@@ -1,0 +1,30 @@
+{
+  "output_dir": "./traces",
+  "output_format": "jsonl",
+  "gpu_sampler": {
+    "sample_interval_ms": 100,
+    "gpu_ids": null,
+    "use_dcgm": false,
+    "collect_tensor_utilization": false
+  },
+  "energy": {
+    "enabled": true,
+    "attribution_method": "proportional_time",
+    "energy_price_usd_per_kwh": 0.12
+  },
+  "autopsy": {
+    "enabled": true,
+    "queue_overload_threshold_ms": 100.0,
+    "throttle_severity_threshold": 3,
+    "memory_pressure_threshold_pct": 90.0,
+    "low_gpu_util_threshold_pct": 50.0,
+    "batch_fragmentation_threshold": 0.3
+  },
+  "enable_batch_metadata": true,
+  "enable_kv_cache_tracking": true,
+  "async_write": true,
+  "buffer_size": 1000,
+  "distributed_mode": false,
+  "rank": null,
+  "world_size": null
+}

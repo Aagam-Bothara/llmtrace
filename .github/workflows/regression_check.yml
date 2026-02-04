@@ -1,0 +1,70 @@
+name: Performance Regression Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  performance-test:
+    runs-on: ubuntu-latest
+
+    # Requires GPU runner for realistic benchmarks
+    # For demo purposes, this workflow shows the structure
+    # In production, use self-hosted runners with GPUs
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install -e .
+        pip install vllm pytest
+
+    - name: Download baseline traces
+      run: |
+        # In practice, store baseline in artifact storage
+        # or S3/GCS bucket
+        mkdir -p baseline_traces
+        # aws s3 sync s3://your-bucket/baseline baseline_traces/
+
+    - name: Run benchmark with llmtrace
+      run: |
+        python benchmarks/run_benchmark.py \
+          --output-dir ./current_traces \
+          --model meta-llama/Llama-2-7b-hf \
+          --num-requests 100
+
+    - name: Run regression check
+      run: |
+        llmtrace compare \
+          --baseline ./baseline_traces \
+          --current ./current_traces \
+          --ttft-threshold 5 \
+          --energy-threshold 10 \
+          --fail-on-regression
+
+    - name: Upload traces as artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-traces
+        path: |
+          current_traces/
+          baseline_traces/
+
+    - name: Comment on PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          // Read analysis output
+          // Post as PR comment
+          // This would parse the llmtrace analysis output

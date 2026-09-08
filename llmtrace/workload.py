@@ -216,9 +216,10 @@ class WorkloadSpec(_Strict):
         return specs
 
     def hash(self) -> str:
+        """Identity of the replayed work: the request list plus the seed and vocabulary settings that fix the prompt token ids."""
         from llmtrace.manifest import workload_hash
 
-        return workload_hash(self.generate())
+        return workload_hash(self.generate() + [{"seed": self.seed, "vocab_size": self.vocab_size, "min_token_id": self.min_token_id}])
 
     def summary(self, specs: Optional[List[RequestSpec]] = None) -> Dict[str, Any]:
         specs = specs if specs is not None else self.generate()

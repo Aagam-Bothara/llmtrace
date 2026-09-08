@@ -34,9 +34,14 @@ class TestGeneration:
     def test_deterministic_and_seed_sensitive(self):
         a, b = _spec().generate(), _spec().generate()
         assert a == b
-        assert workload_hash(a) == workload_hash(b) == _spec().hash()
+        assert workload_hash(a) == workload_hash(b) and _spec().hash() == _spec().hash()
         c = _spec(seed=4).generate()
-        assert c != a and workload_hash(c) != workload_hash(a)
+        assert c != a and workload_hash(c) != workload_hash(a) and _spec(seed=4).hash() != _spec().hash()
+        # fixed lengths + constant arrivals: the request list is seed-independent, the prompt token ids are not
+        fixed = dict(classes=[RequestClass(name="a", count=3, prompt_len=LengthSpec(value=8), max_tokens=LengthSpec(value=2),
+                                           arrival=ArrivalSpec(kind="constant", rate_per_s=10.0))])
+        assert WorkloadSpec(seed=1, **fixed).generate() == WorkloadSpec(seed=2, **fixed).generate()
+        assert WorkloadSpec(seed=1, **fixed).hash() != WorkloadSpec(seed=2, **fixed).hash()
 
     def test_ids_classes_ordering_and_lengths(self):
         specs = _spec().generate()

@@ -125,7 +125,7 @@ to the steps it shared. The trace-level evidence that identified the mechanism
 here was exactly that join (`batches_*.jsonl` request ids and scheduled
 tokens per step, joined to `traces_*.jsonl` batch ids), plus the TTFT
 decomposition into queue and prefill spans that `compare` prints. The
-`findings` command reports the same hypothesis as `not_evaluable`, with the
+`findings` command reports the same hypothesis as `insufficient_evidence`, with the
 missing evidence named, when only the aggregate stats are available.
 
 ## Visualize

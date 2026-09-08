@@ -194,8 +194,10 @@ def visualize(run_dir: str, compare_dir: Optional[str], trace_out: Optional[str]
 @click.option("--queue-threshold-ms", type=float, default=100.0)
 @click.option("--kv-threshold", type=float, default=0.9, help="KV-cache usage fraction that counts as pressure")
 @click.option("--json", "json_out", type=click.Path(), help="Write findings JSON here")
-def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_threshold: float, json_out: Optional[str]) -> None:
-    """Evaluate the supported hypotheses on a recorded run: queue overload, long-prompt interference, KV pressure, tracer self-effect."""
+@click.option("--verbose", "verbose", is_flag=True, help="Also print each check's assumptions, competing explanations and limits")
+def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_threshold: float, json_out: Optional[str],
+             verbose: bool) -> None:
+    """Evaluate the hypotheses on a recorded run: queue overload, long-prompt interference, KV pressure, host overhead, tracer self-effect."""
     from llmtrace.control_plane.findings import evaluate_all, format_findings
 
     traces = io.load_traces([run_dir])
@@ -204,10 +206,39 @@ def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_t
         sys.exit(EXIT_USAGE)
     result = evaluate_all(traces, io.load_batches([run_dir]), io.load_vllm_stats([run_dir]), io.load_collector_events([run_dir]),
                           chunk_threshold, queue_threshold_ms, kv_threshold, io.load_gpu_steps([run_dir]))
-    click.echo(format_findings(result))
+    click.echo(format_findings(result, verbose=verbose))
     if json_out:
         Path(json_out).write_text(json.dumps([f.model_dump() for f in result], indent=2), encoding="utf-8")
         click.echo(f"Findings written to {json_out}")
+
+
+@main.command()
+@click.argument("run_dir", type=click.Path(exists=True))
+@click.option("--chunk-threshold", type=int, default=128, help="Prefill chunk size (tokens) that counts as 'long'")
+@click.option("--queue-threshold-ms", type=float, default=100.0)
+@click.option("--kv-threshold", type=float, default=0.9)
+@click.option("--max-candidates", type=int, default=4, show_default=True)
+@click.option("--repeats", type=int, default=3, show_default=True)
+@click.option("--json", "json_out", type=click.Path(), help="Write the plan JSON here (input for `llmtrace run --plan`)")
+def plan(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_threshold: float, max_candidates: int, repeats: int,
+         json_out: Optional[str]) -> None:
+    """From a recorded run's findings, propose a bounded set of configuration experiments (plans only; runs nothing)."""
+    from llmtrace.control_plane.experiments import plan_experiments
+    from llmtrace.control_plane.findings import evaluate_all
+    from llmtrace.manifest import RunManifest
+
+    traces = io.load_traces([run_dir])
+    if not traces:
+        click.echo(f"No traces in {run_dir}", err=True)
+        sys.exit(EXIT_USAGE)
+    batches = io.load_batches([run_dir])
+    result = evaluate_all(traces, batches, io.load_vllm_stats([run_dir]), io.load_collector_events([run_dir]),
+                          chunk_threshold, queue_threshold_ms, kv_threshold, io.load_gpu_steps([run_dir]))
+    p = plan_experiments(result, RunManifest.read(run_dir), batches, max_candidates=max_candidates, repeats=repeats, source_run=run_dir)
+    click.echo(p.format())
+    if json_out:
+        Path(json_out).write_text(p.model_dump_json(indent=2), encoding="utf-8")
+        click.echo(f"Plan written to {json_out}; execute with: llmtrace run --plan {json_out} --workload <spec.json> --engine <fake|vllm> --out <dir>")
 
 
 @main.command()
@@ -218,14 +249,17 @@ def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_t
 @click.option("--exclude-class", "exclude_classes", multiple=True,
               help="Drop requests of this class (id prefix before '-') before evaluating, e.g. settle or warm; repeatable")
 @click.option("--min-metric-coverage", type=float, default=1.0, help="Share of selected requests that must carry the target metric")
+@click.option("--slo", "slos", multiple=True,
+              help="Per-class request SLOs for goodput, e.g. 'short: ttft <= 50ms, tpot <= 15ms' ('*' for all classes); repeatable")
 @click.option("--json", "json_out", type=click.Path(), help="Write the decision JSON here")
 def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_classes: Tuple[str, ...], min_metric_coverage: float,
-           json_out: Optional[str]) -> None:
-    """Compare configurations against a latency target (advisory; changes nothing)."""
-    from llmtrace.control_plane.decision import Target, evaluate, format_decision
+           slos: Tuple[str, ...], json_out: Optional[str]) -> None:
+    """Compare configurations against a latency target, with goodput under SLOs and bootstrap intervals (advisory; changes nothing)."""
+    from llmtrace.control_plane.decision import Slo, Target, evaluate, format_decision
 
     try:
         tgt = Target.parse(target)
+        parsed_slos = [Slo.parse(s) for s in slos]
     except ValueError as exc:
         click.echo(str(exc), err=True)
         sys.exit(EXIT_USAGE)
@@ -236,7 +270,7 @@ def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_clas
             sys.exit(EXIT_USAGE)
         name, dirs = c.split("=", 1)
         parsed[name.strip()] = [d.strip() for d in dirs.split(",") if d.strip()]
-    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None)
+    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None, slos=parsed_slos or None)
     click.echo(format_decision(dec))
     if json_out:
         Path(json_out).write_text(dec.model_dump_json(indent=2), encoding="utf-8")
@@ -296,6 +330,8 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 
 @main.command()
 @click.option("--workload", "workload_path", required=True, type=click.Path(exists=True), help="Workload spec JSON (see `llmtrace workload template`)")
+@click.option("--plan", "plan_path", type=click.Path(exists=True),
+              help="Experiment plan JSON from `llmtrace plan`: runs its baseline and every candidate as <out>/<config>/r<i> (overrides --config-name/--set/--repeat)")
 @click.option("--engine", type=click.Choice(["fake", "vllm"]), default="fake", show_default=True,
               help="fake: synthetic CPU engine (invented cost model, not evidence); vllm: real vLLM 0.11.0 on a GPU")
 @click.option("--out", "out_dir", required=True, type=click.Path(), help="Run directory (raw traces + manifest); with --repeat, <out>/r<i>")
@@ -310,8 +346,9 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 @click.option("--no-ignore-eos", is_flag=True, help="Let requests stop at EOS (work then differs across configs)")
 @click.option("--no-warmup", is_flag=True, help="vllm: skip the untraced warm-up replay")
 @click.option("--settle", type=int, default=4, show_default=True, help="vllm: traced settling requests before the measured replay")
-def run(workload_path: str, engine: str, out_dir: str, model: str, config_name: str, changes: Tuple[str, ...], engine_kwargs: str,
-        repeat: int, collection_interval: float, enable_nvtx: bool, no_ignore_eos: bool, no_warmup: bool, settle: int) -> None:
+def run(workload_path: str, plan_path: Optional[str], engine: str, out_dir: str, model: str, config_name: str, changes: Tuple[str, ...],
+        engine_kwargs: str, repeat: int, collection_interval: float, enable_nvtx: bool, no_ignore_eos: bool, no_warmup: bool,
+        settle: int) -> None:
     """Replay a workload spec under llmtrace and write run directories (raw data + manifest)."""
     from llmtrace.runner import RunOptions, run_workload
     from llmtrace.workload import WorkloadSpec
@@ -325,6 +362,20 @@ def run(workload_path: str, engine: str, out_dir: str, model: str, config_name: 
             if not k or not sep:
                 raise ValueError(f"--set expects KEY=JSON, got {c!r}")
             change[k.strip()] = json.loads(v)
+        jobs: List[Tuple[str, dict, str]] = []  # (config name, scheduling change, out dir for repeat i -> formatted later)
+        if plan_path:
+            from llmtrace.control_plane.experiments import ExperimentPlan
+
+            p = ExperimentPlan.model_validate_json(Path(plan_path).read_text(encoding="utf-8"))
+            if p.workload_hash and p.workload_hash != spec.hash():
+                click.echo(f"warning: plan was made from workload {p.workload_hash}, this spec is {spec.hash()}")
+            repeat = p.repeats
+            for cfg in p.configs():
+                for i in range(repeat):
+                    jobs.append((cfg["name"], cfg["scheduling_change"], str(Path(out_dir) / cfg["name"] / f"r{i}")))
+        else:
+            for i in range(repeat):
+                jobs.append((config_name, change, out_dir if repeat == 1 else str(Path(out_dir) / f"r{i}")))
     except Exception as exc:
         click.echo(f"Invalid arguments: {exc}", err=True)
         sys.exit(EXIT_USAGE)
@@ -332,9 +383,8 @@ def run(workload_path: str, engine: str, out_dir: str, model: str, config_name: 
         click.echo("--repeat must be >= 1", err=True)
         sys.exit(EXIT_USAGE)
     failed = False
-    for i in range(repeat):
-        out = out_dir if repeat == 1 else str(Path(out_dir) / f"r{i}")
-        opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=config_name, scheduling_change=change,
+    for name, chg, out in jobs:
+        opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=name, scheduling_change=chg,
                           engine_kwargs=extra, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
                           ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle)
         m = run_workload(spec, opts)
@@ -352,6 +402,10 @@ def run(workload_path: str, engine: str, out_dir: str, model: str, config_name: 
         for pr in problems:
             click.echo(f"    PROBLEM: {pr}", err=True)
         failed = failed or bool(problems)
+    if plan_path:
+        names = [cfg["name"] for cfg in p.configs()]
+        cfgs = " ".join(f"--config {n}={','.join(str(Path(out_dir) / n / f'r{i}') for i in range(repeat))}" for n in names)
+        click.echo(f"compare with: llmtrace decide --target '<class> ttft_p95 <= <ms>' {cfgs}")
     sys.exit(EXIT_REGRESSION if failed else EXIT_OK)
 
 

@@ -1,8 +1,12 @@
 """Inspectable findings: hypotheses supported by recorded events, never confident root causes.
 
 Each ``Finding`` names the hypothesis, the affected requests, the supporting
-events (with the file/field they came from), what evidence is *missing*, and a
-suggested experiment. Five hypotheses are implemented:
+events (with the file/field they came from), what evidence is *missing*, the
+assumptions the check rests on, the competing explanations the recorded data
+cannot rule out, the limits of the measurement, and a suggested experiment.
+A ``supported`` finding is a consistent pattern in the recorded events, never
+a causal claim: only the suggested experiment (replay with one change) can
+establish cause. Five hypotheses are implemented:
 
 * ``queue_overload``: requests waited in the scheduler queue while the engine
   was busy (queue spans from in-process scheduling, or vLLM's own queued-time
@@ -13,8 +17,8 @@ suggested experiment. Five hypotheses are implemented:
   preemptions (vLLM stats; request ids are not exposed there).
 
 A finding is only produced when its supporting events exist; otherwise the
-hypothesis is reported as ``not_evaluable`` with the missing evidence listed,
-so "no finding" is never confused with "nothing happened".
+hypothesis is reported as ``insufficient_evidence`` with the missing evidence
+listed, so "no finding" is never confused with "nothing happened".
 """
 
 from __future__ import annotations
@@ -38,16 +42,126 @@ class Evidence(BaseModel):
     unit: Optional[str] = None
 
 
+SUPPORTED = "supported"
+NOT_SUPPORTED = "not_supported"
+INSUFFICIENT = "insufficient_evidence"
+
+
 class Finding(BaseModel):
     hypothesis: str
-    status: str  # supported | not_supported | not_evaluable
+    status: str  # supported | not_supported | insufficient_evidence
     summary: str
     affected_requests: List[str] = Field(default_factory=list)
     affected_count: int = 0
     supporting_events: List[Evidence] = Field(default_factory=list)
     missing_evidence: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)  # what the check takes for granted
+    competing_explanations: List[str] = Field(default_factory=list)  # what the same events are also consistent with
+    confidence_limits: List[str] = Field(default_factory=list)  # why this is a pattern, not a cause
     suggested_experiment: Optional[str] = None
     parameters: Dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def evaluable(self) -> bool:
+        return self.status != INSUFFICIENT
+
+
+# What each check assumes, what else its events are consistent with, and where its confidence stops.
+# Attached to every finding of that hypothesis regardless of status, so a reader can judge the check itself.
+_CONTEXT: Dict[str, Dict[str, List[str]]] = {
+    "queue_overload": {
+        "assumptions": [
+            "queue wait is the time from add_request to the first engine step that scheduled the request (in-process scheduler), "
+            "or vLLM's own queued_time for finished requests",
+            "the threshold separates ordinary scheduling delay from overload for this workload",
+        ],
+        "competing": [
+            "load-generator lateness rather than scheduler queueing (compare manifest arrival delays with the queue spans)",
+            "requests waited for KV-cache blocks rather than for step capacity (see kv_cache_pressure)",
+            "one large prefill chunk consumed the step's token budget (see long_prompt_interference)",
+        ],
+        "limits": [
+            "queue wait is step-granular (resolved to the end of the step that first scheduled the request)",
+            "vLLM's queued_time carries no request ids, so affected requests come only from in-process queue spans",
+        ],
+    },
+    "long_prompt_interference": {
+        "assumptions": [
+            "an engine step's duration is set mainly by the largest prefill chunk it carries",
+            "every request scheduled in a step waits for the whole step, so sharing a long step delays its tokens",
+        ],
+        "competing": [
+            "the long steps were slow for another reason: first-time batch shapes or CUDA-graph capture (see warm-up in the "
+            "manifest), host stalls (see host_overhead), or the tracer's own drains (see tracer_observer_effect)",
+            "the sharing requests' TTFT came from queue wait before they were scheduled, not from the step they shared "
+            "(compare their queue spans)",
+        ],
+        "limits": [
+            "this is co-occurrence of step membership and step duration; cause is established only by the replay with "
+            "long_prefill_token_threshold changed",
+            "GPU step spans, when present, show the step was GPU compute but not whose tokens consumed it",
+        ],
+    },
+    "kv_cache_pressure": {
+        "assumptions": [
+            "KV-cache usage at or above the threshold means block allocation can fail for new tokens",
+            "preemptions reported by vLLM in the same run are caused by that shortage",
+        ],
+        "competing": [
+            "high usage without preemptions is ordinary steady state for a full batch (not a problem by itself)",
+            "preemptions can also follow priority scheduling or a request longer than max_model_len allows",
+        ],
+        "limits": [
+            "vLLM stats carry no request ids: the requests alive during high-usage steps are known only with batch metadata",
+            "usage is sampled once per step; a shortage inside a step is not visible",
+        ],
+    },
+    "host_overhead": {
+        "assumptions": [
+            "host_step_ms - gpu_span_ms is time the GPU stream was not spanned by the model forward (scheduling, input "
+            "preparation, output processing, tracing)",
+        ],
+        "competing": [
+            "the span excludes work on vLLM's other streams and includes launch gaps inside the span, so a high host share "
+            "on a tiny model can be launch-bound GPU idle time rather than host work (Nsight cross-check: decode steps of a "
+            "125M model were 58% busy inside the span)",
+        ],
+        "limits": [
+            "measured only with UniProcExecutor on the blocking execute path; the tracer's own per-step cost is inside the host share",
+        ],
+    },
+    "tracer_observer_effect": {
+        "assumptions": [
+            "a collector drain that overlaps an engine step and is a material part of that step's excess over the median delayed it",
+        ],
+        "competing": [
+            "the overlapping step was long for its own reasons (a large prefill chunk, a first-time shape)",
+        ],
+        "limits": [
+            "the drain's duration is measured by the collector thread; GIL contention it caused inside the step is inferred, not measured",
+        ],
+    },
+}
+
+
+def _contextualize(f: Finding) -> Finding:
+    ctx = _CONTEXT.get(f.hypothesis)
+    if ctx:
+        f.assumptions = f.assumptions or list(ctx["assumptions"])
+        f.competing_explanations = f.competing_explanations or list(ctx["competing"])
+        f.confidence_limits = f.confidence_limits or list(ctx["limits"])
+    return f
+
+
+def _check(fn):
+    """Decorator: every return path of a check gets the hypothesis context attached."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return _contextualize(fn(*args, **kwargs))
+
+    return wrapper
 
 
 def _kind(request_id: str) -> str:
@@ -61,6 +175,7 @@ def _step_durations(batches: List[BatchMetadata]) -> Dict[str, float]:
 
 # ------------------------------------------------------------------ hypotheses
 
+@_check
 def check_queue_overload(traces: List[RequestTrace], batches: List[BatchMetadata], stats: List[VLLMIterationRecord],
                          threshold_ms: float = 100.0) -> Finding:
     queued = [(t.request_id, t.queue_duration_ms) for t in traces if t.queue_duration_ms > 0]
@@ -84,7 +199,7 @@ def check_queue_overload(traces: List[RequestTrace], batches: List[BatchMetadata
     else:
         missing.append("vLLM per-step waiting counts (stat_loggers hook)")
     if not queued and not waiting:
-        return Finding(hypothesis="queue_overload", status="not_evaluable", summary="No queue evidence recorded.",
+        return Finding(hypothesis="queue_overload", status="insufficient_evidence", summary="No queue evidence recorded.",
                        missing_evidence=missing, parameters={"threshold_ms": threshold_ms})
     supported = bool(affected) or (waiting and max(waiting) > 0 and any(
         e.source.endswith("queued_time") and (e.value or 0) >= threshold_ms for e in events))
@@ -99,11 +214,12 @@ def check_queue_overload(traces: List[RequestTrace], batches: List[BatchMetadata
     )
 
 
+@_check
 def check_long_prompt_interference(traces: List[RequestTrace], batches: List[BatchMetadata],
                                    chunk_threshold: int = DEFAULT_CHUNK_THRESHOLD, slowdown_factor: float = 2.0) -> Finding:
     dur = _step_durations(batches)
     if not dur:
-        return Finding(hypothesis="long_prompt_interference", status="not_evaluable",
+        return Finding(hypothesis="long_prompt_interference", status="insufficient_evidence",
                        summary="No batch metadata: cannot see which requests shared which engine step.",
                        missing_evidence=["batch metadata with step end times (in-process scheduler, VLLM_ENABLE_V1_MULTIPROCESSING=0)"],
                        parameters={"chunk_threshold": chunk_threshold})
@@ -154,12 +270,13 @@ def check_long_prompt_interference(traces: List[RequestTrace], batches: List[Bat
     )
 
 
+@_check
 def check_kv_cache_pressure(traces: List[RequestTrace], batches: List[BatchMetadata], stats: List[VLLMIterationRecord],
                             usage_threshold: float = 0.9) -> Finding:
     kv_stats = [r for r in stats if r.kv_cache_usage is not None]
     kv_batches = [b for b in batches if b.kv_cache_usage_fraction is not None]
     if not kv_stats and not kv_batches:
-        return Finding(hypothesis="kv_cache_pressure", status="not_evaluable", summary="No KV-cache usage recorded.",
+        return Finding(hypothesis="kv_cache_pressure", status="insufficient_evidence", summary="No KV-cache usage recorded.",
                        missing_evidence=["KV-cache usage per step (vLLM stat_loggers hook or in-process scheduler)",
                                          "preemption counts (vLLM stat_loggers hook)"],
                        parameters={"usage_threshold": usage_threshold})
@@ -195,11 +312,12 @@ def check_kv_cache_pressure(traces: List[RequestTrace], batches: List[BatchMetad
                    parameters={"usage_threshold": usage_threshold, "source": events_src})
 
 
+@_check
 def check_host_overhead(batches: List[BatchMetadata], gpu_steps: List[Any], share_threshold: float = 0.5) -> Finding:
     """Are engine steps dominated by time the GPU is not spanned (scheduling, input prep, output processing, tracer)?"""
     resolved = [g for g in gpu_steps if g.gpu_span_ms is not None and g.host_step_ms > 0]
     if not resolved:
-        return Finding(hypothesis="host_overhead", status="not_evaluable",
+        return Finding(hypothesis="host_overhead", status="insufficient_evidence",
                        summary="No GPU step spans recorded: cannot separate GPU time from host time.",
                        missing_evidence=["gpu_steps_*.jsonl (CUDA events around execute_model; needs in-process engine core and torch.cuda)"])
     shares = [max(0.0, g.host_step_ms - g.gpu_span_ms) / g.host_step_ms for g in resolved]
@@ -223,11 +341,12 @@ def check_host_overhead(batches: List[BatchMetadata], gpu_steps: List[Any], shar
                    parameters={"share_threshold": share_threshold})
 
 
+@_check
 def check_tracer_self_effect(batches: List[BatchMetadata], collector_events: List[Any], factor: float = 2.0) -> Finding:
     """Flag engine steps overlapping a tracer collector drain that are much longer than the median."""
     dur = _step_durations(batches)
     if not dur or not collector_events:
-        return Finding(hypothesis="tracer_observer_effect", status="not_evaluable", summary="No collector events or step timings.",
+        return Finding(hypothesis="tracer_observer_effect", status="insufficient_evidence", summary="No collector events or step timings.",
                        missing_evidence=["collector_*.jsonl (written by LLMTracer) and batch metadata"])
     med = statistics.median(dur.values())
     by_id = {b.batch_id: b for b in batches}
@@ -268,7 +387,7 @@ def evaluate_all(traces: List[RequestTrace], batches: List[BatchMetadata], stats
     return out
 
 
-def format_findings(findings: List[Finding]) -> str:
+def format_findings(findings: List[Finding], verbose: bool = False) -> str:
     lines = []
     for f in findings:
         lines.append(f"[{f.status}] {f.hypothesis}: {f.summary}")
@@ -280,6 +399,13 @@ def format_findings(findings: List[Finding]) -> str:
             lines.append(f"    evidence: {e.statement}{v}  [{e.source}]")
         for m in f.missing_evidence:
             lines.append(f"    missing: {m}")
+        if verbose:
+            for a in f.assumptions:
+                lines.append(f"    assumes: {a}")
+            for c in f.competing_explanations:
+                lines.append(f"    also consistent with: {c}")
+            for lim in f.confidence_limits:
+                lines.append(f"    limit: {lim}")
         if f.suggested_experiment:
             lines.append(f"    experiment: {f.suggested_experiment}")
     return "\n".join(lines)

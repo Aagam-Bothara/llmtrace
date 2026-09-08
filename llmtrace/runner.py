@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from llmtrace.manifest import ArrivalRecord, RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version, workload_hash
+from llmtrace.manifest import ArrivalRecord, RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version
 from llmtrace.workload import RequestSpec, WorkloadSpec, make_prompt
 
 
@@ -99,7 +99,7 @@ def run_workload(spec: WorkloadSpec, opts: RunOptions) -> RunManifest:
                            model=opts.model if opts.engine == "vllm" else "fake",
                            llmtrace_version=llmtrace_version(), llmtrace_git_commit=git_commit(opts.repo_dir),
                            gpu=gpu_info() if opts.engine == "vllm" else None,
-                           workload=spec.model_dump(exclude_none=True), workload_hash=workload_hash(specs), seed=spec.seed,
+                           workload=spec.model_dump(exclude_none=True), workload_hash=spec.hash(), seed=spec.seed,
                            config_name=opts.config_name, scheduling_change=dict(opts.scheduling_change),
                            engine_kwargs=dict(opts.engine_kwargs))
     try:

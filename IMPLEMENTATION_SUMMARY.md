@@ -40,6 +40,13 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   recorded; failed runs recorded; repeats; the outputs feed `decide`.
 * `llmtrace doctor`: environment probes (vLLM version, engine-core process
   mode, CUDA, NVML, extras) and per-run signal availability with reasons.
+* Findings carry assumptions, competing explanations and confidence limits;
+  `insufficient_evidence` status; queue overload from vLLM's queued_time.
+* `decide`: goodput under per-class SLOs, seeded bootstrap intervals, marginal
+  candidates; recommendation by goodput when SLOs are given.
+* Experiment planner (`llmtrace plan`, `llmtrace run --plan`): bounded
+  candidates from supported findings; plan -> run -> decide loop exercised on
+  the synthetic engine.
 
 ## Verified on hardware (one run, one GPU, one tiny model)
 

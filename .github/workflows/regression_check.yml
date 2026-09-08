@@ -36,5 +36,8 @@ jobs:
           llmtrace run --workload w.json --engine fake --out ./runs/base
           llmtrace run --workload w.json --engine fake --out ./runs/capped --config-name capped --set long_prefill_token_threshold=256
           llmtrace doctor ./runs/base
-          llmtrace findings ./runs/base
-          llmtrace decide --target "short ttft_p95 <= 50ms" --config base=./runs/base --config capped=./runs/capped
+          llmtrace findings ./runs/base --verbose
+          llmtrace decide --target "short ttft_p95 <= 50ms" --slo "short: ttft <= 50ms" --config base=./runs/base --config capped=./runs/capped
+          llmtrace plan ./runs/base --repeats 1 --max-candidates 1 --json plan.json
+          llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp
+          llmtrace decide --target "short ttft_p95 <= 50ms" --config baseline=./exp/baseline/r0 --config cap1024=./exp/cap1024/r0

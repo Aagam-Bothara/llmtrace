@@ -172,7 +172,7 @@ class TestTracerAndAnalysis:
         gpu_bound = [StepGpuTiming(step_index=i, timestamp=0, host_step_ms=4.0, gpu_span_ms=3.6, host_overhead_ms=0.4) for i in range(5)]
         assert check_host_overhead([], gpu_bound).status == "not_supported"
         f3 = check_host_overhead([], [])
-        assert f3.status == "not_evaluable" and "gpu_steps_" in f3.missing_evidence[0]
+        assert f3.status == "insufficient_evidence" and "gpu_steps_" in f3.missing_evidence[0]
         assert [x.hypothesis for x in evaluate_all([], [], [], [], gpu_steps=big_host)][3] == "host_overhead"
 
     def test_analysis_splits_gpu_and_host(self, tmp_path):

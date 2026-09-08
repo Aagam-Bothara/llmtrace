@@ -162,13 +162,46 @@ test the hypothesis. New diagnosis work belongs in findings.
 ## Findings and decisions (`control_plane/findings.py`, `control_plane/decision.py`)
 
 A `Finding` is a hypothesis with a status (`supported`, `not_supported`,
-`not_evaluable`), the affected request ids, supporting events (each naming the
-file and field it came from), the evidence that is missing, and a suggested
-experiment. Findings never claim a root cause; the suggested experiment is the
-causal test. `decision.evaluate()` scores configurations against a parsed
-`Target` (`<class|*> <ttft|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and only
-reports; it recommends the candidate with the highest median throughput among
-those meeting the target in every repeat, labeled advisory.
+`insufficient_evidence`), the affected request ids, supporting events (each
+naming the file and field it came from), the evidence that is missing, the
+check's `assumptions`, the `competing_explanations` the recorded events are
+also consistent with, its `confidence_limits`, and a suggested experiment.
+The three context lists are fixed per hypothesis (`_CONTEXT`) and attached by
+the `_check` decorator on every return path, so they describe the check
+itself, not the outcome. Findings never claim a root cause; the suggested
+experiment is the causal test. `queue_overload` uses vLLM's own
+`queued_time` from `FinishedRequestStats` when the in-process queue spans are
+absent (then with no request ids).
+
+`decision.evaluate()` scores configurations against a parsed `Target`
+(`<class|*> <ttft|ttft_sched|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and
+only reports. Uncertainty: per-repeat median/min/max plus a seeded percentile
+bootstrap (default 1000 resamples) of the target statistic over the
+per-request values pooled across eligible repeats; a candidate whose interval
+upper bound misses the target is listed as `marginal`. Optional `Slo`s
+(`<class|*>: <metric> <= <ms>, ...`) give goodput: the share of selected
+requests meeting every bound, with a request lacking a bounded metric counted
+as not meeting it and the coverage reported. The recommendation prefers the
+highest goodput when SLOs are given, otherwise the highest median throughput,
+among candidates meeting the target in every repeat; always labeled advisory.
+
+## Experiment planner (`control_plane/experiments.py`)
+
+`plan_experiments(findings, manifest, batches)` maps supported findings to a
+bounded list of `Candidate`s (name, `scheduling_change`, source finding,
+rationale, expected effect, expected cost): `long_prompt_interference` gives
+`long_prefill_token_threshold` values below the largest observed chunk (and a
+halved `max_num_batched_tokens` when that would cap it); `queue_overload`
+doubles `max_num_seqs` when the running count reached it and doubles the
+token budget; `kv_cache_pressure` raises `gpu_memory_utilization` by 0.1 (at
+most 0.95), halves `max_num_seqs`, enables prefix caching if off;
+`host_overhead` doubles `max_num_seqs`. Baseline knobs come from the
+manifest's effective config (real sections or the fake engine's). Candidates
+are deduplicated and capped (`--max-candidates`), skipped items are listed
+with the reason, and the plan is JSON that `llmtrace run --plan` executes as
+fresh engines under the same workload (`<out>/<config>/r<i>`), warning if the
+workload hash differs from the plan's source run. Nothing is executed by the
+planner and no running server is modified.
 
 ## GPU span per step (`data_plane/cuda_timing.py`)
 

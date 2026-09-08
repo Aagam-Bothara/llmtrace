@@ -9,8 +9,11 @@ llmtrace doctor                       # what this environment can and cannot rec
 llmtrace workload template --output w.json
 llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 2
 llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 2 --config-name capped --set long_prefill_token_threshold=256
-llmtrace findings ./runs/base/r0
-llmtrace decide --target "short ttft_p95 <= 20ms" --config base=./runs/base/r0,./runs/base/r1 --config capped=./runs/capped/r0,./runs/capped/r1
+llmtrace findings ./runs/base/r0 --verbose
+llmtrace plan ./runs/base/r0 --repeats 2 --json plan.json          # experiments derived from the supported findings
+llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp
+llmtrace decide --target "short ttft_p95 <= 20ms" --slo "short: ttft <= 20ms" \
+    --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
 python examples/synthetic_replay.py   # fake engine + fake NVML, writes ./traces_synthetic
 llmtrace analyze ./traces_synthetic/current --baseline ./traces_synthetic/baseline
 ```

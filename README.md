@@ -26,7 +26,9 @@ verified vLLM interfaces; **not implemented** = absent.
 | Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; on the GPU run, device energy matched a separately collected `nvidia-smi` stream of the same NVML sensor within 0.15% over identical boundaries |
 | Timing (TTFT/TPOT) | Validated through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
 | Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
-| Evidence-based findings (`llmtrace findings`) | Implemented; the long-prompt-interference finding validated on the GPU experiment |
+| Evidence-based findings (`llmtrace findings`) with assumptions, competing explanations and confidence limits | Implemented; the long-prompt-interference finding validated on the GPU experiment; the others report not supported or insufficient evidence on the recorded runs |
+| Experiment planner (`llmtrace plan`, `llmtrace run --plan`) | Implemented; CPU-tested end to end on the synthetic engine (plan from findings, run baseline + candidates, decide); rules cover the five findings with bounded scheduler/cache knobs |
+| Goodput under per-class SLOs and bootstrap intervals in `decide` | Implemented and CPU-tested |
 | vLLM engine stats via `stat_loggers` hook | Validated on `AsyncLLM` (34 per-step records with KV usage over the multiprocess core); attached post-hoc on the sync engine in fakes only |
 | GPU span per step (CUDA events around `execute_model`), `host_overhead` finding | Validated (RTX 4000 Ada, A100 with Qwen2.5-7B): one span per step, never above host time, timer clean; long-prefill interference is GPU compute (7.9 vs 1.7 ms on opt-125m, 103 vs 11 ms on the 7B model); host share 9 to 13% on opt-125m, 2% on the 7B model; refused for TP>1 executors |
 | NVTX ranges per step, Nsight Systems cross-check (`scripts/nsys_step_compare.py`) | Validated (RTX A5000, opt-125m, Nsight Systems 2026.1): all 626 and 654 step ranges of two runs matched to llmtrace's spans; the span was never below Nsight's GPU busy time (kernels plus CUDA-graph executions); busy/span 0.58 on decode steps of this launch-bound 125M model, 0.84 on 1536-token prefill steps |
@@ -199,22 +201,41 @@ llmtrace visualize ./traces/run --compare ./traces/other --html-out report.html 
 ```
 
 ```bash
-llmtrace findings ./exp/baseline_0                 # hypotheses with affected requests, evidence, missing evidence, next experiment
-llmtrace decide --target "short ttft_p95 <= 300ms" \
-    --config baseline=./exp/baseline_0,./exp/baseline_1 --config capped=./exp/capped_0,./exp/capped_1
+llmtrace findings ./runs/base/r0 --verbose         # hypotheses: evidence, missing evidence, assumptions, competing explanations, limits
+llmtrace plan ./runs/base/r0 --json plan.json      # bounded configuration experiments derived from the supported findings
+llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp   # baseline + candidates, <out>/<config>/r<i>
+llmtrace decide --target "short ttft_p95 <= 300ms" --slo "short: ttft <= 300ms, tpot <= 20ms" \
+    --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
 ```
 
-`findings` evaluates four hypotheses on a run (queue overload, long-prompt
-interference, KV-cache pressure with preemption, and llmtrace's own observer
-effect) and reports each as supported, not supported, or not evaluable with
-the missing evidence named. `decide` compares configurations (each a set of
-repeats) against a stated target: which meet it in every repeat, throughput,
-energy per output token with telemetry coverage, run-to-run range, failed
-repeats, and whether the work was identical. A repeat counts toward a
-candidate only if every selected request has the target metric, every
-expected request completed (no aborted or incomplete ones), and the tracer's
-health was clean; ineligible repeats are listed with reasons. It is advisory
-and changes nothing.
+`findings` evaluates five hypotheses on a run (queue overload, long-prompt
+interference, KV-cache pressure with preemption, host overhead, and
+llmtrace's own observer effect) and reports each as supported, not supported,
+or insufficient evidence with the missing evidence named. Every finding also
+carries the check's assumptions, the competing explanations the recorded data
+cannot rule out, and its confidence limits (`--verbose` prints them); a
+supported finding is a consistent pattern in the events, never a root cause,
+and names the replay experiment that would establish one.
+
+`plan` turns a run's supported findings into a bounded, reviewable list of
+configuration experiments (for example a `long_prefill_token_threshold` sweep
+below the largest observed chunk, `max_num_seqs` doubled when the running
+count hit it, `gpu_memory_utilization` raised by 0.1 under KV pressure), each
+with the effect expected if the finding is the cause and the class expected
+to pay for it. `llmtrace run --plan` executes the baseline and every
+candidate as fresh engines with the same workload and repeat count; no
+running server is touched.
+
+`decide` compares configurations (each a set of repeats) against a stated
+target: which meet it in every repeat, a seeded 95% bootstrap interval of the
+target statistic over the pooled requests (a candidate whose interval's upper
+bound misses the target is flagged marginal), goodput under per-class SLOs
+(`--slo "short: ttft <= 50ms, tpot <= 15ms"`), throughput, energy per output
+token with telemetry coverage, run-to-run range, failed repeats, and whether
+the work was identical. A repeat counts toward a candidate only if every
+selected request has the target metric, every expected request completed (no
+aborted or incomplete ones), and the tracer's health was clean; ineligible
+repeats are listed with reasons. It is advisory and changes nothing.
 
 `visualize` writes a self-contained HTML report (request timeline with
 queue/prefill/decode phases, step durations over time and versus scheduled

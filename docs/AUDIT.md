@@ -54,7 +54,7 @@ Provenance is carried in the records rather than in a single place:
 `prompt_length_source`, `ttft_unavailable_reason`, `output_kind`,
 `scheduler_visible`, `BatchMetadata.source`, `StepGpuTiming.source`,
 `EnergyAttribution.is_estimate` / `membership_source` / `unavailable_reason`,
-`Finding.status` (supported / not_supported / not_evaluable) with
+`Finding.status` (supported / not_supported / insufficient_evidence) with
 `missing_evidence`, `RepeatResult.status` with `problems`. `llmtrace doctor`
 (this phase) summarizes signal availability per environment and per run.
 
@@ -140,7 +140,7 @@ All from 2026-09-08 sessions, evidence under `docs/gpu_runs/`:
 Not supported by any run: preemption, speculative decoding, `n > 1`, models
 above 7B, the OpenAI server process, the CUDA-event recording cost itself,
 this phase's `llmtrace run --engine vllm` path, the `findings` other than
-long-prompt interference (the others report not_supported or not_evaluable
+long-prompt interference (the others report not_supported or insufficient_evidence
 on the recorded runs, which is correct behaviour, not validation).
 
 ## 6. Overlap with upstream and adjacent tooling
@@ -191,15 +191,28 @@ Done in this phase (Phase 1 increment and the Phase 2 vertical slice):
 5. `scripts/gpu_overhead.py --gpu-step-timing both` (not yet run).
 6. Stale statements corrected in docs and docstrings.
 
+Done in the second phase (Phases 3 and 4, CPU only):
+
+7. Findings carry `assumptions`, `competing_explanations` and
+   `confidence_limits` per hypothesis; the absent-data status is
+   `insufficient_evidence`; queue overload evaluates vLLM's own `queued_time`
+   when scheduler spans are missing (`control_plane/findings.py`).
+8. `decide` reports goodput under per-class SLOs (`--slo`), a seeded bootstrap
+   interval of the target statistic over pooled requests, and marginal
+   candidates (`control_plane/decision.py`).
+9. `control_plane/experiments.py` and `llmtrace plan` / `run --plan`: bounded
+   configuration experiments from supported findings, executed as fresh
+   engines, never against a running server.
+
 Next, in order (files named):
 
 | # | Item | Files | Why first |
 |---|------|-------|-----------|
 | 1 | Run `llmtrace run --engine vllm` on a GPU for baseline and capped, confirm it reproduces the experiment's numbers, then make `experiments/mixed_prompts/run.py` a thin wrapper | `llmtrace/runner.py`, `experiments/mixed_prompts/run.py`, `docs/GPU_VALIDATION.md` | Removes the last duplicated driver only after the generic one is validated |
 | 2 | Overhead matrix with GPU step timing on/off and on the 7B model | `scripts/gpu_overhead.py` (done), evidence | The remaining measurement-foundation gap |
-| 3 | Findings: add `assumptions`, `competing_explanations`, `confidence_limits` fields; wire `FinishedRequestStats` queued/prefill/decode time as evidence when scheduler spans are unavailable | `control_plane/findings.py`, `data_plane/vllm_stats.py`, tests | Phase 3 requirement; uses upstream data instead of duplicating it |
-| 4 | Goodput and SLO-class metrics in `decide` (`--slo ttft:..,tpot:..` per class), uncertainty as min/median/max plus a bootstrap interval over repeats | `control_plane/decision.py`, `cli.py`, tests | Phase 4 comparison set is incomplete without goodput |
-| 5 | Experiment generator: from a supported finding, emit a bounded list of `RunOptions` (e.g. `long_prefill_token_threshold` sweep, `max_num_batched_tokens`, `max_num_seqs`) with a dry-run plan and no automatic execution against a server | new `control_plane/experiments.py`, `cli.py` (`plan`) | Phase 4 core; deterministic, reviewable |
+| 3 | Done (second phase): findings context fields and `insufficient_evidence` | `control_plane/findings.py` | |
+| 4 | Done (second phase): goodput under SLOs, bootstrap intervals, marginal candidates | `control_plane/decision.py`, `cli.py` | |
+| 5 | Done (second phase): experiment planner and `run --plan` | `control_plane/experiments.py`, `cli.py` | Validated on the synthetic engine only; the candidates' effects on real vLLM are what the GPU session must show |
 | 6 | Benchmark suite: synthetic scenarios with planted bottlenecks (queueing, prefill interference, KV pressure with preemption, host overhead) and expected findings; accuracy table produced by a test | new `benchmarks/`, `tests/test_benchmark_suite.py` | Phase 5; makes diagnostic accuracy a measured number |
 | 7 | Machine-readable + human report combining findings, tested configs, deltas, regressions per class, limitations | `control_plane/report.py` (new), `cli.py` (`report`) | Phase 5 |
 | 8 | GPU integration tests behind a `gpu` marker, runnable on a self-hosted runner | `tests/gpu/`, `pyproject.toml`, workflow | Turns the manual smoke tests into repeatable checks |

@@ -52,9 +52,9 @@ class TestFindings:
         assert "long_prefill_token_threshold" in f.suggested_experiment
         assert "waited while the scheduler spent its token budget" in f.summary
 
-    def test_interference_not_evaluable_without_batches(self):
+    def test_interference_insufficient_evidence_without_batches(self):
         f = check_long_prompt_interference([_trace("short-0")], [])
-        assert f.status == "not_evaluable" and "VLLM_ENABLE_V1_MULTIPROCESSING=0" in f.missing_evidence[0]
+        assert f.status == "insufficient_evidence" and "VLLM_ENABLE_V1_MULTIPROCESSING=0" in f.missing_evidence[0]
 
     def test_interference_not_supported_when_steps_not_slower(self):
         batches = [_batch(0, ["short-0", "long-0"], {"short-0": 1, "long-0": 1500}, 0.002), _batch(1, ["short-0"], {"short-0": 1}, 0.002)]
@@ -67,7 +67,7 @@ class TestFindings:
         assert f.status == "supported" and f.affected_requests == ["short-0"]
         srcs = {e.source for e in f.supporting_events}
         assert "traces_*.jsonl:spans[phase=queue]" in srcs and "vllm_stats_*.jsonl:num_waiting_reqs" in srcs
-        assert check_queue_overload([_trace("a")], [], []).status == "not_evaluable"
+        assert check_queue_overload([_trace("a")], [], []).status == "insufficient_evidence"
 
     def test_kv_pressure_needs_high_usage_and_preemptions(self):
         traces = [_trace("short-0", ["b0"])]
@@ -76,7 +76,7 @@ class TestFindings:
         assert any("request ids" in m for m in f.missing_evidence)
         f2 = check_kv_cache_pressure(traces, [], [_stat(1, kv=0.97, preempted=0)])
         assert f2.status == "not_supported" and "no preemptions" in f2.summary
-        assert check_kv_cache_pressure(traces, [], []).status == "not_evaluable"
+        assert check_kv_cache_pressure(traces, [], []).status == "insufficient_evidence"
 
     def test_tracer_self_effect(self):
         batches = [_batch(i, ["a"], {"a": 1}, 0.002) for i in range(10)] + [_batch(10, ["a"], {"a": 1}, 0.012)]
@@ -94,7 +94,7 @@ class TestFindings:
         assert [f.hypothesis for f in out] == ["queue_overload", "long_prompt_interference", "kv_cache_pressure", "host_overhead",
                                                "tracer_observer_effect"]
         text = format_findings(out)
-        assert "[not_evaluable] long_prompt_interference" in text and "missing:" in text
+        assert "[insufficient_evidence] long_prompt_interference" in text and "missing:" in text
 
 
 class TestDecision:

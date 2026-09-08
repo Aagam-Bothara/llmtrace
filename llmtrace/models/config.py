@@ -1,51 +1,80 @@
-"""Configuration models for llmtrace."""
+"""Configuration models for llmtrace.
 
-from typing import List, Optional
+All models forbid unknown fields so that a misspelled or unsupported option
+fails loudly instead of being silently ignored.
+"""
 
-from pydantic import BaseModel, Field
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class GPUSamplerConfig(BaseModel):
-    """Configuration for GPU sampling."""
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class GPUSamplerConfig(_StrictModel):
+    """Configuration for GPU sampling (NVML)."""
 
     sample_interval_ms: int = Field(
         default=100, ge=10, le=10000, description="GPU sampling interval in milliseconds"
     )
     gpu_ids: Optional[List[int]] = Field(
-        default=None, description="Specific GPU IDs to monitor (None = all)"
+        default=None, description="Specific GPU indices to monitor (None = all)"
     )
-    use_dcgm: bool = Field(
-        default=False, description="Use DCGM instead of NVML (requires dcgm-exporter)"
+    max_buffered_samples: int = Field(
+        default=100_000,
+        ge=100,
+        description="Samples kept in memory before the oldest are dropped (drops are counted)",
     )
-    collect_tensor_utilization: bool = Field(
-        default=False, description="Collect tensor core utilization (may have overhead)"
+    require_gpu: bool = Field(
+        default=False,
+        description="Fail start() if NVML cannot be initialised. Default: continue without telemetry.",
     )
 
 
-class EnergyConfig(BaseModel):
-    """Configuration for energy attribution."""
+AttributionMethod = Literal["equal_share", "proportional_tokens", "window_only"]
 
-    enabled: bool = Field(default=True, description="Enable energy attribution")
-    attribution_method: str = Field(
-        default="proportional_time",
-        description="Attribution method: proportional_time, proportional_tokens, or exact",
+
+class EnergyConfig(_StrictModel):
+    """Configuration for energy integration and allocation."""
+
+    enabled: bool = Field(default=True, description="Enable energy accounting")
+    attribution_method: AttributionMethod = Field(
+        default="equal_share",
+        description=(
+            "Allocation policy for device energy while several requests are active: "
+            "equal_share (split each interval equally among active requests), "
+            "proportional_tokens (split by prompt+output tokens of active requests), "
+            "window_only (no allocation; only report device energy over each request window)"
+        ),
+    )
+    max_sample_gap_s: float = Field(
+        default=1.0,
+        gt=0,
+        description="Consecutive samples further apart than this are treated as a telemetry gap "
+        "and no energy is integrated across it",
+    )
+    min_coverage_fraction: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Request windows with less telemetry coverage than this get no energy figure",
     )
     energy_price_usd_per_kwh: Optional[float] = Field(
         default=None, ge=0, description="Energy price for cost calculation (USD per kWh)"
     )
 
 
-class AutopsyConfig(BaseModel):
-    """Configuration for autopsy/diagnosis engine."""
+class AutopsyConfig(_StrictModel):
+    """Configuration for the rules-based diagnosis engine."""
 
     enabled: bool = Field(default=True, description="Enable automatic diagnosis")
-
-    # Thresholds for diagnosis rules
     queue_overload_threshold_ms: float = Field(
         default=100.0, description="Queue wait threshold for overload diagnosis"
     )
     throttle_severity_threshold: int = Field(
-        default=3, description="Number of throttle samples to trigger throttling diagnosis"
+        default=3, description="Number of throttled samples to trigger throttling diagnosis"
     )
     memory_pressure_threshold_pct: float = Field(
         default=90.0, ge=0, le=100, description="Memory utilization % for pressure diagnosis"
@@ -57,54 +86,54 @@ class AutopsyConfig(BaseModel):
         default=0.3,
         ge=0,
         le=1,
-        description="Prompt length variance threshold for fragmentation diagnosis",
+        description="Prompt length coefficient of variation for fragmentation diagnosis",
     )
 
 
-class TracerConfig(BaseModel):
+class ReporterConfig(_StrictModel):
+    """Configuration for reporters."""
+
+    cli_rich_output: bool = Field(default=True, description="Use rich formatting when available")
+
+
+class TracerConfig(_StrictModel):
     """Main configuration for LLMTracer."""
 
     output_dir: str = Field(default="./traces", description="Output directory for traces")
-    output_format: str = Field(
-        default="jsonl", description="Output format: jsonl or parquet"
+    output_format: Literal["jsonl", "parquet"] = Field(
+        default="jsonl", description="Output format: jsonl or parquet (parquet needs pyarrow)"
     )
 
-    # Component configs
     gpu_sampler: GPUSamplerConfig = Field(default_factory=GPUSamplerConfig)
     energy: EnergyConfig = Field(default_factory=EnergyConfig)
     autopsy: AutopsyConfig = Field(default_factory=AutopsyConfig)
+    reporter: ReporterConfig = Field(default_factory=ReporterConfig)
 
-    # Instrumentation
     enable_batch_metadata: bool = Field(
-        default=True, description="Collect batch/scheduler metadata from vLLM"
-    )
-    enable_kv_cache_tracking: bool = Field(
-        default=True, description="Track KV cache usage (may require vLLM patching)"
+        default=True,
+        description="Record scheduler batches when the vLLM scheduler is reachable in-process",
     )
 
-    # Performance
-    async_write: bool = Field(
-        default=True, description="Write traces asynchronously to avoid blocking"
+    collection_interval_s: float = Field(
+        default=1.0, gt=0, description="How often the collector thread drains buffers to disk"
     )
-    buffer_size: int = Field(
-        default=1000, ge=1, description="Number of traces to buffer before flushing"
+    max_buffered_events: int = Field(
+        default=10_000,
+        ge=10,
+        description="Completed traces / batches kept in memory before the oldest are dropped",
     )
-
-    # Distributed
-    distributed_mode: bool = Field(
-        default=False, description="Enable distributed tracing for multi-GPU/multi-node"
+    background_writes: bool = Field(
+        default=True, description="Write files from a background thread (bounded queue)"
     )
-    rank: Optional[int] = Field(default=None, description="Rank ID in distributed setup")
-    world_size: Optional[int] = Field(default=None, description="Total number of ranks")
-
-
-class ReporterConfig(BaseModel):
-    """Configuration for reporters."""
-
-    cli_rich_output: bool = Field(default=True, description="Use rich formatting for CLI")
-    export_formats: List[str] = Field(
-        default_factory=lambda: ["jsonl"], description="Export formats: jsonl, parquet, otlp"
+    max_write_queue: int = Field(
+        default=10_000, ge=10, description="Bounded write queue size for background writes"
     )
-    otlp_endpoint: Optional[str] = Field(
-        default=None, description="OTLP endpoint for OpenTelemetry export"
+    strict_instrumentation: bool = Field(
+        default=False,
+        description="Re-raise instrumentation bookkeeping errors instead of counting them. "
+        "Never affects the engine's own return values or exceptions.",
+    )
+    write_incomplete_requests: bool = Field(
+        default=True,
+        description="On stop, write still-active requests with status=incomplete",
     )

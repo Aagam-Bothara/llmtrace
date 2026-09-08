@@ -1,25 +1,41 @@
 """Data models for llmtrace."""
 
+from llmtrace.models.config import (
+    AutopsyConfig,
+    EnergyConfig,
+    GPUSamplerConfig,
+    ReporterConfig,
+    TracerConfig,
+)
 from llmtrace.models.trace import (
-    RequestTrace,
-    RequestSpan,
-    GPUSample,
     BatchMetadata,
-    EnergyAttribution,
     DiagnosisResult,
+    EnergyAttribution,
+    GPUSample,
+    MetricComparison,
+    RequestSpan,
+    RequestStatus,
+    RequestTrace,
+    RunEnergyLedger,
+    SpanPhase,
     TraceAnalysis,
 )
-from llmtrace.models.config import TracerConfig, GPUSamplerConfig, ReporterConfig
 
 __all__ = [
     "RequestTrace",
     "RequestSpan",
+    "RequestStatus",
+    "SpanPhase",
     "GPUSample",
     "BatchMetadata",
     "EnergyAttribution",
+    "RunEnergyLedger",
     "DiagnosisResult",
+    "MetricComparison",
     "TraceAnalysis",
     "TracerConfig",
     "GPUSamplerConfig",
+    "EnergyConfig",
+    "AutopsyConfig",
     "ReporterConfig",
 ]

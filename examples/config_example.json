@@ -4,13 +4,15 @@
   "gpu_sampler": {
     "sample_interval_ms": 100,
     "gpu_ids": null,
-    "use_dcgm": false,
-    "collect_tensor_utilization": false
+    "max_buffered_samples": 100000,
+    "require_gpu": false
   },
   "energy": {
     "enabled": true,
-    "attribution_method": "proportional_time",
-    "energy_price_usd_per_kwh": 0.12
+    "attribution_method": "equal_share",
+    "max_sample_gap_s": 1.0,
+    "min_coverage_fraction": 0.5,
+    "energy_price_usd_per_kwh": null
   },
   "autopsy": {
     "enabled": true,
@@ -20,11 +22,14 @@
     "low_gpu_util_threshold_pct": 50.0,
     "batch_fragmentation_threshold": 0.3
   },
+  "reporter": {
+    "cli_rich_output": true
+  },
   "enable_batch_metadata": true,
-  "enable_kv_cache_tracking": true,
-  "async_write": true,
-  "buffer_size": 1000,
-  "distributed_mode": false,
-  "rank": null,
-  "world_size": null
+  "collection_interval_s": 1.0,
+  "max_buffered_events": 10000,
+  "background_writes": true,
+  "max_write_queue": 10000,
+  "strict_instrumentation": false,
+  "write_incomplete_requests": true
 }

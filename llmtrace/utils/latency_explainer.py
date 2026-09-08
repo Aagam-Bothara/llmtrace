@@ -1,10 +1,10 @@
 """Tail latency explainer (Feature 2)."""
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import statistics
 
-from llmtrace.models.trace import RequestTrace, DiagnosisResult, DiagnosisCategory
+from llmtrace.models.trace import RequestTrace, DiagnosisCategory
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +70,8 @@ class LatencyExplainer:
             "is_tail": True,  # If we have a diagnosis, it's a tail latency case
             "phase_breakdown": phase_breakdown,
             "root_cause": {
-                "category": trace.diagnosis.category.value,
-                "confidence": trace.diagnosis.confidence,
+                "category": DiagnosisCategory(trace.diagnosis.category).value,
+                "score": trace.diagnosis.score,
                 "description": trace.diagnosis.description,
                 "mitigation": trace.diagnosis.mitigation,
                 "evidence": [
@@ -116,7 +116,8 @@ class LatencyExplainer:
         cause_counts: Dict[DiagnosisCategory, int] = {}
 
         for diag in tail_diagnoses:
-            cause_counts[diag.category] = cause_counts.get(diag.category, 0) + 1
+            cat = DiagnosisCategory(diag.category)
+            cause_counts[cat] = cause_counts.get(cat, 0) + 1
 
         # Rank causes
         ranked_causes = sorted(
@@ -172,12 +173,12 @@ class LatencyExplainer:
         # Root cause
         root_cause = explanation["root_cause"]
         print(f"\nRoot Cause: {root_cause['category']}")
-        print(f"Confidence: {root_cause['confidence']*100:.1f}%")
-        print(f"\nDescription:")
+        print(f"Rule score: {root_cause['score']:.2f} (ranking value, not a probability)")
+        print("\nDescription:")
         print(f"  {root_cause['description']}")
 
         if root_cause.get("mitigation"):
-            print(f"\nMitigation:")
+            print("\nMitigation:")
             print(f"  {root_cause['mitigation']}")
 
         # Evidence
@@ -250,24 +251,24 @@ class LatencyExplainer:
             if not trace.diagnosis:
                 continue
 
-            cat = trace.diagnosis.category
+            cat = DiagnosisCategory(trace.diagnosis.category)
 
             if cat not in category_stats:
                 category_stats[cat] = {
                     "count": 0,
                     "total_latency": 0.0,
-                    "avg_confidence": 0.0,
-                    "confidences": [],
+                    "avg_score": 0.0,
+                    "scores": [],
                 }
 
             category_stats[cat]["count"] += 1
             category_stats[cat]["total_latency"] += trace.total_duration_ms
-            category_stats[cat]["confidences"].append(trace.diagnosis.confidence)
+            category_stats[cat]["scores"].append(trace.diagnosis.score)
 
         # Compute averages
         for cat, stats in category_stats.items():
             stats["avg_latency"] = stats["total_latency"] / stats["count"]
-            stats["avg_confidence"] = statistics.mean(stats["confidences"])
+            stats["avg_score"] = statistics.mean(stats["scores"])
 
         report = {
             "total_requests": total,
@@ -278,7 +279,7 @@ class LatencyExplainer:
                     "count": stats["count"],
                     "percentage": stats["count"] / diagnosed * 100 if diagnosed > 0 else 0,
                     "avg_latency_ms": stats["avg_latency"],
-                    "avg_confidence": stats["avg_confidence"],
+                    "avg_score": stats["avg_score"],
                 }
                 for cat, stats in category_stats.items()
             },

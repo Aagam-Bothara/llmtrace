@@ -1,319 +1,225 @@
-"""Main LLMTracer orchestrator class."""
+"""Main LLMTracer orchestrator.
 
-import asyncio
+Synchronous lifecycle, safe to use around the blocking ``vllm.LLM.generate()``
+call: GPU sampling, collection and writing all run in background threads, so
+they progress while the calling thread is inside vLLM.
+
+    tracer = LLMTracer(output_dir="./traces")
+    tracer.instrument_engine(llm.llm_engine)   # starts collection
+    llm.generate(prompts, sampling_params)
+    tracer.stop()                              # restores engine, drains, flushes
+    analysis = tracer.analyze()
+"""
+
+from __future__ import annotations
+
 import logging
-from typing import Any, List, Optional
+import threading
+import uuid
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from llmtrace.models.config import TracerConfig
-from llmtrace.models.trace import RequestTrace, TraceAnalysis
-from llmtrace.data_plane.gpu_sampler import GPUSampler
-from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
-from llmtrace.data_plane.trace_writer import TraceWriter
+from llmtrace import io
 from llmtrace.control_plane.correlator import Correlator
-from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.control_plane.reporter import Reporter
+from llmtrace.control_plane.rules_engine import RulesEngine
+from llmtrace.data_plane.gpu_sampler import GPUSampler, SamplerBackend
+from llmtrace.data_plane.trace_writer import TraceWriter
+from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
+from llmtrace.models.config import TracerConfig
+from llmtrace.models.trace import TraceAnalysis
 
 logger = logging.getLogger(__name__)
 
+_CONVENIENCE_KWARGS = {
+    # LLMTracer(**kwargs) shortcuts -> nested config paths
+    "gpu_sample_interval_ms": ("gpu_sampler", "sample_interval_ms"),
+    "enable_energy_attribution": ("energy", "enabled"),
+    "attribution_method": ("energy", "attribution_method"),
+    "energy_price_usd_per_kwh": ("energy", "energy_price_usd_per_kwh"),
+}
+
 
 class LLMTracer:
-    """
-    Main tracer orchestrator for llmtrace.
+    def __init__(
+        self,
+        config: Optional[TracerConfig] = None,
+        *,
+        gpu_backend: Optional[SamplerBackend] = None,
+        **kwargs: Any,
+    ):
+        """Create a tracer.
 
-    Coordinates data plane (collection) and control plane (analysis) components.
-
-    Usage:
-        tracer = LLMTracer(config)
-        tracer.instrument_engine(llm_engine)
-        # ... run inference ...
-        tracer.stop()
-        analysis = tracer.analyze()
-    """
-
-    def __init__(self, config: Optional[TracerConfig] = None, **kwargs):
+        ``kwargs`` may be top-level ``TracerConfig`` fields or the shortcuts in
+        ``_CONVENIENCE_KWARGS``. Unknown options raise ``ValueError`` instead of
+        being ignored.
         """
-        Initialize LLMTracer.
+        base = (config or TracerConfig()).model_dump()
+        for key, value in kwargs.items():
+            if key in _CONVENIENCE_KWARGS:
+                section, field = _CONVENIENCE_KWARGS[key]
+                base[section][field] = value
+            elif key in TracerConfig.model_fields:
+                base[key] = value
+            else:
+                raise ValueError(
+                    f"Unknown LLMTracer option '{key}'. Valid: "
+                    f"{sorted(list(TracerConfig.model_fields) + list(_CONVENIENCE_KWARGS))}"
+                )
+        self.config = TracerConfig.model_validate(base)
 
-        Args:
-            config: TracerConfig object, or None to use defaults
-            **kwargs: Config overrides (e.g., output_dir="./traces")
-        """
-        # Build config
-        if config is None:
-            config = TracerConfig(**kwargs)
-        elif kwargs:
-            # Override config fields
-            config = config.model_copy(update=kwargs)
-
-        self.config = config
-
-        # Initialize components
-        self.gpu_sampler = GPUSampler(config.gpu_sampler)
+        self.session_id = uuid.uuid4().hex[:12]
+        self.gpu_sampler = GPUSampler(self.config.gpu_sampler, backend=gpu_backend, clock_domain=self.session_id)
         self.vllm_instrumentation = VLLMInstrumentation(
-            enable_batch_metadata=config.enable_batch_metadata,
-            enable_kv_cache=config.enable_kv_cache_tracking,
+            enable_batch_metadata=self.config.enable_batch_metadata,
+            max_buffered=self.config.max_buffered_events,
+            strict=self.config.strict_instrumentation,
+            clock_domain=self.session_id,
         )
         self.trace_writer = TraceWriter(
-            output_dir=config.output_dir,
-            output_format=config.output_format,
-            async_write=config.async_write,
-            buffer_size=config.buffer_size,
+            output_dir=self.config.output_dir,
+            output_format=self.config.output_format,
+            background=self.config.background_writes,
+            max_queue=self.config.max_write_queue,
         )
-        self.correlator = Correlator(config.energy)
-        self.rules_engine = RulesEngine(config.autopsy)
-        self.reporter = Reporter(
-            config=TracerConfig.model_validate({"cli_rich_output": True, "export_formats": ["jsonl"]})
-            if not hasattr(config, 'reporter') else config.reporter
-        )
+        self.correlator = Correlator(self.config.energy)
+        self.rules_engine = RulesEngine(self.config.autopsy)
+        self.reporter = Reporter(self.config.reporter)
 
-        self._running = False
-        self._collection_task: Optional[asyncio.Task] = None
+        self._state = "new"  # new | running | stopped
+        self._stop_event = threading.Event()
+        self._collector: Optional[threading.Thread] = None
+        self._collection_errors = 0
+        self._last_collection_error: Optional[str] = None
+        self._incomplete_written = 0
 
-        logger.info("LLMTracer initialized")
+    # -------------------------------------------------------------- lifecycle
 
     def instrument_engine(self, engine: Any) -> None:
-        """
-        Instrument a vLLM LLMEngine for tracing.
-
-        Args:
-            engine: vLLM LLMEngine instance
-        """
-        logger.info("Instrumenting vLLM engine")
+        """Instrument a vLLM LLMEngine and start collection."""
         self.vllm_instrumentation.instrument_engine(engine)
-
-        # Start data collection
         self.start()
 
     def start(self) -> None:
-        """Start tracing (GPU sampling and data collection)."""
-        if self._running:
+        if self._state == "running":
             logger.warning("Tracer already running")
             return
-
-        logger.info("Starting llmtrace data collection")
-
-        # Start GPU sampler
-        self.gpu_sampler.start()
-
-        # Start trace writer
+        if self._state == "stopped":
+            raise RuntimeError("LLMTracer cannot be restarted; create a new instance")
         self.trace_writer.start()
+        self.gpu_sampler.start()  # raises only if require_gpu=True and NVML is unavailable
+        self._stop_event.clear()
+        self._collector = threading.Thread(target=self._collect_loop, name="llmtrace-collector", daemon=True)
+        self._collector.start()
+        self._state = "running"
+        logger.info("llmtrace started (session %s, output %s)", self.session_id, self.config.output_dir)
 
-        # Start periodic collection task
-        self._running = True
-        self._collection_task = asyncio.create_task(self._collection_loop())
-
-        logger.info("llmtrace started successfully")
-
-    async def stop(self) -> None:
-        """Stop tracing and flush all data."""
-        if not self._running:
-            logger.warning("Tracer not running")
+    def stop(self) -> None:
+        """Stop collection, restore the engine, drain buffers and flush files. Idempotent."""
+        if self._state != "running":
+            if self._state == "new":
+                logger.warning("Tracer not running")
             return
+        self._state = "stopped"
+        self._stop_event.set()
+        if self._collector is not None:
+            self._collector.join()
+            self._collector = None
 
-        logger.info("Stopping llmtrace")
+        # Restore the engine first so no new events arrive, then drain everything.
+        leftovers = self.vllm_instrumentation.uninstrument_engine()
+        self.gpu_sampler.stop()
+        self._collect_once()
+        if leftovers:
+            if self.config.write_incomplete_requests:
+                self.trace_writer.write_traces(leftovers)
+                self._incomplete_written = len(leftovers)
+            logger.warning("%d requests were still active at stop (written as incomplete=%s)",
+                           len(leftovers), self.config.write_incomplete_requests)
+        self.trace_writer.stop()
+        health = self.health()
+        if health["instrumentation"]["instrumentation_errors"] or health["writer"]["write_errors"] \
+                or any(health["writer"]["dropped"].values()) or self._collection_errors:
+            logger.error("llmtrace stopped with problems: %s", health)
+        else:
+            logger.info("llmtrace stopped cleanly: %s", health)
 
-        self._running = False
+    def __enter__(self) -> "LLMTracer":
+        return self
 
-        # Stop collection task
-        if self._collection_task:
-            await self._collection_task
+    def __exit__(self, *exc: Any) -> None:
+        self.stop()
 
-        # Stop components
-        await self.gpu_sampler.stop()
-        await self.trace_writer.stop()
+    # ------------------------------------------------------------- collection
 
-        # Uninstrument engine
-        self.vllm_instrumentation.uninstrument_engine()
+    def _collect_loop(self) -> None:
+        while not self._stop_event.wait(self.config.collection_interval_s):
+            self._collect_once()
 
-        logger.info("llmtrace stopped")
+    def _collect_once(self) -> None:
+        try:
+            traces = self.vllm_instrumentation.drain_completed_traces()
+            batches = self.vllm_instrumentation.drain_batch_metadata()
+            samples = self.gpu_sampler.drain()
+            if traces:
+                self.trace_writer.write_traces(traces)
+            if batches:
+                self.trace_writer.write_batch_metadata(batches)
+            if samples:
+                self.trace_writer.write_gpu_samples(samples)
+        except Exception as exc:
+            self._collection_errors += 1
+            self._last_collection_error = f"{type(exc).__name__}: {exc}"
+            logger.error("Collection error: %s", exc, exc_info=True)
 
-    async def _collection_loop(self) -> None:
-        """
-        Periodic collection loop.
+    def health(self) -> Dict[str, Any]:
+        return {
+            "state": self._state,
+            "session_id": self.session_id,
+            "instrumentation": self.vllm_instrumentation.health(),
+            "gpu_sampler": self.gpu_sampler.stats(),
+            "writer": self.trace_writer.stats(),
+            "collection_errors": self._collection_errors,
+            "last_collection_error": self._last_collection_error,
+            "incomplete_requests_written": self._incomplete_written,
+        }
 
-        Collects completed traces, GPU samples, and batch metadata,
-        then writes them to disk.
-        """
-        while self._running:
-            await asyncio.sleep(1.0)  # Collect every second
+    # --------------------------------------------------------------- analysis
 
-            try:
-                # Collect completed traces
-                traces = await self.vllm_instrumentation.get_completed_traces(clear=True)
-
-                # Collect batch metadata
-                batches = await self.vllm_instrumentation.get_batch_metadata(clear=True)
-
-                # Collect GPU samples
-                # Note: We keep samples until correlation, then can clear
-                # For now, we'll write them incrementally
-                gpu_samples = await self.gpu_sampler.get_samples()
-
-                # Write to disk
-                if traces:
-                    await self.trace_writer.write_traces(traces)
-                    logger.debug(f"Collected and wrote {len(traces)} traces")
-
-                if batches:
-                    await self.trace_writer.write_batch_metadata(batches)
-                    logger.debug(f"Collected and wrote {len(batches)} batch metadata entries")
-
-                if gpu_samples:
-                    await self.trace_writer.write_gpu_samples(gpu_samples)
-                    # Clear old samples to manage memory
-                    await self.gpu_sampler.clear_samples()
-                    logger.debug(f"Collected and wrote {len(gpu_samples)} GPU samples")
-
-            except Exception as e:
-                logger.error(f"Error in collection loop: {e}", exc_info=True)
-
-    async def analyze(
-        self,
-        baseline_dir: Optional[str] = None,
-    ) -> TraceAnalysis:
-        """
-        Analyze collected traces and generate report.
-
-        Args:
-            baseline_dir: Optional path to baseline traces for regression detection
-
-        Returns:
-            TraceAnalysis object
-        """
-        logger.info("Analyzing collected traces")
-
-        # Load traces from output files
-        traces = await self._load_traces()
-
+    def analyze(self, baseline_dir: Optional[str] = None) -> TraceAnalysis:
+        """Analyze this session's files in ``output_dir`` (optionally against a baseline dir)."""
+        out_dir = Path(self.config.output_dir)
+        files = self.trace_writer.get_output_files()
+        traces = io.load_traces(files.get("traces", []))
         if not traces:
-            logger.warning("No traces found to analyze")
+            logger.warning("No traces found for session %s in %s", self.trace_writer.session_id, out_dir)
             return self.reporter._empty_analysis()
+        samples = io.load_gpu_samples(files.get("gpu", []))
+        batches = io.load_batches(files.get("batches", []))
+        result = self.correlator.correlate(traces, samples, batches)
+        for t in result.traces:
+            t.diagnosis = self.rules_engine.diagnose_request(t)
 
-        # Load GPU samples
-        gpu_samples = await self._load_gpu_samples()
-
-        # Correlate traces with GPU samples
-        correlated_traces = await self.correlator.correlate_traces(traces, gpu_samples)
-
-        # Run diagnosis on each trace
-        for trace in correlated_traces:
-            diagnosis = await self.rules_engine.diagnose_request(trace)
-            trace.diagnosis = diagnosis
-
-        # Run batch-level diagnosis if we have batch metadata
-        # (This would require loading batch metadata and grouping traces by batch)
-
-        # Load baseline if provided
         baseline_traces = None
+        baseline_ledger = None
         if baseline_dir:
-            baseline_traces = await self._load_traces(baseline_dir)
-
-        # Generate analysis
-        analysis = self.reporter.generate_analysis(correlated_traces, baseline_traces)
-
-        logger.info("Analysis complete")
-        return analysis
+            baseline_traces = io.load_traces([baseline_dir])
+            if baseline_traces:
+                b = self.correlator.correlate(
+                    baseline_traces, io.load_gpu_samples([baseline_dir]), io.load_batches([baseline_dir])
+                )
+                baseline_traces, baseline_ledger = b.traces, b.ledger
+        return self.reporter.generate_analysis(result.traces, baseline_traces, result.ledger, baseline_ledger)
 
     def print_analysis(self, analysis: TraceAnalysis) -> None:
-        """Print analysis to console."""
         self.reporter.print_analysis(analysis)
 
-    async def _load_traces(self, directory: Optional[str] = None) -> List[RequestTrace]:
-        """Load traces from output directory."""
-        dir_path = Path(directory) if directory else Path(self.config.output_dir)
-
-        if not dir_path.exists():
-            return []
-
-        traces = []
-
-        # Load from JSONL files
-        if self.config.output_format == "jsonl":
-            import json
-
-            for trace_file in dir_path.glob("traces_*.jsonl"):
-                with open(trace_file, "r") as f:
-                    for line in f:
-                        if line.strip():
-                            trace_dict = json.loads(line)
-                            trace = RequestTrace.model_validate(trace_dict)
-                            traces.append(trace)
-
-        # Load from Parquet files
-        elif self.config.output_format == "parquet":
-            import pyarrow.parquet as pq
-
-            for trace_file in dir_path.glob("traces_*.parquet"):
-                table = pq.read_table(trace_file)
-                for row in table.to_pylist():
-                    trace = RequestTrace.model_validate(row)
-                    traces.append(trace)
-
-        logger.info(f"Loaded {len(traces)} traces from {dir_path}")
-        return traces
-
-    async def _load_gpu_samples(self, directory: Optional[str] = None):
-        """Load GPU samples from output directory."""
-        from llmtrace.models.trace import GPUSample
-
-        dir_path = Path(directory) if directory else Path(self.config.output_dir)
-
-        if not dir_path.exists():
-            return []
-
-        samples = []
-
-        # Load from JSONL files
-        if self.config.output_format == "jsonl":
-            import json
-
-            for sample_file in dir_path.glob("gpu_*.jsonl"):
-                with open(sample_file, "r") as f:
-                    for line in f:
-                        if line.strip():
-                            sample_dict = json.loads(line)
-                            sample = GPUSample.model_validate(sample_dict)
-                            samples.append(sample)
-
-        # Load from Parquet files
-        elif self.config.output_format == "parquet":
-            import pyarrow.parquet as pq
-
-            for sample_file in dir_path.glob("gpu_*.parquet"):
-                table = pq.read_table(sample_file)
-                for row in table.to_pylist():
-                    sample = GPUSample.model_validate(row)
-                    samples.append(sample)
-
-        logger.info(f"Loaded {len(samples)} GPU samples from {dir_path}")
-        return samples
-
-    def get_output_files(self) -> dict:
-        """Get paths to output files."""
+    def get_output_files(self) -> Dict[str, List[str]]:
         return self.trace_writer.get_output_files()
 
     @classmethod
-    def from_config_file(cls, config_path: str) -> "LLMTracer":
-        """
-        Create LLMTracer from a config file.
-
-        Args:
-            config_path: Path to JSON or YAML config file
-
-        Returns:
-            LLMTracer instance
-        """
-        import json
-        from pathlib import Path
-
-        config_file = Path(config_path)
-
-        if config_file.suffix == ".json":
-            with open(config_file) as f:
-                config_dict = json.load(f)
-        else:
-            raise ValueError(f"Unsupported config format: {config_file.suffix}")
-
-        config = TracerConfig.model_validate(config_dict)
-        return cls(config)
+    def from_config_file(cls, config_path: str, **kwargs: Any) -> "LLMTracer":
+        path = Path(config_path)
+        if path.suffix != ".json":
+            raise ValueError(f"Unsupported config format: {path.suffix} (use .json)")
+        return cls(TracerConfig.model_validate(io.read_json(path)), **kwargs)

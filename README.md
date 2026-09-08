@@ -2,259 +2,136 @@
 
 **Flight recorder, attribution, and autopsy for vLLM inference.**
 
-llmtrace is a vLLM-native observability tool that answers the questions you can't answer today:
-- Why is this request slow? (with ranked causes + evidence)
-- How much energy does each request actually cost?
-- What's vLLM doing internally? (batching, scheduling, KV cache pressure)
-- Did my optimization regress performance or energy?
+llmtrace instruments a vLLM `LLMEngine`, samples GPU telemetry alongside it,
+and turns the two into per-request lifecycle traces, an energy ledger, and
+rule-based diagnoses.
 
-## Core Pillars
+## Status: pre-GPU-validation
 
-### Pillar A: Flight Recorder (Truth)
-Per-request lifecycle spans from inside vLLM:
-- Queue wait, prefill, decode phases
-- Scheduler/batch metadata
-- GPU telemetry aligned in time: power, clocks, utilization, throttling
+This is an early implementation that has **not yet been run against real vLLM
+or a real GPU**. What exists today:
 
-### Pillar B: Attribution (Blame)
-Per-request energy and cost attribution:
-- J/request, J/token
-- Cost/request (with optional $/token from energy price)
-- Energy breakdown across queue/prefill/decode
+| Area | Status |
+|------|--------|
+| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Implemented against interfaces verified from the vLLM 0.11.0 source; exercised only with a fake engine (CPU tests) |
+| Scheduler batch metadata | Implemented for the in-process scheduler (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); reported as unavailable otherwise |
+| GPU telemetry (NVML, background thread) | Implemented; exercised only with a fake backend |
+| Energy ledger (per-GPU integration, allocation policies, conservation) | Implemented and unit-tested with known totals |
+| Rules-based diagnosis, CLI `analyze` / `compare`, offline analysis | Implemented and CPU-tested |
+| `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
+| AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |
+| Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
+| Overhead measurements | None taken yet; see `docs/GPU_VALIDATION.md` |
 
-### Pillar C: Autopsy (Answers)
-Automated diagnosis:
-- For a bad request: "why" with ranked causes + evidence
-- For a run: top regressions, anomalies, inefficiency flags
+See [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for what the first GPU
+run must check, and [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
+for a precise list of what is and is not verified.
 
-## vLLM-Specific Features
+## What it records
 
-### 1. Batch/Scheduler Visibility
-See what vLLM is doing internally:
-- Batch size over time (prefill vs decode)
-- Prompt length distribution per batch
-- KV cache pressure proxy
-- Queue depth snapshots
+**Per request** (`traces_*.jsonl`): arrival, completion, status
+(completed/aborted/incomplete), prompt and output token counts from engine
+token ids, spans at engine-step granularity, TTFT and TPOT with explicit
+"unavailable" reasons, batch ids, and an energy allocation with its policy and
+telemetry coverage. Durations come from the monotonic clock; wall-clock
+timestamps are kept as metadata.
 
-### 2. Tail Latency Explainer
-Automatic diagnosis with mechanism attribution:
-- Queueing overload
-- Batch fragmentation
-- GPU downclocking/throttling
-- Memory pressure
-- Host bottlenecks
-- Cold path issues
+**Per scheduler step** (`batches_*.jsonl`, in-process scheduler only): real
+request ids scheduled, tokens scheduled per request, prefill/decode counts,
+KV-cache usage fraction.
 
-### 3. Energy Regression Guardrail
-CI integration for serving performance:
-- Baseline comparison
-- Automatic regression detection (TTFT, J/token, throttling)
-- Fail CI on regressions
+**GPU telemetry** (`gpu_*.jsonl`): power, utilization, memory, clocks,
+throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 
-## Architecture
+## Energy accounting, precisely
 
-### Data Plane
-- **vLLM instrumentation plugin**: Hooks into engine lifecycle
-- **GPU sampler**: NVML/DCGM polling for GPU telemetry
-- **Trace writer**: Append-only JSONL/Parquet output
+* **Telemetry** is measured: NVML power readings.
+* **Device energy** is an estimate: each GPU's power is integrated on its own
+  timestamps (trapezoid); gaps longer than `max_sample_gap_s` are not
+  integrated; device energies are then summed.
+* **Attributed energy** is an allocation estimate: in every elementary time
+  interval the device energy is split among the requests active in it
+  (`equal_share` or `proportional_tokens`). Membership comes from scheduler
+  batch metadata when available, otherwise from request windows (which include
+  queue wait). `window_only` skips allocation and only reports device energy
+  during each request window, labeled as shared.
+* **Conservation**: `device = attributed + idle + unattributable` over the run
+  window, checked to floating-point tolerance. Idle energy (no request active)
+  is reported, not attributed. Energy outside the run window is not counted.
+* **Insufficient telemetry** yields `null` with a reason, not zero.
 
-### Control Plane
-- **Correlator**: Aligns request windows with GPU samples
-- **Rules engine**: Diagnoses issues with evidence thresholds
-- **Reporters**: CLI summaries, notebook exports, OTLP
-
-## Installation
+## Install
 
 ```bash
-pip install llmtrace
-
-# With DCGM support for enterprise deployments
-pip install llmtrace[dcgm]
+pip install -e .                 # offline analysis + CLI, no GPU deps
+pip install -e ".[nvml]"         # + NVML telemetry
+pip install -e ".[parquet]"      # + parquet output
+pip install -e ".[vllm]"         # + vllm==0.11.0 (Linux, NVIDIA GPU)
+pip install -e ".[dev]"          # + pytest, ruff
 ```
 
-## Quick Start
-
-### Basic Usage
+## Use with vLLM 0.11.0 (offline `LLM` API)
 
 ```python
-import asyncio
+from vllm import LLM, SamplingParams
 from llmtrace import LLMTracer
-from vllm import LLM
 
-async def main():
-    # Initialize tracer
-    tracer = LLMTracer(
-        output_dir="./traces",
-        gpu_sample_interval_ms=100,
-        enable_energy_attribution=True,
-    )
+tracer = LLMTracer(output_dir="./traces", gpu_sample_interval_ms=100)
+llm = LLM(model="facebook/opt-125m")
+tracer.instrument_engine(llm.llm_engine)     # patches the engine, starts collection threads
 
-    # Instrument your vLLM engine
-    llm = LLM(model="meta-llama/Llama-2-7b-hf")
-    tracer.instrument_engine(llm.llm_engine)
+outputs = llm.generate(["Hello, world!"], SamplingParams(max_tokens=32))
 
-    # Your inference as usual
-    outputs = llm.generate("Hello, world!")
-
-    # Stop tracing and analyze
-    await tracer.stop()
-    analysis = await tracer.analyze()
-    tracer.print_analysis(analysis)
-
-asyncio.run(main())
+tracer.stop()                                # restores the engine, drains, flushes
+print(tracer.health())                       # errors, drops, telemetry availability
+tracer.print_analysis(tracer.analyze())
 ```
 
-### What You Get
+Set `VLLM_ENABLE_V1_MULTIPROCESSING=0` before creating the `LLM` to keep the
+engine core in-process; that is the only configuration in which the scheduler
+is reachable and batch metadata plus queue/prefill spans are recorded.
 
-**Console Output:**
-```
-llmtrace Analysis Report
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Overview
-┌─────────────┬───────────┐
-│ Metric      │ Value     │
-├─────────────┼───────────┤
-│ Requests    │ 4         │
-│ Duration    │ 2.34s     │
-│ Throughput  │ 1.71 req/s│
-└─────────────┴───────────┘
-
-Latency Metrics
-┌───────────┬──────────┬──────────┬──────────┬──────────┐
-│ Metric    │ Avg      │ P50      │ P95      │ P99      │
-├───────────┼──────────┼──────────┼──────────┼──────────┤
-│ TTFT (ms) │ 45.23    │ 43.12    │ 52.34    │ 53.21    │
-│ TPOT (ms) │ 12.45    │ 11.23    │ 15.67    │ 16.12    │
-└───────────┴──────────┴──────────┴──────────┴──────────┘
-
-Energy & Efficiency
-┌──────────────────────┬────────────┐
-│ Metric               │ Value      │
-├──────────────────────┼────────────┤
-│ Total Energy         │ 456.78 J   │
-│ Avg per Request      │ 114.20 J   │
-│ Avg per Token        │ 2.2840 J   │
-│ Avg GPU Utilization  │ 87.3%      │
-│ Avg Power Draw       │ 245.6 W    │
-│ Throttle Incidents   │ 0          │
-└──────────────────────┴────────────┘
-```
-
-**Trace Files:**
-```
-./traces/
-├── traces_20260204_153045.jsonl      # Request lifecycle data
-├── batches_20260204_153045.jsonl     # Batch metadata
-└── gpu_20260204_153045.jsonl         # GPU telemetry
-```
-
-See [QUICKSTART.md](QUICKSTART.md) for detailed getting started guide.
-
-## CLI Usage
+## CPU-only synthetic example
 
 ```bash
-# Live monitoring
-llmtrace monitor --pid <vllm_process_pid>
-
-# Analyze traces
-llmtrace analyze traces/run_*.jsonl
-
-# CI regression check
-llmtrace compare --baseline traces/baseline.jsonl --current traces/current.jsonl \
-    --fail-on-regression --ttft-threshold 5% --energy-threshold 10%
+python examples/synthetic_replay.py
 ```
 
-## Distributed/Multi-GPU Support
+Everything in it is fabricated (fake engine, fake NVML). It demonstrates the
+pipeline and the `compare` exit codes; its numbers mean nothing about hardware.
 
-llmtrace automatically detects tensor parallelism and pipeline parallelism:
-- Aggregates GPU metrics across all ranks
-- Attributes energy proportionally by device
-- Correlates across distributed workers
+## CLI
 
-## Examples
+```bash
+llmtrace analyze ./traces                       # analyze a run directory
+llmtrace analyze ./traces --output report.json  # machine-readable report
+llmtrace compare --baseline ./traces/baseline --current ./traces/current \
+    --ttft-threshold 5 --energy-threshold 10 --fail-on-regression
+llmtrace init-config --output llmtrace_config.json
+```
 
-Check out [examples/](examples/) for complete working examples:
+`compare` sign convention: change = (current - baseline) / baseline. All
+compared metrics are higher-is-worse, so only a positive change above the
+threshold is a regression; improvements never fail. Missing metrics and zero
+baselines are reported as unavailable (`--fail-on-missing` makes them fail).
 
-- **[basic_usage.py](examples/basic_usage.py)**: Basic integration with vLLM
-- **[batch_analysis.py](examples/batch_analysis.py)**: Feature 1 - Batch/Scheduler visibility
-- **[latency_diagnosis.py](examples/latency_diagnosis.py)**: Feature 2 - Tail latency explainer
-- **[ci_regression.py](examples/ci_regression.py)**: Feature 3 - Energy regression guardrail for CI
+## Tests
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+```
+
+The suite runs without a GPU, NVML or vLLM. It validates llmtrace's own logic
+against fakes shaped like the vLLM 0.11.0 interfaces; it does not prove
+compatibility with real vLLM.
 
 ## Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)**: Get started in 5 minutes
-- **[DEVELOPMENT.md](DEVELOPMENT.md)**: Architecture details and contribution guide
-- **[examples/](examples/)**: Complete working examples
-
-## Why llmtrace?
-
-### The Problem
-
-LLM serving is a black box:
-- "Why is this request slow?" → No visibility into vLLM internals
-- "How much does this cost in energy?" → No per-request attribution
-- "Did my optimization help?" → No regression detection
-
-### The Solution
-
-llmtrace provides:
-1. **Truth**: Per-request lifecycle traces from inside vLLM + GPU telemetry
-2. **Blame**: Energy attribution (J/request, J/token) with phase breakdown
-3. **Answers**: Automated diagnosis with ranked causes and evidence
-
-### Key Differentiators
-
-- **vLLM-native**: Not a generic tracer - built specifically for vLLM internals
-- **Energy-focused**: First-class energy attribution and cost tracking
-- **Actionable**: Diagnoses point to mechanisms (not just symptoms) with mitigations
-- **Production-ready**: <1% overhead, async I/O, distributed support
-- **CI-integrated**: Regression guardrails for your performance pipeline
-
-## Performance
-
-**Overhead Targets:**
-- GPU sampling: <1% CPU
-- vLLM instrumentation: <1% latency increase
-- Trace writing: Non-blocking async I/O
-
-Measured in production workloads.
-
-## Roadmap
-
-**v0.2 (Near-term)**
-- [ ] DCGM support for enterprise deployments
-- [ ] Improved multi-GPU attribution
-- [ ] Streaming analysis mode
-- [ ] Web UI for trace exploration
-
-**v0.3 (Long-term)**
-- [ ] ML-based anomaly detection
-- [ ] Real-time monitoring dashboard
-- [ ] OTLP/OpenTelemetry integration
-- [ ] Support for other LLM frameworks
-
-## Contributing
-
-Contributions welcome! See [DEVELOPMENT.md](DEVELOPMENT.md) for architecture details.
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Submit PR
-
-## Citation
-
-If you use llmtrace in your research, please cite:
-
-```bibtex
-@software{llmtrace2026,
-  title={llmtrace: Flight Recorder, Attribution, and Autopsy for vLLM Inference},
-  author={llmtrace contributors},
-  year={2026},
-  url={https://github.com/yourusername/llmtrace}
-}
-```
+* [QUICKSTART.md](QUICKSTART.md)
+* [DEVELOPMENT.md](DEVELOPMENT.md): architecture, verified interfaces, semantics
+* [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md): first GPU run checklist
+* [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md): implementation status
 
 ## License
 

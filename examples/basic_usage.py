@@ -1,59 +1,37 @@
-"""Basic usage example for llmtrace."""
+"""Basic llmtrace usage with vLLM 0.11.0 (requires Linux + NVIDIA GPU; not yet validated on hardware).
 
-import asyncio
+    pip install -e ".[vllm]"
+    VLLM_ENABLE_V1_MULTIPROCESSING=0 python examples/basic_usage.py   # =0 exposes scheduler batch metadata
+"""
+
 from vllm import LLM, SamplingParams
+
 from llmtrace import LLMTracer
 
 
-async def main():
-    # Initialize llmtrace
-    tracer = LLMTracer(
-        output_dir="./traces",
-        gpu_sample_interval_ms=100,
-        enable_energy_attribution=True,
-    )
+def main() -> None:
+    tracer = LLMTracer(output_dir="./traces", gpu_sample_interval_ms=100)
 
-    # Initialize vLLM
-    llm = LLM(model="facebook/opt-125m")  # Small model for demo
+    llm = LLM(model="facebook/opt-125m")
+    tracer.instrument_engine(llm.llm_engine)  # patches add_request/step/abort_request, starts collection
 
-    # Instrument the engine
-    tracer.instrument_engine(llm.llm_engine)
-
-    # Run inference
     prompts = [
         "Hello, my name is",
         "The president of the United States is",
         "The capital of France is",
         "To be or not to be,",
     ]
-
-    sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=50)
-
-    print("Running inference with llmtrace...")
-    outputs = llm.generate(prompts, sampling_params)
-
-    # Print outputs
+    outputs = llm.generate(prompts, SamplingParams(temperature=0.8, top_p=0.95, max_tokens=50))
     for output in outputs:
-        prompt = output.prompt
-        generated_text = output.outputs[0].text
-        print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+        print(f"{output.prompt!r} -> {output.outputs[0].text!r}")
 
-    # Stop tracer
-    await tracer.stop()
+    tracer.stop()  # restores the engine, drains buffers, flushes files
+    print("health:", tracer.health())
 
-    # Analyze traces
-    print("\nAnalyzing traces...")
-    analysis = await tracer.analyze()
-
-    # Print analysis
+    analysis = tracer.analyze()
     tracer.print_analysis(analysis)
-
-    # Get output files
-    output_files = tracer.get_output_files()
-    print(f"\nTrace files written to:")
-    for data_type, filepath in output_files.items():
-        print(f"  {data_type}: {filepath}")
+    print("files:", tracer.get_output_files())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

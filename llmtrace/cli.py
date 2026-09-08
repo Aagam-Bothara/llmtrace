@@ -1,297 +1,180 @@
-"""Command-line interface for llmtrace."""
+"""Command-line interface for llmtrace (offline analysis; no GPU or vLLM needed)."""
 
-import asyncio
+from __future__ import annotations
+
+import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import click
 
-from llmtrace import LLMTracer
-from llmtrace.models.config import TracerConfig
-from llmtrace.control_plane.reporter import Reporter, ReporterConfig
+from llmtrace import __version__, io
+from llmtrace.control_plane.correlator import Correlator, CorrelationResult
+from llmtrace.control_plane.reporter import Reporter
+from llmtrace.control_plane.rules_engine import RulesEngine
+from llmtrace.models.config import AutopsyConfig, EnergyConfig, ReporterConfig, TracerConfig
+from llmtrace.models.trace import MetricComparison
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
+
+EXIT_OK = 0
+EXIT_REGRESSION = 1
+EXIT_USAGE = 2
+EXIT_NOT_IMPLEMENTED = 3
 
 
 @click.group()
-@click.version_option(version="0.1.0")
-def main():
-    """llmtrace - Flight recorder, attribution, and autopsy for vLLM inference."""
-    pass
+@click.version_option(version=__version__)
+@click.option("-v", "--verbose", is_flag=True, help="Enable INFO logging")
+def main(verbose: bool) -> None:
+    """llmtrace - flight recorder, attribution and autopsy for vLLM inference."""
+    logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+
+
+def _correlate_dir(
+    trace_paths: List[str], gpu_paths: Optional[List[str]], attribution: str
+) -> CorrelationResult:
+    traces = io.load_traces(trace_paths)
+    dirs = io.run_directories_for(trace_paths)
+    samples = io.load_gpu_samples(gpu_paths if gpu_paths else dirs)
+    batches = io.load_batches(dirs)
+    correlator = Correlator(EnergyConfig(attribution_method=attribution))  # type: ignore[arg-type]
+    return correlator.correlate(traces, samples, batches)
 
 
 @main.command()
-@click.option("--pid", type=int, help="vLLM process PID to monitor")
-@click.option("--output-dir", default="./traces", help="Output directory for traces")
-@click.option(
-    "--sample-interval",
-    default=100,
-    type=int,
-    help="GPU sampling interval in milliseconds",
-)
-def monitor(pid: Optional[int], output_dir: str, sample_interval: int):
-    """Monitor a running vLLM process and collect traces."""
-    click.echo(f"Monitoring vLLM process (PID: {pid})")
-    click.echo(f"Output directory: {output_dir}")
-    click.echo(f"GPU sample interval: {sample_interval}ms")
+@click.argument("trace_paths", nargs=-1, required=True, type=click.Path(exists=True))
+@click.option("--gpu-samples", "gpu_paths", multiple=True, type=click.Path(exists=True),
+              help="GPU sample file(s)/dir(s); default: gpu_*.jsonl next to the trace files")
+@click.option("--baseline", type=click.Path(exists=True), help="Baseline run directory for comparison")
+@click.option("--attribution", default="equal_share",
+              type=click.Choice(["equal_share", "proportional_tokens", "window_only"]))
+@click.option("--output", type=click.Path(), help="Write report (.json for machine-readable, else text)")
+@click.option("--no-rich", is_flag=True, help="Plain text output")
+def analyze(trace_paths: Tuple[str, ...], gpu_paths: Tuple[str, ...], baseline: Optional[str],
+            attribution: str, output: Optional[str], no_rich: bool) -> None:
+    """Analyze trace files or run directories."""
+    result = _correlate_dir(list(trace_paths), list(gpu_paths) or None, attribution)
+    if not result.traces:
+        click.echo("No traces found", err=True)
+        sys.exit(EXIT_USAGE)
+    rules = RulesEngine(AutopsyConfig())
+    for t in result.traces:
+        t.diagnosis = rules.diagnose_request(t)
 
-    # For now, this is a placeholder
-    # Full implementation would attach to process, inject instrumentation, etc.
-    # This is complex and would require process introspection
-    click.echo("\nNote: Live monitoring requires vLLM integration.")
-    click.echo("Use LLMTracer programmatically in your vLLM server code for now.")
-
-
-@main.command()
-@click.argument("trace_files", nargs=-1, type=click.Path(exists=True))
-@click.option("--baseline", type=click.Path(exists=True), help="Baseline trace directory")
-@click.option("--output", type=click.Path(), help="Output file for report")
-def analyze(trace_files: tuple, baseline: Optional[str], output: Optional[str]):
-    """Analyze trace files and generate report."""
-    if not trace_files:
-        click.echo("Error: No trace files specified", err=True)
-        sys.exit(1)
-
-    click.echo(f"Analyzing {len(trace_files)} trace file(s)")
-
-    # Run async analysis
-    asyncio.run(_analyze_async(trace_files, baseline, output))
-
-
-async def _analyze_async(trace_files: tuple, baseline: Optional[str], output: Optional[str]):
-    """Async analysis implementation."""
-    from llmtrace.models.trace import RequestTrace, GPUSample
-    import json
-
-    # Load traces
-    traces = []
-    for trace_file in trace_files:
-        path = Path(trace_file)
-
-        if path.is_dir():
-            # Load all traces from directory
-            for jsonl_file in path.glob("traces_*.jsonl"):
-                with open(jsonl_file) as f:
-                    for line in f:
-                        if line.strip():
-                            trace = RequestTrace.model_validate(json.loads(line))
-                            traces.append(trace)
-        else:
-            # Single file
-            with open(path) as f:
-                for line in f:
-                    if line.strip():
-                        trace = RequestTrace.model_validate(json.loads(line))
-                        traces.append(trace)
-
-    if not traces:
-        click.echo("No traces found to analyze", err=True)
-        return
-
-    # Load GPU samples (look for gpu_*.jsonl in same directory as first trace file)
-    gpu_samples = []
-    first_trace_dir = Path(trace_files[0]) if Path(trace_files[0]).is_dir() else Path(trace_files[0]).parent
-
-    for gpu_file in first_trace_dir.glob("gpu_*.jsonl"):
-        with open(gpu_file) as f:
-            for line in f:
-                if line.strip():
-                    sample = GPUSample.model_validate(json.loads(line))
-                    gpu_samples.append(sample)
-
-    # Create tracer components for analysis
-    from llmtrace.control_plane.correlator import Correlator
-    from llmtrace.control_plane.rules_engine import RulesEngine
-    from llmtrace.models.config import EnergyConfig, AutopsyConfig
-
-    correlator = Correlator(EnergyConfig())
-    rules_engine = RulesEngine(AutopsyConfig())
-    reporter = Reporter(ReporterConfig(cli_rich_output=True, export_formats=["jsonl"]))
-
-    # Correlate
-    correlated = await correlator.correlate_traces(traces, gpu_samples)
-
-    # Diagnose
-    for trace in correlated:
-        trace.diagnosis = await rules_engine.diagnose_request(trace)
-
-    # Load baseline if provided
-    baseline_traces = None
+    baseline_traces = baseline_ledger = None
     if baseline:
-        baseline_traces = []
-        baseline_dir = Path(baseline)
-        for jsonl_file in baseline_dir.glob("traces_*.jsonl"):
-            with open(jsonl_file) as f:
-                for line in f:
-                    if line.strip():
-                        trace = RequestTrace.model_validate(json.loads(line))
-                        baseline_traces.append(trace)
+        b = _correlate_dir([baseline], None, attribution)
+        baseline_traces, baseline_ledger = b.traces, b.ledger
+        if not baseline_traces:
+            click.echo(f"Warning: no baseline traces in {baseline}", err=True)
 
-    # Generate analysis
-    analysis = reporter.generate_analysis(correlated, baseline_traces)
-
-    # Print to console
+    reporter = Reporter(ReporterConfig(cli_rich_output=not no_rich))
+    analysis = reporter.generate_analysis(result.traces, baseline_traces, result.ledger, baseline_ledger)
     reporter.print_analysis(analysis)
-
-    # Export if requested
     if output:
         reporter.export_to_file(analysis, Path(output))
-        click.echo(f"\nReport exported to {output}")
+        click.echo(f"Report written to {output}")
+
+
+def evaluate_regressions(
+    comparisons: dict, thresholds: dict
+) -> Tuple[List[str], List[str], List[str]]:
+    """Classify comparisons. Returns (regressions, improvements_or_ok, unavailable).
+
+    A metric regresses only when its percent change is *positive* and exceeds
+    the threshold (all compared metrics are higher-is-worse). Negative changes
+    are improvements and never fail the check.
+    """
+    regressions, ok, unavailable = [], [], []
+    for name, threshold in thresholds.items():
+        cmp: Optional[MetricComparison] = comparisons.get(name)
+        if cmp is None or cmp.pct_change is None:
+            status = cmp.status if cmp is not None else "missing"
+            unavailable.append(f"{name}: {status} (baseline={cmp.baseline if cmp else None}, "
+                               f"current={cmp.current if cmp else None})")
+            continue
+        line = f"{name}: {cmp.pct_change:+.2f}% (threshold +{threshold}%)"
+        if cmp.pct_change > threshold:
+            regressions.append(line)
+        else:
+            ok.append(line)
+    return regressions, ok, unavailable
 
 
 @main.command()
-@click.option("--baseline", required=True, type=click.Path(exists=True), help="Baseline trace directory")
-@click.option("--current", required=True, type=click.Path(exists=True), help="Current trace directory")
-@click.option("--ttft-threshold", default=5.0, type=float, help="TTFT regression threshold (%)")
-@click.option("--energy-threshold", default=10.0, type=float, help="Energy regression threshold (%)")
-@click.option("--fail-on-regression", is_flag=True, help="Exit with error code if regression detected")
-def compare(
-    baseline: str,
-    current: str,
-    ttft_threshold: float,
-    energy_threshold: float,
-    fail_on_regression: bool,
-):
-    """
-    Compare current traces against baseline for CI regression detection.
+@click.option("--baseline", required=True, type=click.Path(exists=True), help="Baseline run directory")
+@click.option("--current", required=True, type=click.Path(exists=True), help="Current run directory")
+@click.option("--ttft-threshold", default=5.0, type=float, help="Max allowed p95 TTFT increase (%)")
+@click.option("--tpot-threshold", default=None, type=float, help="Max allowed p95 TPOT increase (%)")
+@click.option("--energy-threshold", default=10.0, type=float, help="Max allowed J/output-token increase (%)")
+@click.option("--attribution", default="equal_share",
+              type=click.Choice(["equal_share", "proportional_tokens", "window_only"]))
+@click.option("--fail-on-regression", is_flag=True, help="Exit 1 if any threshold is exceeded")
+@click.option("--fail-on-missing", is_flag=True, help="Exit 1 if a thresholded metric is unavailable")
+@click.option("--no-rich", is_flag=True, help="Plain text output")
+def compare(baseline: str, current: str, ttft_threshold: float, tpot_threshold: Optional[float],
+            energy_threshold: float, attribution: str, fail_on_regression: bool, fail_on_missing: bool,
+            no_rich: bool) -> None:
+    """Compare a current run against a baseline run (positive change = worse)."""
+    base = _correlate_dir([baseline], None, attribution)
+    cur = _correlate_dir([current], None, attribution)
+    if not base.traces or not cur.traces:
+        click.echo(f"Error: baseline has {len(base.traces)} traces, current has {len(cur.traces)}", err=True)
+        sys.exit(EXIT_USAGE)
 
-    This is Feature 3: Energy Regression Guardrail.
-    """
-    click.echo("Comparing traces for regression detection")
-    click.echo(f"Baseline: {baseline}")
-    click.echo(f"Current: {current}")
-    click.echo(f"Thresholds: TTFT={ttft_threshold}%, Energy={energy_threshold}%")
-
-    # Run async comparison
-    exit_code = asyncio.run(
-        _compare_async(
-            baseline, current, ttft_threshold, energy_threshold, fail_on_regression
-        )
-    )
-
-    if exit_code != 0:
-        sys.exit(exit_code)
-
-
-async def _compare_async(
-    baseline_dir: str,
-    current_dir: str,
-    ttft_threshold: float,
-    energy_threshold: float,
-    fail_on_regression: bool,
-) -> int:
-    """Async comparison implementation."""
-    from llmtrace.models.trace import RequestTrace, GPUSample
-    from llmtrace.control_plane.correlator import Correlator
-    from llmtrace.control_plane.reporter import Reporter
-    from llmtrace.models.config import EnergyConfig, ReporterConfig
-    import json
-
-    # Load baseline traces
-    baseline_traces = []
-    for trace_file in Path(baseline_dir).glob("traces_*.jsonl"):
-        with open(trace_file) as f:
-            for line in f:
-                if line.strip():
-                    trace = RequestTrace.model_validate(json.loads(line))
-                    baseline_traces.append(trace)
-
-    # Load baseline GPU samples
-    baseline_gpu_samples = []
-    for gpu_file in Path(baseline_dir).glob("gpu_*.jsonl"):
-        with open(gpu_file) as f:
-            for line in f:
-                if line.strip():
-                    sample = GPUSample.model_validate(json.loads(line))
-                    baseline_gpu_samples.append(sample)
-
-    # Load current traces
-    current_traces = []
-    for trace_file in Path(current_dir).glob("traces_*.jsonl"):
-        with open(trace_file) as f:
-            for line in f:
-                if line.strip():
-                    trace = RequestTrace.model_validate(json.loads(line))
-                    current_traces.append(trace)
-
-    # Load current GPU samples
-    current_gpu_samples = []
-    for gpu_file in Path(current_dir).glob("gpu_*.jsonl"):
-        with open(gpu_file) as f:
-            for line in f:
-                if line.strip():
-                    sample = GPUSample.model_validate(json.loads(line))
-                    current_gpu_samples.append(sample)
-
-    if not baseline_traces or not current_traces:
-        click.echo("Error: Missing baseline or current traces", err=True)
-        return 1
-
-    # Correlate both
-    correlator = Correlator(EnergyConfig())
-    baseline_correlated = await correlator.correlate_traces(baseline_traces, baseline_gpu_samples)
-    current_correlated = await correlator.correlate_traces(current_traces, current_gpu_samples)
-
-    # Generate analysis with comparison
-    reporter = Reporter(ReporterConfig(cli_rich_output=True, export_formats=["jsonl"]))
-    analysis = reporter.generate_analysis(current_correlated, baseline_correlated)
-
-    # Print analysis
+    reporter = Reporter(ReporterConfig(cli_rich_output=not no_rich))
+    analysis = reporter.generate_analysis(cur.traces, base.traces, cur.ledger, base.ledger)
     reporter.print_analysis(analysis)
 
-    # Check regressions
-    regressions_detected = []
+    thresholds = {"p95_ttft_ms": ttft_threshold, "joules_per_output_token": energy_threshold}
+    if tpot_threshold is not None:
+        thresholds["p95_tpot_ms"] = tpot_threshold
+    regressions, ok, unavailable = evaluate_regressions(analysis.regressions, thresholds)
 
-    if "p95_ttft" in analysis.regressions:
-        if abs(analysis.regressions["p95_ttft"]) > ttft_threshold:
-            regressions_detected.append(
-                f"TTFT regression: {analysis.regressions['p95_ttft']:.2f}% "
-                f"(threshold: {ttft_threshold}%)"
-            )
+    click.echo("\nRegression check (positive change = worse):")
+    for line in ok:
+        click.echo(f"  ok         {line}")
+    for line in unavailable:
+        click.echo(f"  unavailable {line}")
+    for line in regressions:
+        click.echo(f"  REGRESSION {line}")
 
-    if "joules_per_token" in analysis.regressions:
-        if analysis.regressions["joules_per_token"] > energy_threshold:
-            regressions_detected.append(
-                f"Energy regression: {analysis.regressions['joules_per_token']:.2f}% "
-                f"(threshold: {energy_threshold}%)"
-            )
-
-    if regressions_detected:
-        click.echo("\n" + "=" * 50)
-        click.echo("REGRESSIONS DETECTED:")
-        for reg in regressions_detected:
-            click.echo(f"  - {reg}")
-        click.echo("=" * 50)
-
-        if fail_on_regression:
-            click.echo("\nFailing due to regressions (--fail-on-regression enabled)")
-            return 1
-
+    code = EXIT_OK
+    if regressions and fail_on_regression:
+        code = EXIT_REGRESSION
+    if unavailable and fail_on_missing:
+        code = EXIT_REGRESSION
+    if code != EXIT_OK:
+        click.echo("FAILED")
+    elif regressions:
+        click.echo("Regressions found (not failing: --fail-on-regression not set)")
     else:
-        click.echo("\nNo significant regressions detected. ✓")
-
-    return 0
+        click.echo("PASSED")
+    sys.exit(code)
 
 
 @main.command()
+@click.option("--pid", type=int, help="(not implemented)")
+def monitor(pid: Optional[int]) -> None:
+    """Attach to a running vLLM process. NOT IMPLEMENTED."""
+    click.echo(
+        "monitor is not implemented: llmtrace cannot attach to an external process. "
+        "Use LLMTracer.instrument_engine() inside the vLLM process.",
+        err=True,
+    )
+    sys.exit(EXIT_NOT_IMPLEMENTED)
+
+
+@main.command("init-config")
 @click.option("--output", default="llmtrace_config.json", help="Output config file path")
-def init_config(output: str):
-    """Generate a default configuration file."""
-    config = TracerConfig()
-
-    import json
-
-    with open(output, "w") as f:
-        json.dump(config.model_dump(), f, indent=2)
-
+def init_config(output: str) -> None:
+    """Write a default configuration file (load with LLMTracer.from_config_file)."""
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(TracerConfig().model_dump(), f, indent=2)
     click.echo(f"Default configuration written to {output}")
-    click.echo("Edit this file and use with: llmtrace --config <file>")
 
 
 if __name__ == "__main__":

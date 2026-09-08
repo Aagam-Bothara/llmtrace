@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llmtrace"
-version = "0.1.0"
+version = "0.2.0"
 description = "Flight recorder, attribution, and autopsy for vLLM inference"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,29 +12,24 @@ license = {text = "MIT"}
 authors = [
     {name = "llmtrace contributors"}
 ]
+# Core runtime: offline analysis, CLI and CPU tests work with only these.
 dependencies = [
-    "vllm>=0.3.0",
-    "nvidia-ml-py>=12.535.133",  # pynvml
-    "pyarrow>=12.0.0",           # Parquet support
-    "pandas>=2.0.0",             # Data analysis
-    "click>=8.0.0",              # CLI
-    "pydantic>=2.0.0",           # Config validation
-    "rich>=13.0.0",              # Pretty CLI output
-    "opentelemetry-api>=1.20.0", # Optional OTLP export
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp>=1.20.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
+# GPU telemetry via NVML (import is lazy; absent -> telemetry reported unavailable)
+nvml = ["nvidia-ml-py>=12.535.133"]
+# Parquet output/input
+parquet = ["pyarrow>=12.0.0"]
+# The one vLLM version whose engine interfaces were verified (see DEVELOPMENT.md).
+# Linux + NVIDIA GPU only.
+vllm = ["vllm==0.11.0", "nvidia-ml-py>=12.535.133"]
 dev = [
     "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "black>=23.0.0",
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
-]
-dcgm = [
-    "dcgm-exporter>=3.1.0",  # DCGM support for enterprise
 ]
 
 [project.scripts]
@@ -44,16 +39,10 @@ llmtrace = "llmtrace.cli:main"
 where = ["."]
 include = ["llmtrace*"]
 
-[tool.black]
-line-length = 100
-target-version = ['py39']
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py39"
-
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true

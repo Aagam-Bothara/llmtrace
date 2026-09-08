@@ -1,47 +1,32 @@
-"""Example: Batch/Scheduler visibility (Feature 1)."""
+"""Batch/scheduler visibility from recorded batch metadata (offline, CPU-only).
 
-import asyncio
-import json
-from pathlib import Path
-from llmtrace.models.trace import BatchMetadata
+Batch metadata is only recorded when the vLLM scheduler ran in-process
+(VLLM_ENABLE_V1_MULTIPROCESSING=0). Otherwise there is nothing to analyse.
+
+    python examples/batch_analysis.py ./traces
+"""
+
+import sys
+
+from llmtrace import io
 from llmtrace.utils.batch_analyzer import BatchAnalyzer
 
 
-async def main():
-    # Load batch metadata from traces
-    trace_dir = Path("./traces")  # Update to your trace directory
-
-    batches = []
-    for batch_file in trace_dir.glob("batches_*.jsonl"):
-        with open(batch_file) as f:
-            for line in f:
-                if line.strip():
-                    batch = BatchMetadata.model_validate(json.loads(line))
-                    batches.append(batch)
-
+def main() -> None:
+    trace_dir = sys.argv[1] if len(sys.argv) > 1 else "./traces"
+    batches = io.load_batches([trace_dir])
     if not batches:
-        print("No batch metadata found. Run basic_usage.py first.")
+        print(f"No batch metadata in {trace_dir}. It is only recorded with an in-process scheduler "
+              "(VLLM_ENABLE_V1_MULTIPROCESSING=0) or from the synthetic example.")
         return
-
-    print(f"Loaded {len(batches)} batch metadata entries")
-
-    # Analyze batches
+    print(f"Loaded {len(batches)} batches (source: {batches[0].source})")
     analyzer = BatchAnalyzer()
-
-    # Print summary
     analyzer.print_batch_summary(batches)
-
-    # Get timeline
     timeline = analyzer.generate_batch_timeline(batches)
-    print(f"\nGenerated timeline with {len(timeline)} entries")
-
-    # Detect inefficiencies
-    inefficiencies = analyzer.detect_batching_inefficiencies(batches)
-    if inefficiencies:
-        print(f"\nFound {len(inefficiencies)} batching inefficiencies")
-    else:
-        print("\nNo batching inefficiencies detected!")
+    print(f"\nTimeline entries: {len(timeline)}")
+    for ineff in analyzer.detect_batching_inefficiencies(batches):
+        print(f"- [{ineff['severity']}] {ineff['type']}: {ineff['description']}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

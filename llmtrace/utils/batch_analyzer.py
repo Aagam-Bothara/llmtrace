@@ -4,7 +4,7 @@ import logging
 from typing import List, Dict, Any
 import statistics
 
-from llmtrace.models.trace import BatchMetadata, RequestTrace
+from llmtrace.models.trace import BatchMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class BatchAnalyzer:
         # Prompt length statistics
         all_prompt_lengths = []
         for batch in batches:
-            all_prompt_lengths.extend(batch.prompt_lengths)
+            all_prompt_lengths.extend(batch.prompt_lengths)  # newly scheduled requests only
 
         # KV cache statistics
         kv_utilizations = [
@@ -109,7 +109,7 @@ class BatchAnalyzer:
                 "total_requests": batch.num_requests,
                 "prefill": batch.num_prefill,
                 "decode": batch.num_decode,
-                "total_tokens": batch.total_tokens,
+                "total_tokens": batch.total_scheduled_tokens,
                 "kv_utilization": batch.kv_cache_utilization,
             }
             timeline.append(entry)

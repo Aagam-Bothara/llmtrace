@@ -1,84 +1,43 @@
-"""Example: Tail latency explainer (Feature 2)."""
+"""Tail latency explanation from recorded traces (offline, CPU-only).
 
-import asyncio
-import json
-from pathlib import Path
-from llmtrace.models.trace import RequestTrace, GPUSample
+    python examples/latency_diagnosis.py ./traces
+"""
+
+import sys
+
+from llmtrace import io
 from llmtrace.control_plane.correlator import Correlator
 from llmtrace.control_plane.rules_engine import RulesEngine
-from llmtrace.models.config import EnergyConfig, AutopsyConfig
+from llmtrace.models.config import AutopsyConfig, EnergyConfig
 from llmtrace.utils.latency_explainer import LatencyExplainer
 
 
-async def main():
-    # Load traces
-    trace_dir = Path("./traces")  # Update to your trace directory
-
-    traces = []
-    for trace_file in trace_dir.glob("traces_*.jsonl"):
-        with open(trace_file) as f:
-            for line in f:
-                if line.strip():
-                    trace = RequestTrace.model_validate(json.loads(line))
-                    traces.append(trace)
-
+def main() -> None:
+    trace_dir = sys.argv[1] if len(sys.argv) > 1 else "./traces"
+    traces = io.load_traces([trace_dir])
     if not traces:
-        print("No traces found. Run basic_usage.py first.")
+        print(f"No traces in {trace_dir}. Run examples/synthetic_replay.py or basic_usage.py first.")
         return
+    samples = io.load_gpu_samples([trace_dir])
+    batches = io.load_batches([trace_dir])
+    print(f"Loaded {len(traces)} traces, {len(samples)} GPU samples, {len(batches)} batches")
 
-    # Load GPU samples
-    gpu_samples = []
-    for gpu_file in trace_dir.glob("gpu_*.jsonl"):
-        with open(gpu_file) as f:
-            for line in f:
-                if line.strip():
-                    sample = GPUSample.model_validate(json.loads(line))
-                    gpu_samples.append(sample)
+    result = Correlator(EnergyConfig()).correlate(traces, samples, batches)
+    rules = RulesEngine(AutopsyConfig())
+    for t in result.traces:
+        t.diagnosis = rules.diagnose_request(t)
 
-    print(f"Loaded {len(traces)} traces and {len(gpu_samples)} GPU samples")
-
-    # Correlate and diagnose
-    correlator = Correlator(EnergyConfig())
-    rules_engine = RulesEngine(AutopsyConfig())
-
-    correlated = await correlator.correlate_traces(traces, gpu_samples)
-
-    for trace in correlated:
-        trace.diagnosis = await rules_engine.diagnose_request(trace)
-
-    # Use latency explainer
     explainer = LatencyExplainer()
-
-    # Explain batch tail latency
-    batch_summary = explainer.explain_tail_latency_batch(correlated, tail_percentile=95)
-    explainer.print_batch_explanation(batch_summary)
-
-    # Explain individual tail requests
-    print("\n\nExample Tail Request Explanations:")
-    print("=" * 60)
-
-    for trace in correlated:
-        if trace.diagnosis:
-            explanation = explainer.explain_request(trace)
-            explainer.print_explanation(explanation)
-            break  # Just show one example
-
-    # Generate diagnosis report
-    report = explainer.generate_diagnosis_report(correlated)
-    print("\n\nDiagnosis Report:")
-    print("=" * 60)
-    print(f"Total Requests: {report['total_requests']}")
-    print(f"Diagnosed Requests: {report['diagnosed_requests']}")
-    print(f"Diagnosis Rate: {report['diagnosis_rate']:.1f}%")
-
-    print("\nCategory Breakdown:")
+    explainer.print_batch_explanation(explainer.explain_tail_latency_batch(result.traces, tail_percentile=95))
+    for t in result.traces:
+        if t.diagnosis:
+            explainer.print_explanation(explainer.explain_request(t))
+            break
+    report = explainer.generate_diagnosis_report(result.traces)
+    print(f"\nDiagnosed {report['diagnosed_requests']}/{report['total_requests']} requests")
     for category, stats in report["category_breakdown"].items():
-        print(f"\n  {category}:")
-        print(f"    Count: {stats['count']}")
-        print(f"    Percentage: {stats['percentage']:.1f}%")
-        print(f"    Avg Latency: {stats['avg_latency_ms']:.2f}ms")
-        print(f"    Avg Confidence: {stats['avg_confidence']*100:.1f}%")
+        print(f"  {category}: {stats['count']} (avg latency {stats['avg_latency_ms']:.1f} ms, avg rule score {stats['avg_score']:.2f})")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

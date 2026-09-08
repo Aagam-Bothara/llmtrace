@@ -107,6 +107,23 @@ differs across configurations (`--no-ignore-eos` to disable).
 Then: `llmtrace findings <run_dir>` and
 `llmtrace decide --target "short ttft_p95 <= 5ms" --config baseline=... --config capped=...`.
 
+## What built-in metrics would have shown
+
+vLLM's own metrics (Prometheus / `LoggingStatLogger`, and the same numbers
+llmtrace records through the `stat_loggers` hook) give per-step aggregates:
+TTFT and inter-token latency histograms, queued/prefill/decode time per
+finished request without request ids, running and waiting counts, KV usage,
+preemptions. From those alone one can see that short-request TTFT p95 was
+8.4 ms and that nothing was queued for long. They cannot say *which* steps were
+slow, *what else* was in them, or *which* requests paid for it: there is no
+step-level record of scheduled tokens per request and no link from a request
+to the steps it shared. The trace-level evidence that identified the mechanism
+here was exactly that join (`batches_*.jsonl` request ids and scheduled
+tokens per step, joined to `traces_*.jsonl` batch ids), plus the TTFT
+decomposition into queue and prefill spans that `compare` prints. The
+`findings` command reports the same hypothesis as `not_evaluable`, with the
+missing evidence named, when only the aggregate stats are available.
+
 ## Visualize
 
 ```bash

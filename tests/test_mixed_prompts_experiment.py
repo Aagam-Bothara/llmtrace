@@ -14,7 +14,7 @@ from run import drive  # noqa: E402
 from workload import WorkloadConfig, build_workload, make_prompt  # noqa: E402
 
 from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
-from llmtrace.models.trace import BatchMetadata, RequestTrace
+from llmtrace.models.trace import BatchMetadata, RequestSpan, RequestTrace, SpanPhase
 
 
 class TestFakeSchedulerKnobs:
@@ -179,6 +179,27 @@ class TestDiagnosis:
             t.ttft_ms = None  # e.g. FINAL_ONLY outputs
         c = compare(base, analyze_run(cand_traces, [], 128))
         assert c["verdict"] == "unavailable" and c["missing_metrics"] == ["short_ttft_ms_p95"]
+
+    def test_ttft_change_decomposes_into_queue_and_prefill(self):
+        from analyze import decompose_ttft_change
+
+        def tr(rid, queue, prefill):
+            t = RequestTrace(request_id=rid, start_time=0, end_time=1, prompt_length=4, output_length=4, model_name="m",
+                             ttft_ms=queue + prefill, scheduler_visible=True, spans=[
+                                 RequestSpan(phase=SpanPhase.QUEUE, start_time=0, end_time=queue / 1000, duration_ms=queue),
+                                 RequestSpan(phase=SpanPhase.PREFILL, start_time=queue / 1000, end_time=(queue + prefill) / 1000, duration_ms=prefill)])
+            return t
+
+        base = analyze_run([tr("short-0", 1.0, 2.0), tr("short-1", 1.0, 2.0)], [], 128)
+        cand = analyze_run([tr("short-0", 7.0, 2.5), tr("short-1", 5.0, 2.5)], [], 128)
+        d = decompose_ttft_change(base, cand)
+        assert d["available"] and d["delta_ttft_ms"] == pytest.approx(5.5)
+        assert d["delta_queue_ms"] == pytest.approx(5.0) and d["delta_prefill_ms"] == pytest.approx(0.5)
+        assert abs(d["residual_ms"]) < 1e-9 and d["dominant_component"] == "queue"
+        assert d["share_of_change"]["queue"] == pytest.approx(5.0 / 5.5)
+        # Without the scheduler the boundary is not exposed: reported unavailable, never estimated.
+        no_sched = analyze_run([_trace("short-0", [], tpot=1.0, ttft=3.0)], [], 128)
+        assert decompose_ttft_change(no_sched, cand)["available"] is False
 
     def test_ttft_from_intended_arrival_uses_delays(self):
         a = analyze_run([_trace("short-0", [], tpot=1.0, ttft=5.0), _trace("short-1", [], tpot=1.0, ttft=5.0)], [], 128,

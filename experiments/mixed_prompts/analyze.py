@@ -70,6 +70,10 @@ def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_
             "requests": len(ts),
             "completed": sum(1 for t in ts if t.status.value == "completed"),
             "ttft_ms": _stats([t.ttft_ms for t in ts if t.ttft_ms is not None]),
+            "ttft_mean_ms": statistics.mean([t.ttft_ms for t in ts if t.ttft_ms is not None]) if any(t.ttft_ms is not None for t in ts) else None,
+            "queue_mean_ms": statistics.mean([t.queue_duration_ms for t in ts]) if ts else None,
+            "prefill_mean_ms": statistics.mean([t.prefill_duration_ms for t in ts]) if ts else None,
+            "ttft_span_resolved": all(t.scheduler_visible for t in ts) if ts else False,
             "ttft_sched_ms": _stats([v for v in (ttft_from_scheduled_ms(t, delays.get(t.request_id)) for t in ts) if v is not None]),
             "arrival_delay_ms": _stats([delays[t.request_id] for t in ts if t.request_id in delays]),
             "tpot_ms": _stats([t.tpot_ms for t in ts if t.tpot_ms is not None]),
@@ -231,7 +235,32 @@ def compare(base: Dict[str, Any], cand: Dict[str, Any], min_improvement_pct: flo
     else:
         verdict = "no_meaningful_change"
     return {"rows": rows, "verdict_metrics": tail_metrics, "missing_metrics": missing, "long_ttft_change_pct": long_cost,
-            "verdict": verdict, "min_improvement_pct": min_improvement_pct}
+            "verdict": verdict, "min_improvement_pct": min_improvement_pct,
+            "ttft_decomposition": decompose_ttft_change(base, cand)}
+
+
+def decompose_ttft_change(base: Dict[str, Any], cand: Dict[str, Any], kind: str = "short") -> Dict[str, Any]:
+    """Attribute the change in mean TTFT between two runs to queue wait vs prefill.
+
+    With the in-process scheduler every request's TTFT is exactly queue span + prefill
+    span (both step-granular), so mean TTFT decomposes exactly. Without it the boundary is
+    not exposed and the decomposition is reported as unavailable, not estimated.
+    """
+    a, b = base["latency"].get(kind, {}), cand["latency"].get(kind, {})
+    if not a or not b or a.get("ttft_mean_ms") is None or b.get("ttft_mean_ms") is None:
+        return {"available": False, "reason": f"no TTFT for class '{kind}' in one of the runs"}
+    if not (a.get("ttft_span_resolved") and b.get("ttft_span_resolved")):
+        return {"available": False, "reason": "queue/prefill boundary not exposed (in-process scheduler required in both runs)"}
+    d_ttft = b["ttft_mean_ms"] - a["ttft_mean_ms"]
+    d_queue = b["queue_mean_ms"] - a["queue_mean_ms"]
+    d_prefill = b["prefill_mean_ms"] - a["prefill_mean_ms"]
+    residual = d_ttft - d_queue - d_prefill
+    parts = {"queue": d_queue, "prefill": d_prefill}
+    dominant = max(parts, key=lambda k: abs(parts[k])) if any(parts.values()) else None
+    return {"available": True, "class": kind, "ttft_mean_ms": {"baseline": a["ttft_mean_ms"], "candidate": b["ttft_mean_ms"]},
+            "delta_ttft_ms": d_ttft, "delta_queue_ms": d_queue, "delta_prefill_ms": d_prefill, "residual_ms": residual,
+            "dominant_component": dominant,
+            "share_of_change": {k: (v / d_ttft if abs(d_ttft) > 1e-9 else None) for k, v in parts.items()}}
 
 
 def _f(v: Optional[float], d: int = 2) -> str:
@@ -273,6 +302,13 @@ def main() -> int:
         print("\n== comparison (candidate vs baseline; negative = faster)")
         for name, r in cmp["rows"].items():
             print(f"  {name:22} {_f(r['baseline'])} -> {_f(r['candidate'])} ms  ({_f(r['change_pct'], 1)}%)")
+        dec = cmp["ttft_decomposition"]
+        if dec.get("available"):
+            print(f"short TTFT (mean) {_f(dec['ttft_mean_ms']['baseline'])} -> {_f(dec['ttft_mean_ms']['candidate'])} ms: "
+                  f"queue {dec['delta_queue_ms']:+.2f} ms, prefill {dec['delta_prefill_ms']:+.2f} ms, "
+                  f"residual {_f(dec['residual_ms'], 3)} ms; dominant component: {dec['dominant_component']}")
+        else:
+            print(f"TTFT decomposition unavailable: {dec.get('reason')}")
         metrics = ", ".join(f"{k} {_f(v, 1)}%" for k, v in cmp["verdict_metrics"].items())
         print(f"verdict: {cmp['verdict']} on [{metrics}] (threshold {cmp['min_improvement_pct']}%); "
               f"long-request TTFT p50 change {_f(cmp['long_ttft_change_pct'], 1)}% (cost)"

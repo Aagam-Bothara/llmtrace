@@ -113,6 +113,17 @@ Records go to `vllm_stats_<session>.jsonl`; `llmtrace analyze` and
 ids to finished-request stats, so they are run-level evidence (e.g. for the
 KV-pressure/preemption hypothesis), not per-request attribution.
 
+## Two layers of diagnosis
+
+`RulesEngine` (`control_plane/rules_engine.py`) is a set of threshold
+*screens* over one request: they flag a symptom (long queue span, throttled
+samples, high memory use) with the evidence value and threshold, and carry a
+ranking `score`. They do not assert causes: a high TTFT alone never produces a
+diagnosis, and rules whose inputs are missing return nothing rather than a
+guess. `findings.py` is the evidence layer: it joins requests, scheduler steps
+and vLLM stats, names what is missing, and proposes the experiment that would
+test the hypothesis. New diagnosis work belongs in findings.
+
 ## Findings and decisions (`control_plane/findings.py`, `control_plane/decision.py`)
 
 A `Finding` is a hypothesis with a status (`supported`, `not_supported`,

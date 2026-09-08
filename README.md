@@ -13,15 +13,21 @@ RTX A4500 diagnosis experiment, 2026-09-08); see
 [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
 Larger models, multi-GPU, preemption and speculative decoding are untested.
 
+Status labels: **validated** = exercised on real vLLM 0.11.0 on a GPU with
+committed evidence; **implemented** = CPU-tested against fakes shaped like the
+verified vLLM interfaces; **not implemented** = absent.
+
 | Area | Status |
 |------|--------|
-| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Verified on hardware: patched, traced 8/8 and 64/64 requests, restored cleanly |
-| Scheduler batch metadata | Verified in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
-| GPU telemetry (NVML, background thread) | Verified: all fields populated on an A5000, samples taken while `generate()` blocks |
+| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Validated: patched, traced 8/8 and 64/64 requests, restored cleanly |
+| Scheduler batch metadata | Validated in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
+| GPU telemetry (NVML, background thread) | Validated: all fields populated on an A5000, samples taken while `generate()` blocks |
 | Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; on the GPU run, device energy matched a separately collected `nvidia-smi` stream of the same NVML sensor within 0.15% over identical boundaries |
-| Timing (TTFT/TPOT) | Verified through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
+| Timing (TTFT/TPOT) | Validated through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
 | Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
-| Rules-based diagnosis, CLI `analyze` / `compare`, offline analysis | Implemented and CPU-tested |
+| Evidence-based findings (`llmtrace findings`) | Implemented; the long-prompt-interference finding validated on the GPU experiment |
+| vLLM engine stats via `stat_loggers` hook | Implemented (fakes only); not yet run on hardware |
+| Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
 | Diagnosis experiment (short requests mixed with long prompts) | Run on one GPU: traces attribute the short-request tail to steps carrying 1536-token prefill chunks; `long_prefill_token_threshold=256` cut short TTFT p95 by 63% and worst stall by 54 to 62%, doubling long-request TTFT (`experiments/mixed_prompts/README.md`) |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
 | AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |
@@ -66,20 +72,39 @@ or let `instrument_engine()` attach post-hoc when log stats are on.
 
 ## Energy accounting, precisely
 
-* **Telemetry** is measured: NVML power readings.
-* **Device energy** is an estimate: each GPU's power is integrated on its own
-  timestamps (trapezoid); gaps longer than `max_sample_gap_s` are not
-  integrated; device energies are then summed.
-* **Attributed energy** is an allocation estimate: in every elementary time
-  interval the device energy is split among the requests active in it
-  (`equal_share` or `proportional_tokens`). Membership comes from scheduler
-  batch metadata when available, otherwise from request windows (which include
-  queue wait). `window_only` skips allocation and only reports device energy
-  during each request window, labeled as shared.
-* **Conservation**: `device = attributed + idle + unattributable` over the run
-  window, checked to floating-point tolerance. Idle energy (no request active)
-  is reported, not attributed. Energy outside the run window is not counted.
-* **Insufficient telemetry** yields `null` with a reason, not zero.
+Per-request energy on a shared GPU is an allocation, not a measurement.
+Integrating power over a request's lifetime double-counts everything that ran
+alongside it, so llmtrace never reports that number as consumption. The model:
+
+```
+E_r = sum over elementary intervals t of  E_t * w_{r,t} / sum_{j in A_t} w_{j,t}
+```
+
+* `E_t` is the device energy in interval `t`: each GPU's NVML power integrated
+  by trapezoid on that GPU's own timestamps, then summed over GPUs. Gaps
+  longer than `max_sample_gap_s` are not integrated (uncovered time).
+* `A_t` is the set of requests active in `t`. Membership comes from scheduler
+  batch records (which requests were scheduled in the step spanning `t`) when
+  the in-process scheduler is visible; otherwise from request windows, which
+  include queue wait, and the ledger says so.
+* `w_{r,t}` is the weight: 1 for `equal_share`, prompt+output tokens for
+  `proportional_tokens`. `window_only` sets no weights and reports only the
+  shared device energy over each request's window, labeled as shared.
+* Elementary intervals are cut at every request/span boundary, so phase energy
+  (queue/prefill/decode) integrates the power curve within each phase rather
+  than splitting a total by elapsed time.
+* Conservation, checked to floating-point tolerance on every run:
+  `device = attributed + idle + unattributable`, where idle is energy in
+  intervals with no active request (reported, never attributed) and
+  unattributable is energy in intervals whose requests lacked enough telemetry
+  coverage for a figure. Energy outside the run window is not counted.
+* Insufficient telemetry yields `null` with a reason, never zero. Telemetry
+  coverage is reported with every figure.
+
+Validated only in the sense that llmtrace's integrated device energy matched a
+separately collected `nvidia-smi` stream of the same sensor within 0.15%
+(`docs/GPU_VALIDATION.md`); the allocation weights are a stated policy, not a
+physical measurement, and the docs say so wherever a per-request figure appears.
 
 ## Install
 

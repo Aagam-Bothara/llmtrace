@@ -1,0 +1,246 @@
+"""Diagnosis for the mixed-prompt experiment, computed only from llmtrace's recorded files.
+
+Given a run directory (traces_*, batches_*, gpu_*):
+
+1. Per request class (short/long): TTFT and TPOT percentiles, plus the
+   inter-token latency (ITL) distribution: the durations of every engine step a
+   request was scheduled in, from batch metadata. A request's average TPOT
+   hides a single slow step; ITL p99 does not, and it is what a long prefill
+   chunk co-scheduled with decodes is expected to move.
+2. Per engine step (from batch metadata): duration, scheduled tokens, and whether
+   the step carried a "long prefill chunk" (a single request scheduled with more
+   than ``chunk_threshold`` tokens).
+3. Interference attribution for short requests: how much of each short request's
+   decode time was spent in steps that also carried a long prefill chunk, and how
+   much slower those steps were. This is co-occurrence evidence from the traces;
+   the controlled comparison (``compare``) is the causal test.
+4. Step-time model: least-squares slope of step duration vs scheduled tokens.
+
+``compare(baseline, candidate)`` reports the change in the short-request tail
+and the long-request cost side by side and states whether the candidate improved
+the short tail beyond ``min_improvement_pct``.
+
+Verdict metrics. The mechanism produces *stalls*: a short request arriving
+during a big prefill step waits for the whole step (TTFT), and short requests
+already decoding lose one token interval to it (ITL max). Capping long prefill
+bounds the stall but spreads it over more steps, so it raises the *number* of
+affected steps while lowering their severity; an all-token ITL p99 therefore
+moves against the cap by construction when affected steps are rare (<1%). The
+verdict uses short-request TTFT p95 and ITL max (both must improve by the
+threshold; neither may regress) and reports ITL p99, TPOT and the long-request
+TTFT cost alongside so the trade-off is visible. Without batch metadata the
+ITL part falls back to TPOT p95.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from llmtrace import io
+from llmtrace.control_plane.reporter import percentile
+from llmtrace.models.trace import BatchMetadata, RequestTrace
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from workload import kind_of  # noqa: E402
+
+
+def _stats(values: List[float]) -> Dict[str, Optional[float]]:
+    return {"n": len(values), "p50": percentile(values, 50), "p95": percentile(values, 95),
+            "p99": percentile(values, 99), "max": max(values) if values else None}
+
+
+def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_threshold: int = 128) -> Dict[str, Any]:
+    by_kind: Dict[str, List[RequestTrace]] = {}
+    for t in traces:
+        by_kind.setdefault(kind_of(t.request_id), []).append(t)
+    step_dur = {b.batch_id: (b.step_end_monotonic - b.monotonic) * 1000.0
+                for b in batches if b.monotonic is not None and b.step_end_monotonic is not None}
+    latency = {
+        kind: {
+            "requests": len(ts),
+            "completed": sum(1 for t in ts if t.status.value == "completed"),
+            "ttft_ms": _stats([t.ttft_ms for t in ts if t.ttft_ms is not None]),
+            "tpot_ms": _stats([t.tpot_ms for t in ts if t.tpot_ms is not None]),
+            "itl_ms": _stats([step_dur[b] for t in ts for b in t.batch_ids if b in step_dur]),
+            "queue_ms": _stats([t.queue_duration_ms for t in ts if t.queue_duration_ms > 0]),
+        }
+        for kind, ts in sorted(by_kind.items())
+    }
+
+    steps = []
+    for b in batches:
+        if b.monotonic is None or b.step_end_monotonic is None:
+            continue
+        biggest = max(b.scheduled_tokens.values()) if b.scheduled_tokens else 0
+        steps.append({
+            "batch_id": b.batch_id, "step_index": b.step_index,
+            "duration_ms": (b.step_end_monotonic - b.monotonic) * 1000.0,
+            "scheduled_tokens": b.total_scheduled_tokens, "num_requests": b.num_requests,
+            "num_prefill": b.num_prefill, "biggest_chunk": biggest,
+            "long_chunk": biggest > chunk_threshold, "request_ids": set(b.request_ids),
+        })
+    with_chunk = [s for s in steps if s["long_chunk"]]
+    without = [s for s in steps if not s["long_chunk"]]
+    step_summary = {
+        "steps": len(steps),
+        "steps_with_long_chunk": len(with_chunk),
+        "chunk_threshold_tokens": chunk_threshold,
+        "duration_ms_with_long_chunk": _stats([s["duration_ms"] for s in with_chunk]),
+        "duration_ms_without": _stats([s["duration_ms"] for s in without]),
+        "biggest_chunk_tokens_max": max((s["biggest_chunk"] for s in steps), default=0),
+    }
+
+    # Step-time model: duration = a + b * scheduled_tokens (least squares).
+    model = None
+    if len(steps) >= 3:
+        xs = [s["scheduled_tokens"] for s in steps]
+        ys = [s["duration_ms"] for s in steps]
+        mx, my = statistics.mean(xs), statistics.mean(ys)
+        sxx = sum((x - mx) ** 2 for x in xs)
+        if sxx > 0:
+            slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+            intercept = my - slope * mx
+            ss_res = sum((y - (intercept + slope * x)) ** 2 for x, y in zip(xs, ys))
+            ss_tot = sum((y - my) ** 2 for y in ys)
+            model = {"intercept_ms": intercept, "us_per_token": slope * 1000.0,
+                     "r2": 1 - ss_res / ss_tot if ss_tot > 0 else None}
+
+    # Interference attribution for short requests, over the steps each request participated in.
+    step_by_id = {s["batch_id"]: s for s in steps}
+    per_short = []
+    for t in by_kind.get("short", []):
+        mine = [step_by_id[b] for b in t.batch_ids if b in step_by_id]
+        if not mine:
+            continue
+        shared = [s for s in mine if s["long_chunk"]]
+        total = sum(s["duration_ms"] for s in mine)
+        in_shared = sum(s["duration_ms"] for s in shared)
+        per_short.append({"request_id": t.request_id, "steps": len(mine), "steps_with_long_chunk": len(shared),
+                          "step_time_ms": total, "step_time_in_long_chunk_steps_ms": in_shared,
+                          "share_in_long_chunk_steps": (in_shared / total) if total > 0 else 0.0,
+                          "tpot_ms": t.tpot_ms, "ttft_ms": t.ttft_ms})
+    affected = [p for p in per_short if p["steps_with_long_chunk"] > 0]
+    unaffected = [p for p in per_short if p["steps_with_long_chunk"] == 0]
+    interference = {
+        "short_requests_with_step_data": len(per_short),
+        "short_requests_sharing_a_long_chunk_step": len(affected),
+        "share_of_short_step_time_in_long_chunk_steps": (
+            sum(p["step_time_in_long_chunk_steps_ms"] for p in per_short) / sum(p["step_time_ms"] for p in per_short)
+            if per_short and sum(p["step_time_ms"] for p in per_short) > 0 else None),
+        "tpot_ms_affected": _stats([p["tpot_ms"] for p in affected if p["tpot_ms"] is not None]),
+        "tpot_ms_unaffected": _stats([p["tpot_ms"] for p in unaffected if p["tpot_ms"] is not None]),
+        "ttft_ms_affected": _stats([p["ttft_ms"] for p in affected if p["ttft_ms"] is not None]),
+        "ttft_ms_unaffected": _stats([p["ttft_ms"] for p in unaffected if p["ttft_ms"] is not None]),
+    }
+    return {"latency": latency, "steps": step_summary, "step_time_model": model, "interference": interference,
+            "batch_metadata_available": bool(steps)}
+
+
+def explain(a: Dict[str, Any]) -> str:
+    lines = []
+    for kind, m in a["latency"].items():
+        lines.append(f"{kind:5} n={m['requests']} completed={m['completed']}  TTFT p50/p95 = "
+                     f"{_f(m['ttft_ms']['p50'])}/{_f(m['ttft_ms']['p95'])} ms   TPOT p50/p95 = "
+                     f"{_f(m['tpot_ms']['p50'])}/{_f(m['tpot_ms']['p95'])} ms   ITL p50/p99/max = "
+                     f"{_f(m['itl_ms']['p50'])}/{_f(m['itl_ms']['p99'])}/{_f(m['itl_ms']['max'])} ms")
+    if not a["batch_metadata_available"]:
+        lines.append("No batch metadata: step-level diagnosis unavailable (run with VLLM_ENABLE_V1_MULTIPROCESSING=0).")
+        return "\n".join(lines)
+    s = a["steps"]
+    lines.append(f"steps: {s['steps']}, of which {s['steps_with_long_chunk']} carried a prefill chunk > "
+                 f"{s['chunk_threshold_tokens']} tokens (largest {s['biggest_chunk_tokens_max']}).")
+    lines.append(f"  step duration p50: with long chunk {_f(s['duration_ms_with_long_chunk']['p50'])} ms vs "
+                 f"without {_f(s['duration_ms_without']['p50'])} ms")
+    if a["step_time_model"]:
+        m = a["step_time_model"]
+        lines.append(f"  step time ~ {_f(m['intercept_ms'])} ms + {_f(m['us_per_token'], 3)} us/token (r2={_f(m['r2'], 3)})")
+    i = a["interference"]
+    lines.append(f"short requests: {i['short_requests_sharing_a_long_chunk_step']}/{i['short_requests_with_step_data']} "
+                 f"shared at least one step with a long prefill chunk; "
+                 f"{_pct(i['share_of_short_step_time_in_long_chunk_steps'])} of all short-request step time was in such steps.")
+    lines.append(f"  TPOT p95: affected {_f(i['tpot_ms_affected']['p95'])} ms vs unaffected {_f(i['tpot_ms_unaffected']['p95'])} ms; "
+                 f"TTFT p95: affected {_f(i['ttft_ms_affected']['p95'])} ms vs unaffected {_f(i['ttft_ms_unaffected']['p95'])} ms")
+    return "\n".join(lines)
+
+
+def compare(base: Dict[str, Any], cand: Dict[str, Any], min_improvement_pct: float = 20.0) -> Dict[str, Any]:
+    def pick(a: Dict[str, Any], kind: str, metric: str, stat: str) -> Optional[float]:
+        return a["latency"].get(kind, {}).get(metric, {}).get(stat)
+
+    rows = {}
+    for kind, metric, stat in (("short", "itl_ms", "p99"), ("short", "itl_ms", "max"), ("short", "tpot_ms", "p95"),
+                               ("short", "tpot_ms", "p50"), ("short", "ttft_ms", "p95"),
+                               ("long", "ttft_ms", "p50"), ("long", "tpot_ms", "p50")):
+        b, c = pick(base, kind, metric, stat), pick(cand, kind, metric, stat)
+        rows[f"{kind}_{metric}_{stat}"] = {"baseline": b, "candidate": c,
+                                           "change_pct": ((c - b) / b * 100.0) if b and c is not None else None}
+    # Verdict metrics: short-request TTFT p95 (arrival stall) and ITL max (in-flight stall);
+    # ITL needs batch metadata and falls back to TPOT p95 without it.
+    stall_metric = "short_itl_ms_max" if rows["short_itl_ms_max"]["change_pct"] is not None else "short_tpot_ms_p95"
+    tail_metrics = {"short_ttft_ms_p95": rows["short_ttft_ms_p95"]["change_pct"], stall_metric: rows[stall_metric]["change_pct"]}
+    long_cost = rows["long_ttft_ms_p50"]["change_pct"]
+    changes = [c for c in tail_metrics.values() if c is not None]
+    if not changes:
+        verdict = "unavailable"
+    elif any(c >= min_improvement_pct for c in changes):
+        verdict = "worse"
+    elif all(c <= -min_improvement_pct for c in changes):
+        verdict = "improved"
+    else:
+        verdict = "no_meaningful_change"
+    return {"rows": rows, "verdict_metrics": tail_metrics, "long_ttft_change_pct": long_cost,
+            "verdict": verdict, "min_improvement_pct": min_improvement_pct}
+
+
+def _f(v: Optional[float], d: int = 2) -> str:
+    return "n/a" if v is None else f"{v:.{d}f}"
+
+
+def _pct(v: Optional[float]) -> str:
+    return "n/a" if v is None else f"{v * 100:.0f}%"
+
+
+def load_and_analyze(run_dir: str, chunk_threshold: int) -> Dict[str, Any]:
+    return analyze_run(io.load_traces([run_dir]), io.load_batches([run_dir]), chunk_threshold)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("run_dir")
+    parser.add_argument("--compare", help="candidate run directory (run_dir is then the baseline)")
+    parser.add_argument("--chunk-threshold", type=int, default=128)
+    parser.add_argument("--json", help="write full analysis JSON here")
+    args = parser.parse_args()
+
+    base = load_and_analyze(args.run_dir, args.chunk_threshold)
+    info = Path(args.run_dir) / "run_info.json"
+    if info.exists() and json.loads(info.read_text()).get("synthetic"):
+        print("SYNTHETIC RUN (fake engine): numbers demonstrate the pipeline only.")
+    print(f"== {args.run_dir}")
+    print(explain(base))
+    result: Dict[str, Any] = {"baseline": base}
+    if args.compare:
+        cand = load_and_analyze(args.compare, args.chunk_threshold)
+        print(f"\n== {args.compare}")
+        print(explain(cand))
+        cmp = compare(base, cand)
+        result["candidate"] = cand
+        result["comparison"] = cmp
+        print("\n== comparison (candidate vs baseline; negative = faster)")
+        for name, r in cmp["rows"].items():
+            print(f"  {name:22} {_f(r['baseline'])} -> {_f(r['candidate'])} ms  ({_f(r['change_pct'], 1)}%)")
+        metrics = ", ".join(f"{k} {_f(v, 1)}%" for k, v in cmp["verdict_metrics"].items())
+        print(f"verdict: {cmp['verdict']} on [{metrics}] (threshold {cmp['min_improvement_pct']}%); "
+              f"long-request TTFT p50 change {_f(cmp['long_ttft_change_pct'], 1)}% (cost)")
+    if args.json:
+        Path(args.json).write_text(json.dumps(result, indent=2, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

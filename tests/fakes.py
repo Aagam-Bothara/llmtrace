@@ -188,12 +188,21 @@ class FakeLLMEngine:
         step_seconds: float = 0.01,
         fail_step_at: Optional[int] = None,
         step_sleep_s: float = 0.0,
+        step_seconds_per_token: float = 0.0,
+        max_num_batched_tokens: Optional[int] = None,
+        long_prefill_token_threshold: int = 0,
     ) -> None:
         self.clock = clock or FakeClock()
         self.prefill_chunk = prefill_chunk
         self.tokens_per_step = tokens_per_step
-        self.step_seconds = step_seconds  # advances the fake clock
+        self.step_seconds = step_seconds  # base fake-clock time per step
+        self.step_seconds_per_token = step_seconds_per_token  # extra fake-clock time per scheduled token
         self.step_sleep_s = step_sleep_s  # real time.sleep inside step() (for real-clock demos)
+        # Scheduler knobs mirroring vLLM 0.11.0 SchedulerConfig semantics (token budget per step;
+        # per-step cap on prefill tokens for prompts longer than the threshold; 0 = off).
+        self.max_num_batched_tokens = max_num_batched_tokens
+        self.long_prefill_token_threshold = long_prefill_token_threshold
+        self.last_scheduled_tokens = 0
         self.fail_step_at = fail_step_at
         self.model_config = FakeModelConfig()
         self._requests: Dict[str, _Req] = {}
@@ -236,7 +245,7 @@ class FakeLLMEngine:
             sched.schedule()
         else:
             self._do_schedule()  # same bookkeeping, just not reachable from outside
-        self.clock.advance(self.step_seconds)
+        self.clock.advance(self.step_seconds + self.step_seconds_per_token * self.last_scheduled_tokens)
         if self.step_sleep_s:
             import time
 
@@ -247,6 +256,8 @@ class FakeLLMEngine:
                 continue
             if req.num_computed_tokens < req.num_prompt_tokens:
                 continue  # chunked prefill still running: no output this step
+            if not req.scheduled_once or req.num_computed_tokens < req.num_tokens:
+                continue  # not scheduled in this step (token budget exhausted)
             if isinstance(req.params, PoolingParams):
                 req.finished = True
                 outputs.append(PoolingRequestOutput(req.request_id, PoolingOutput([0.0]), list(req.prompt_token_ids), True))
@@ -268,11 +279,18 @@ class FakeLLMEngine:
         """Real vLLM 0.11.0 order: build SchedulerOutput, then _update_after_schedule()
         advances num_computed_tokens by the scheduled tokens *before* schedule() returns."""
         new, cached, tokens = [], CachedRequestData(), {}
-        for req in self._order():
-            if req.finished:
+        budget = self.max_num_batched_tokens if self.max_num_batched_tokens is not None else 10**9
+        # Real order: RUNNING requests first (already scheduled once), then WAITING ones.
+        ordered = [r for r in self._order() if r.scheduled_once] + [r for r in self._order() if not r.scheduled_once]
+        for req in ordered:
+            if req.finished or budget <= 0:
                 continue
             remaining = req.num_tokens - req.num_computed_tokens  # decode: exactly the new token(s)
             n = min(remaining, self.prefill_chunk) if req.num_computed_tokens < req.num_prompt_tokens else remaining
+            if 0 < self.long_prefill_token_threshold < n:
+                n = self.long_prefill_token_threshold
+            n = min(n, budget)
+            budget -= n
             if not req.scheduled_once:
                 new.append(NewRequestData(req.request_id, list(req.prompt_token_ids), req.num_computed_tokens))
                 req.scheduled_once = True
@@ -281,6 +299,7 @@ class FakeLLMEngine:
                 cached.num_computed_tokens.append(req.num_computed_tokens)
             tokens[req.request_id] = n
         out = SchedulerOutput(new, cached, tokens, sum(tokens.values()), set())
+        self.last_scheduled_tokens = out.total_num_scheduled_tokens
         for rid, n in tokens.items():  # _update_after_schedule()
             self._requests[rid].num_computed_tokens += n
         return out

@@ -5,7 +5,7 @@ same NVML power sensor) are integrated with the same piecewise-linear trapezoid 
 over the same window [a', b'] where a' = max(request window start, first sample of either stream) and
 b' = min(request window end, last sample of either stream). Both streams interpolate at the edges.
 """
-import glob, csv, os, sys, datetime as dt, statistics
+import glob, csv, os, sys, datetime as dt
 from llmtrace import io
 from llmtrace.control_plane.correlator import CumulativePower
 ROOT = sys.argv[1]

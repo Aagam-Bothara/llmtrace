@@ -46,3 +46,5 @@ addopts = "-q"
 [tool.ruff]
 line-length = 120
 target-version = "py39"
+# As-run evidence scripts are kept byte-identical to what executed on the GPU.
+exclude = ["docs/gpu_runs/**/overhead.py", "docs/gpu_runs/**/crosscheck.py"]

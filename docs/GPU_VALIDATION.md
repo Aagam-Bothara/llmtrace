@@ -83,7 +83,7 @@ Failure surfacing
 ## Results: first GPU run (2026-09-08)
 
 Environment: RunPod Secure Cloud, 1x NVIDIA RTX A5000 (24 GB), driver
-580.159.04, CUDA 13.0 runtime, Python 3.11.11, vLLM 0.11.0, transformers 4.57.6
+580.159.04 (driver supports CUDA 13.0; PyTorch 2.8.0+cu128, i.e. CUDA 12.8 runtime), Python 3.11.11, vLLM 0.11.0, transformers 4.57.6
 (after the pin below). Model `facebook/opt-125m`, temperature 0.
 
 Tested code: the working tree was uploaded to the pod uncommitted. Its

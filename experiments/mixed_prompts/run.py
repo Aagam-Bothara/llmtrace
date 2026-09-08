@@ -23,12 +23,13 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from workload import RequestSpec, WorkloadConfig, build_workload, make_prompt  # noqa: E402
+from workload import RequestSpec, WorkloadConfig, build_workload  # noqa: E402
 
-from llmtrace.manifest import RunManifest, ArrivalRecord, engine_effective_config, git_commit, gpu_info, llmtrace_version, workload_hash  # noqa: E402
+from llmtrace.manifest import RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version, workload_hash  # noqa: E402
+from llmtrace.runner import drive  # noqa: E402  (the serving-loop driver moved into the library unchanged)
 
 # The one scheduling change under test. Everything else stays at vLLM defaults.
 CONFIGS: Dict[str, Dict[str, Any]] = {
@@ -37,39 +38,8 @@ CONFIGS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def drive(engine: Any, specs: List[RequestSpec], make_params: Callable[[RequestSpec], Any],
-          now: Callable[[], float], wait_until: Callable[[float], None], vocab_size: int, seed: int) -> Dict[str, Any]:
-    """Serve ``specs`` on a synchronous engine. Returns finished outputs by request id and step count."""
-    pending = list(specs)
-    finished: Dict[str, Any] = {}
-    arrivals: List[ArrivalRecord] = []
-    t0 = now()
-    steps = 0
-    eps = 1e-6  # tolerate floating-point rounding in t0 + arrival (a fake clock can otherwise never reach it)
-    while pending or engine.has_unfinished_requests():
-        while pending and now() - t0 + eps >= pending[0].arrival_s:
-            spec = pending.pop(0)
-            prompt, params = make_prompt(spec, vocab_size, seed), make_params(spec)
-            submit = now()  # submission time: stamped before the call, not after it returns
-            engine.add_request(spec.request_id, prompt, params)
-            arrivals.append(ArrivalRecord(request_id=spec.request_id, scheduled_s=spec.arrival_s, actual_s=submit - t0,
-                                          delay_ms=(submit - t0 - spec.arrival_s) * 1000.0, submit_ms=(now() - submit) * 1000.0))
-        if engine.has_unfinished_requests():
-            steps += 1
-            for out in engine.step():
-                if getattr(out, "finished", False):
-                    finished[str(out.request_id)] = out
-        elif pending:
-            before = now()
-            wait_until(t0 + pending[0].arrival_s)
-            if now() <= before:  # clock did not advance: treat the next request as due rather than spin forever
-                t0 = min(t0, now() - pending[0].arrival_s)
-    return {"finished": finished, "steps": steps, "wall_s": now() - t0, "arrivals": arrivals}
-
-
 def run_fake(config: Dict[str, Any], specs: List[RequestSpec], out_dir: str, wl: WorkloadConfig) -> Dict[str, Any]:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
-    from fakes import FakeClock, FakeLLMEngine, FakeNVMLBackend, RequestOutputKind, SamplingParams
+    from llmtrace.testing.fakes import FakeClock, FakeLLMEngine, FakeNVMLBackend, RequestOutputKind, SamplingParams
 
     from llmtrace import LLMTracer, TracerConfig
 

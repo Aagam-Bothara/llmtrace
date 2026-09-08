@@ -2,7 +2,7 @@
 
 Each ``Finding`` names the hypothesis, the affected requests, the supporting
 events (with the file/field they came from), what evidence is *missing*, and a
-suggested experiment. Three hypotheses are implemented:
+suggested experiment. Five hypotheses are implemented:
 
 * ``queue_overload``: requests waited in the scheduler queue while the engine
   was busy (queue spans from in-process scheduling, or vLLM's own queued-time

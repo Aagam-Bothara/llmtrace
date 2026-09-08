@@ -70,7 +70,8 @@ GPU step spans (CUDA events; in-process run only)
 - [x] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
 - [x] median host share per step recorded: 9 to 13% on opt-125m, i.e. GPU-bound; the `host_overhead` finding reports not supported (the expectation of a large host share was wrong)
 - [x] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels, and every range matched a `gpu_steps` record; `gpu_span_ms >= ` Nsight busy time on every step (RTX A5000 run, `scripts/nsys_step_compare.py`)
-- [ ] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost)
+- [ ] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost): `scripts/gpu_overhead.py --gpu-step-timing both` (script ready, not run)
+- [ ] `llmtrace run --workload w.json --engine vllm` (the generic runner) reproduces `experiments/mixed_prompts/run.py` on the same GPU: same effective config, work-identical hash, verdicts agree
 
 AsyncLLM (`examples/vllm_async_smoke_test.py`)
 - [x] concurrent `generate()` streams traced with TTFT, token counts equal to the consumer's, status completed (RTX 4000 Ada run)
@@ -123,7 +124,7 @@ Executed via `scripts/gpu_smoke_run.sh`, then a longer workload
 
 | Step | Result |
 |------|--------|
-| CPU suite on the GPU box | 83 passed, `tests/test_collection.py` skipped as a whole (`smoke/cpu_tests.log`). Cause: a class-level `pytest.importorskip("pyarrow")` skipped the entire module on machines without pyarrow, so the sampler/writer/tracer tests did not run on the pod. Fixed after the run (per-test `find_spec` skip); the full suite is 106 tests, of which 105 run without pyarrow. The GPU box has not been re-run since. |
+| CPU suite on the GPU box | 83 passed, `tests/test_collection.py` skipped as a whole (`smoke/cpu_tests.log`). Cause: a class-level `pytest.importorskip("pyarrow")` skipped the entire module on machines without pyarrow, so the sampler/writer/tracer tests did not run on the pod. Fixed after the run (per-test `find_spec` skip); at that point the suite was 106 tests. The CPU suite has not been re-run on a GPU box since (it needs nothing from the GPU). |
 | Smoke, multiprocess engine core (default) | ALL CHECKS PASSED: `SyncMPClient`, scheduler reported unreachable with the documented reason, no batches, membership `request_window` |
 | Smoke, in-process engine core (`VLLM_ENABLE_V1_MULTIPROCESSING=0`) | ALL CHECKS PASSED: `InprocClient`, scheduler found at `engine.engine_core.engine_core.scheduler`, 32 batches for 8 x 32-token requests, every trace linked to batches, membership `batch_metadata`, queue + prefill == TTFT |
 | Phase A (`LLM.generate()`) | `output_kind=final_only`, TTFT/TPOT unavailable with the FINAL_ONLY reason, token counts equal to the engine's, text identical to untraced |

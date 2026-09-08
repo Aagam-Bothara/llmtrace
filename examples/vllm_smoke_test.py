@@ -1,7 +1,7 @@
 """Smoke test for llmtrace against real vLLM 0.11.0 on an NVIDIA GPU.
 
-This is the first thing to run on GPU hardware. It has NOT been run by the
-authors yet (developed without a GPU); see docs/GPU_VALIDATION.md.
+This is the first thing to run on GPU hardware. Run on 2026-09-08 on RTX
+A5000, RTX A4500, RTX 4000 Ada and A100 (results in docs/GPU_VALIDATION.md).
 
 Two traced phases, because ``LLM.generate()`` forces FINAL_ONLY outputs
 (``LLM._validate_and_add_requests`` in vLLM 0.11.0) and therefore cannot expose

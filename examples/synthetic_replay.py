@@ -16,8 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
-from fakes import FakeLLMEngine, FakeNVMLBackend, SamplingParams  # noqa: E402
+from llmtrace.testing.fakes import FakeLLMEngine, FakeNVMLBackend, SamplingParams  # noqa: E402
 
 from llmtrace import LLMTracer, TracerConfig  # noqa: E402
 

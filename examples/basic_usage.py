@@ -1,4 +1,4 @@
-"""Basic llmtrace usage with vLLM 0.11.0 (requires Linux + NVIDIA GPU; not yet validated on hardware).
+"""Basic llmtrace usage with vLLM 0.11.0 (requires Linux + NVIDIA GPU; the same calls as the validated smoke test).
 
     pip install -e ".[vllm]"
     VLLM_ENABLE_V1_MULTIPROCESSING=0 python examples/basic_usage.py   # =0 exposes scheduler batch metadata

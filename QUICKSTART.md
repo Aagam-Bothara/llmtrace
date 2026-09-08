@@ -5,12 +5,18 @@
 ```bash
 pip install -e ".[dev]"
 python -m pytest                      # CPU-only regression tests
+llmtrace doctor                       # what this environment can and cannot record
+llmtrace workload template --output w.json
+llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 2
+llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 2 --config-name capped --set long_prefill_token_threshold=256
+llmtrace findings ./runs/base/r0
+llmtrace decide --target "short ttft_p95 <= 20ms" --config base=./runs/base/r0,./runs/base/r1 --config capped=./runs/capped/r0,./runs/capped/r1
 python examples/synthetic_replay.py   # fake engine + fake NVML, writes ./traces_synthetic
 llmtrace analyze ./traces_synthetic/current --baseline ./traces_synthetic/baseline
 ```
 
-Everything the synthetic example prints is fabricated; it shows the pipeline
-and file formats only.
+Everything the synthetic engine produces is fabricated (an invented cost
+model); it shows the pipeline, the file formats and the decision logic only.
 
 ## 2. With vLLM 0.11.0 on an NVIDIA GPU (Linux)
 
@@ -20,7 +26,18 @@ export VLLM_ENABLE_V1_MULTIPROCESSING=0   # optional; exposes the scheduler for 
 python examples/vllm_smoke_test.py --model facebook/opt-125m --out ./traces_smoke
 ```
 
-Then follow [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md).
+Then follow [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md). The same
+workload spec runs on the real engine (in-process core for batch metadata and
+GPU spans; untraced warm-up replay first, then a traced settle phase, then
+the measured replay with `ignore_eos`):
+
+```bash
+VLLM_ENABLE_V1_MULTIPROCESSING=0 llmtrace run --workload w.json --engine vllm --model facebook/opt-125m --out ./runs/gpu_base --repeat 3
+llmtrace doctor ./runs/gpu_base/r0
+```
+
+This generic runner mirrors the driver validated in `experiments/mixed_prompts`
+but has not itself been run on a GPU yet.
 
 In your own code:
 

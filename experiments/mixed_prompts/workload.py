@@ -14,18 +14,12 @@ shrink the short-request tail, at the cost of the long request's own TTFT.
 
 from __future__ import annotations
 
-import random
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List
 
+from llmtrace.workload import ArrivalSpec, LengthSpec, RequestClass, RequestSpec, WorkloadSpec, make_prompt  # noqa: F401
 
-@dataclass(frozen=True)
-class RequestSpec:
-    request_id: str
-    kind: str  # "short" | "long"
-    arrival_s: float  # seconds after the run starts
-    prompt_len: int
-    max_tokens: int
+# RequestSpec and make_prompt now live in llmtrace.workload (re-exported here unchanged).
 
 
 @dataclass(frozen=True)
@@ -57,10 +51,20 @@ def build_workload(cfg: WorkloadConfig = WorkloadConfig()) -> List[RequestSpec]:
     return specs
 
 
-def make_prompt(spec: RequestSpec, vocab_size: int = 50000, seed: int = 0) -> Dict[str, List[int]]:
-    """Deterministic pseudo-random token ids (avoids the lowest ids, which are usually special tokens)."""
-    rng = random.Random(f"{seed}:{spec.request_id}")
-    return {"prompt_token_ids": [rng.randrange(100, vocab_size) for _ in range(spec.prompt_len)]}
+def to_workload_spec(cfg: WorkloadConfig = WorkloadConfig()) -> WorkloadSpec:
+    """The same workload as ``build_workload(cfg)`` expressed as a generic ``WorkloadSpec`` (for ``llmtrace run``).
+    Identical classes, arrivals and lengths (asserted by the tests); only the zero padding of long-request ids
+    differs (``long-00`` here, ``long-0000`` from the spec)."""
+    return WorkloadSpec(
+        name="mixed_prompts", seed=cfg.seed,
+        classes=[
+            RequestClass(name="short", count=cfg.num_short, prompt_len=LengthSpec(kind="fixed", value=cfg.short_prompt_len),
+                         max_tokens=LengthSpec(kind="fixed", value=cfg.short_max_tokens),
+                         arrival=ArrivalSpec(kind="constant", rate_per_s=cfg.short_rate_per_s)),
+            RequestClass(name="long", count=cfg.num_long, prompt_len=LengthSpec(kind="fixed", value=cfg.long_prompt_len),
+                         max_tokens=LengthSpec(kind="fixed", value=cfg.long_max_tokens),
+                         arrival=ArrivalSpec(kind="constant", rate_per_s=1.0 / cfg.long_every_s, start_s=cfg.first_long_at_s)),
+        ])
 
 
 def kind_of(request_id: str) -> str:

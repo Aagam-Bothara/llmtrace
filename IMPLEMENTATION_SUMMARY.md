@@ -31,6 +31,15 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 * CLI: improvements never regress; regressions fail only with the flag;
   missing metrics and zero baselines reported; GPU samples matched per run;
   `monitor` exits 3.
+* Workload specs (`llmtrace/workload.py`): deterministic generation, seed
+  sensitivity, length distributions, arrival processes (constant, Poisson,
+  gamma burstiness, bursts, at once), validation, equivalence with the
+  GPU-validated experiment workload.
+* Runner (`llmtrace/runner.py`, `llmtrace run`): run directories with raw
+  data, `workload.json` and manifests; scheduling changes applied and
+  recorded; failed runs recorded; repeats; the outputs feed `decide`.
+* `llmtrace doctor`: environment probes (vLLM version, engine-core process
+  mode, CUDA, NVML, extras) and per-run signal availability with reasons.
 
 ## Verified on hardware (one run, one GPU, one tiny model)
 
@@ -73,7 +82,10 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 
 * Behaviour under preemption, speculative decoding, `n > 1`, abort under load,
   pipeline parallelism, models above 7B. The span-vs-busy gap is characterized
-  on opt-125m only; the event-recording overhead itself is not measured.
+  on opt-125m only; the event-recording overhead itself is not measured
+  (`scripts/gpu_overhead.py --gpu-step-timing both` is ready).
+* `llmtrace run --engine vllm`: mirrors the validated experiment driver
+  (warm-up, settle, `ignore_eos`, manifests) but has not run on a GPU.
 * Throttle-reason bits other than `none`.
 * Overhead on models where a step takes longer than a few milliseconds
   (expected to be smaller in relative terms; not measured).

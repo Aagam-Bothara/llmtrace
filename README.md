@@ -32,6 +32,8 @@ verified vLLM interfaces; **not implemented** = absent.
 | NVTX ranges per step, Nsight Systems cross-check (`scripts/nsys_step_compare.py`) | Validated (RTX A5000, opt-125m, Nsight Systems 2026.1): all 626 and 654 step ranges of two runs matched to llmtrace's spans; the span was never below Nsight's GPU busy time (kernels plus CUDA-graph executions); busy/span 0.58 on decode steps of this launch-bound 125M model, 0.84 on 1536-token prefill steps |
 | Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
 | Diagnosis experiment (short requests mixed with long prompts) | Run on opt-125m (RTX A4500, RTX 4000 Ada) and on Qwen2.5-7B (A100, TP=1 and TP=2): traces attribute the short-request tail to steps carrying 1536-token prefill chunks, CUDA spans show that cost is GPU prefill compute (103 vs 11 ms steps on the 7B model); `long_prefill_token_threshold=256` cut short TTFT p95 by 62 to 72% and the worst stall by 45 to 72%, raising long-request TTFT by 64 to 116% (`experiments/mixed_prompts/README.md`) |
+| Configuration-driven workloads and runs (`llmtrace workload`, `llmtrace run`) | Implemented (synthetic engine CPU-tested; template reproduces the GPU-validated experiment workload); the real-engine path mirrors the validated experiment driver but has not itself been run on hardware |
+| `llmtrace doctor` (which signals this environment or a recorded run can provide, and why not) | Implemented; CPU-tested with injected probes |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
 | `AsyncLLM` (the OpenAI-server engine) via `instrument_async_engine()` | Validated (RTX 4000 Ada, opt-125m): 6 concurrent streams traced with TTFT and engine token counts, a client-cancelled stream recorded as aborted after 4 tokens, `generate`/`abort` restored, vLLM per-step stats via `stat_loggers` over the multiprocess core; no batch membership, queue/prefill boundary or GPU spans there, reported as unavailable with the reason |
 | Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
@@ -55,7 +57,7 @@ KV-cache usage fraction.
 **GPU telemetry** (`gpu_*.jsonl`): power, utilization, memory, clocks,
 throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 
-**Run manifest** (`manifest.json`, written by the experiment driver): workload
+**Run manifest** (`manifest.json`, written by `llmtrace run` and the experiment driver): workload
 and its hash, seed, model and revision, engine and llmtrace versions and git
 commit, effective engine config, GPU and driver, tracer config, per-request
 scheduled versus actual arrival, and `status: failed` with the error when a
@@ -177,6 +179,17 @@ pipeline and the `compare` exit codes; its numbers mean nothing about hardware.
 ## CLI
 
 ```bash
+llmtrace doctor                                 # which signals this environment can produce, and why not
+llmtrace workload template --output w.json      # request classes, length distributions, arrival processes, seed
+llmtrace workload preview w.json                # generated request list summary and workload hash
+llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 3          # synthetic engine (CPU)
+llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 3 \
+    --config-name capped --set long_prefill_token_threshold=256
+VLLM_ENABLE_V1_MULTIPROCESSING=0 llmtrace run --workload w.json --engine vllm --model facebook/opt-125m --out ./runs/gpu
+llmtrace doctor ./runs/base/r0                  # which signals the recorded run has, and why the others are missing
+```
+
+```bash
 llmtrace analyze ./traces                       # analyze a run directory
 llmtrace analyze ./traces --output report.json  # machine-readable report
 llmtrace compare --baseline ./traces/baseline --current ./traces/current \
@@ -228,6 +241,7 @@ compatibility with real vLLM.
 
 ## Documentation
 
+* [docs/AUDIT.md](docs/AUDIT.md): architecture, capabilities, risks, hardware-backed claims, upstream overlap, roadmap
 * [QUICKSTART.md](QUICKSTART.md)
 * [DEVELOPMENT.md](DEVELOPMENT.md): architecture, verified interfaces, semantics
 * [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md): first GPU run checklist

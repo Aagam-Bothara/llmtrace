@@ -18,6 +18,29 @@ vLLM process
 
 Data plane (`llmtrace/data_plane`) collects; control plane
 (`llmtrace/control_plane`) analyses offline and never needs vLLM or NVML.
+`llmtrace/workload.py` and `llmtrace/runner.py` replay a configuration-driven
+workload on the fake or the real engine and write a run directory with its
+manifest; `llmtrace/doctor.py` reports which signals an environment or a
+recorded run has. `docs/AUDIT.md` is the current architecture and gap audit.
+
+## Workloads and runs (`workload.py`, `runner.py`)
+
+A `WorkloadSpec` (JSON; `llmtrace workload template`) lists request classes,
+each with a count, prompt-length and `max_tokens` distributions (fixed,
+uniform, choice, clipped lognormal) and an arrival process (at once,
+constant, Poisson, gamma with a burstiness shape, bursts). `generate()` is a
+pure function of the spec and seed; request ids are `<class>-<index>` and
+`class_of()` recovers the class (`decide` and the experiment analysis rely on
+that). Prompts are token-id lists so lengths are exact without a tokenizer.
+
+`run_workload(spec, RunOptions)` replays the list on the synthetic engine
+(CPU) or on vLLM (GPU; the same warm-up, settle and `ignore_eos` protocol the
+experiment validated) under `LLMTracer`, and writes raw data only:
+`traces_*`, `batches_*`, `gpu_*`, `gpu_steps_*`, `vllm_stats_*`,
+`collector_*`, `workload.json`, `manifest.json`, `run_info.json`. Failures
+leave `status: failed` in the manifest. Derived summaries are produced by
+`analyze` / `findings` / `decide` / `visualize` and never written into the
+run directory by the runner.
 
 ## Verified vLLM target
 
@@ -169,8 +192,9 @@ against the span. Scope: vLLM's default blocking path
 thread); with async scheduling (`non_block=True`) `execute_model` returns a
 future and the bracket would cover only submission, so spans are not
 meaningful there and that mode is unsupported. Tensor-parallel executors run
-workers in other processes and are out of reach. Status: implemented against
-a fake backend; not yet run on a GPU.
+workers in other processes and are out of reach. Status: validated on RTX
+4000 Ada and A100 (Qwen2.5-7B) and cross-checked against Nsight Systems on
+RTX A5000; see `docs/GPU_VALIDATION.md`.
 
 ## Clocks
 
@@ -223,9 +247,10 @@ confidence probabilities. Diagnosis rules carry a `score` used for ranking.
 
 ## Tests
 
-`python -m pytest`. Fakes live in `tests/fakes.py` and mirror the verified
-vLLM 0.11.0 shapes with an injectable clock. They validate llmtrace's logic,
-not vLLM compatibility.
+`python -m pytest`. Fakes live in `llmtrace/testing/fakes.py` (re-exported by
+`tests/fakes.py`) and mirror the verified vLLM 0.11.0 shapes with an
+injectable clock. They validate llmtrace's logic, not vLLM compatibility. The
+same fake engine is what `llmtrace run --engine fake` drives.
 
 ## Adding a diagnosis rule
 

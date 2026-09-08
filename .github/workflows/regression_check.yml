@@ -29,3 +29,12 @@ jobs:
         run: python examples/synthetic_replay.py --out ./traces_synthetic
       - name: CLI regression check on synthetic data (expected to report regressions, exit 0 without --fail flag)
         run: llmtrace compare --baseline ./traces_synthetic/baseline --current ./traces_synthetic/current --no-rich
+      - name: Doctor, workload template and synthetic run (fake engine)
+        run: |
+          llmtrace doctor
+          llmtrace workload template --output w.json
+          llmtrace run --workload w.json --engine fake --out ./runs/base
+          llmtrace run --workload w.json --engine fake --out ./runs/capped --config-name capped --set long_prefill_token_threshold=256
+          llmtrace doctor ./runs/base
+          llmtrace findings ./runs/base
+          llmtrace decide --target "short ttft_p95 <= 50ms" --config base=./runs/base --config capped=./runs/capped

@@ -255,6 +255,121 @@ def monitor(pid: Optional[int]) -> None:
     sys.exit(EXIT_NOT_IMPLEMENTED)
 
 
+@main.group()
+def workload() -> None:
+    """Configuration-driven workloads (deterministic request lists for `llmtrace run`)."""
+
+
+@workload.command("template")
+@click.option("--output", default="workload.json", help="Where to write the template spec")
+def workload_template(output: str) -> None:
+    """Write a template workload spec (short stream + injected long prompts) to edit."""
+    from llmtrace.workload import template
+
+    p = template().save(output)
+    click.echo(f"Workload template written to {p}")
+
+
+@workload.command("preview")
+@click.argument("spec_path", type=click.Path(exists=True))
+@click.option("--json", "json_out", type=click.Path(), help="Write the summary JSON here")
+@click.option("--requests", "requests_out", type=click.Path(), help="Write the generated request list (JSONL) here")
+def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Optional[str]) -> None:
+    """Generate a spec's request list and print its summary (counts, lengths, arrivals, hash)."""
+    from llmtrace.workload import WorkloadSpec
+
+    try:
+        spec = WorkloadSpec.load(spec_path)
+    except Exception as exc:
+        click.echo(f"Invalid workload spec: {exc}", err=True)
+        sys.exit(EXIT_USAGE)
+    specs = spec.generate()
+    summary = spec.summary(specs)
+    click.echo(json.dumps(summary, indent=2))
+    if json_out:
+        Path(json_out).write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if requests_out:
+        with open(requests_out, "w", encoding="utf-8") as f:
+            for r in specs:
+                f.write(json.dumps(r.to_dict()) + "\n")
+
+
+@main.command()
+@click.option("--workload", "workload_path", required=True, type=click.Path(exists=True), help="Workload spec JSON (see `llmtrace workload template`)")
+@click.option("--engine", type=click.Choice(["fake", "vllm"]), default="fake", show_default=True,
+              help="fake: synthetic CPU engine (invented cost model, not evidence); vllm: real vLLM 0.11.0 on a GPU")
+@click.option("--out", "out_dir", required=True, type=click.Path(), help="Run directory (raw traces + manifest); with --repeat, <out>/r<i>")
+@click.option("--model", default="facebook/opt-125m", show_default=True, help="vllm only")
+@click.option("--config-name", default="default", show_default=True, help="Label for the configuration under test")
+@click.option("--set", "changes", multiple=True, metavar="KEY=JSON",
+              help="Engine kwarg under test, e.g. --set long_prefill_token_threshold=256 (recorded as scheduling_change)")
+@click.option("--engine-kwargs", default="{}", help="JSON of other engine kwargs (vllm: LLM(...); fake: FakeLLMEngine(...))")
+@click.option("--repeat", type=int, default=1, show_default=True, help="Independent repeats with identical work")
+@click.option("--collection-interval", type=float, default=0.1, show_default=True, help="llmtrace collector drain interval (s)")
+@click.option("--enable-nvtx", is_flag=True, help="NVTX range per engine step (vllm; for nsys)")
+@click.option("--no-ignore-eos", is_flag=True, help="Let requests stop at EOS (work then differs across configs)")
+@click.option("--no-warmup", is_flag=True, help="vllm: skip the untraced warm-up replay")
+@click.option("--settle", type=int, default=4, show_default=True, help="vllm: traced settling requests before the measured replay")
+def run(workload_path: str, engine: str, out_dir: str, model: str, config_name: str, changes: Tuple[str, ...], engine_kwargs: str,
+        repeat: int, collection_interval: float, enable_nvtx: bool, no_ignore_eos: bool, no_warmup: bool, settle: int) -> None:
+    """Replay a workload spec under llmtrace and write run directories (raw data + manifest)."""
+    from llmtrace.runner import RunOptions, run_workload
+    from llmtrace.workload import WorkloadSpec
+
+    try:
+        spec = WorkloadSpec.load(workload_path)
+        extra = json.loads(engine_kwargs)
+        change = {}
+        for c in changes:
+            k, sep, v = c.partition("=")
+            if not k or not sep:
+                raise ValueError(f"--set expects KEY=JSON, got {c!r}")
+            change[k.strip()] = json.loads(v)
+    except Exception as exc:
+        click.echo(f"Invalid arguments: {exc}", err=True)
+        sys.exit(EXIT_USAGE)
+    if repeat < 1:
+        click.echo("--repeat must be >= 1", err=True)
+        sys.exit(EXIT_USAGE)
+    failed = False
+    for i in range(repeat):
+        out = out_dir if repeat == 1 else str(Path(out_dir) / f"r{i}")
+        opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=config_name, scheduling_change=change,
+                          engine_kwargs=extra, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
+                          ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle)
+        m = run_workload(spec, opts)
+        if m.status != "ok":
+            click.echo(f"[{out}] FAILED: {m.error}", err=True)
+            failed = True
+            continue
+        problems = m.extra.get("problems") or []
+        click.echo(f"[{out}] {m.engine}{' (synthetic)' if m.synthetic else ''} config={m.config_name} workload={m.workload_hash} "
+                   f"steps={m.steps} finished={m.finished}/{m.expected_requests} wall={m.wall_s:.3f}s "
+                   f"arrival delay p50/max {m.arrival_delay_ms_p50} / {m.arrival_delay_ms_max} ms")
+        h = m.health or {}
+        click.echo(f"    scheduler visible: {h.get('scheduler_visible_during_run')} ({h.get('scheduler_unavailable_reason_during_run')}); "
+                   f"executor visible: {h.get('executor_visible_during_run')} ({h.get('executor_unavailable_reason_during_run')})")
+        for pr in problems:
+            click.echo(f"    PROBLEM: {pr}", err=True)
+        failed = failed or bool(problems)
+    sys.exit(EXIT_REGRESSION if failed else EXIT_OK)
+
+
+@main.command()
+@click.argument("run_dir", required=False, type=click.Path(exists=True))
+@click.option("--json", "json_out", type=click.Path(), help="Write the report JSON here")
+def doctor(run_dir: Optional[str], json_out: Optional[str]) -> None:
+    """Pre-flight checks: which signals this environment can produce (no engine started), or, with a
+    run directory, which signals a recorded run has and why the others are missing."""
+    from llmtrace.doctor import environment_report, run_report
+
+    report = run_report(run_dir) if run_dir else environment_report()
+    click.echo(report.format())
+    if json_out:
+        Path(json_out).write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    sys.exit(EXIT_REGRESSION if report.errors else EXIT_OK)
+
+
 @main.command("init-config")
 @click.option("--output", default="llmtrace_config.json", help="Output config file path")
 def init_config(output: str) -> None:

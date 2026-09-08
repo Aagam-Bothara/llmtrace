@@ -70,8 +70,10 @@ GPU step spans (CUDA events; in-process run only)
 - [x] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
 - [x] median host share per step recorded: 9 to 13% on opt-125m, i.e. GPU-bound; the `host_overhead` finding reports not supported (the expectation of a large host share was wrong)
 - [x] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels, and every range matched a `gpu_steps` record; `gpu_span_ms >= ` Nsight busy time on every step (RTX A5000 run, `scripts/nsys_step_compare.py`)
-- [ ] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost): `scripts/gpu_overhead.py --gpu-step-timing both` (script ready, not run)
-- [ ] `llmtrace run --workload w.json --engine vllm` (the generic runner) reproduces `experiments/mixed_prompts/run.py` on the same GPU: same effective config, work-identical hash, verdicts agree
+- [x] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost): 0.11 ms per step, +3.0% (RTX A5000 session 2)
+- [x] `llmtrace run --workload w.json --engine vllm` (the generic runner) reproduces `experiments/mixed_prompts/run.py` on the same GPU: same effective config, work-identical hash, verdicts agree (RTX A5000 session 2)
+- [x] `llmtrace plan` -> `llmtrace run --plan` -> `llmtrace decide` on real vLLM, one process per engine (RTX A5000 session 2)
+- [x] vLLM per-step stats through the post-hoc attach on the sync engine (`disable_log_stats=False`; RTX A5000 session 2)
 
 AsyncLLM (`examples/vllm_async_smoke_test.py`)
 - [x] concurrent `generate()` streams traced with TTFT, token counts equal to the consumer's, status completed (RTX 4000 Ada run)
@@ -244,6 +246,31 @@ the smoke test and the mixed-prompt experiment.
 
 Not measured here: GPU busy time (see the Nsight cross-check below for how
 far the span is from it) and the event-recording overhead itself.
+
+## Generic runner, plan loop, stats hook, overhead matrix (2026-09-08, RTX A5000, session 2)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-runner-plan/` (its README lists
+the stages and the two defects found and fixed during the session).
+Workload: the `llmtrace workload template` (120 short requests at 40/s of 32
+prompt tokens and 128 output tokens, 12 long prompts of 1536 tokens every
+0.2 s), opt-125m, in-process core, `ignore_eos`.
+
+| Check | Result |
+|-------|--------|
+| `llmtrace doctor` on the box | vLLM 0.11.0 verified target, in-process core, CUDA and NVML found; every signal available except parquet output |
+| CPU suite on the box | 238 passed, 1 skipped (parquet), 1 failed: a doctor test assumed no CUDA (the fake engine's executor is bracketed with real CUDA events on a GPU box); fixed |
+| Generic runner vs experiment driver, 256-token cap | Both verdicts `improved`. Runner: short TTFT p95 7.93 to 2.85 ms (-64.0%) and 8.28 to 2.89 ms (-65.1%), short ITL max -51.9% and -61.3%, long TTFT p50 +112% and +103%. Driver: 7.90 to 3.09 ms (-60.9%), ITL max -47.3%, long TTFT +115% |
+| `decide` with runner + driver runs as three repeats each, target short TTFT p95 <= 5 ms, SLO ttft <= 5 ms and tpot <= 3 ms | baseline 7.9 ms [7.9..8.3], 95% CI [7.9..8.1], goodput 90%; capped 2.9 ms [2.9..3.1], CI [2.9..3.1], goodput 100%; energy 0.0349 vs 0.0355 J/token at 99% coverage; work identical across all six runs; candidate: capped |
+| Findings on the runner baseline | long_prompt_interference supported (97 requests in 12 long-chunk steps, 7.6 vs 1.5 ms); host_overhead not supported (15% host share); queue, KV pressure, observer effect not supported |
+| `run --plan`, first attempt | Baseline r0 ran; every later engine failed to start: "Free memory on device 11.75/23.55 GiB is less than desired 0.5" because the previous engine's memory stayed allocated in the process. Fixed: one spawned process per real engine (`run_workload_isolated`) plus best-effort teardown; GPU memory after six engines: 1 MiB |
+| vLLM stats on the sync engine, first attempt | No `logger_manager`: `vllm.LLM` sets `disable_log_stats=True` unless told otherwise (read from `vllm/entrypoints/llm.py`). Fixed: the runner passes `disable_log_stats=False` by default; then 1714 per-step records with KV usage and 136 finished-request stats with `queued_time` |
+| Plan from the baseline run | `long_prefill_token_threshold` 1024 and 512 (largest observed chunk 1536); queue, KV and host findings not supported so no other candidates; every source setting reproduced (no `NOT REPRODUCED`) |
+| Planned runs (2 repeats each), `decide` on the same target and SLO | baseline 8.3 ms [8.1..8.4], CI [8.0..8.6], goodput 89%; cap1024 6.1 ms [6.0..6.2], CI [5.9..6.7], goodput 89%; cap512 4.8 ms [4.8..4.9], CI [4.7..5.0], goodput 98%, the only candidate. Per-run analysis against the planned baseline: cap1024 short TTFT p95 -24.2%, ITL max -21.4%, long TTFT +28.2%; cap512 -40.9%, -43.7%, +62.1%; with the earlier 256 cap at -64%, -52%, +112% the effect and its cost grow monotonically as the cap shrinks |
+| Overhead matrix, 64 x 256 tokens, 3 interleaved repeats | untraced `generate()` 0.818 s, untraced engine loop 0.843 s, traced `generate()` 0.881 s (+7.7%, 0.25 ms per step), traced engine loop 0.964 s (+14.4%, 0.47 ms per step), traced engine loop without GPU step timing 0.936 s: CUDA-event recording 0.11 ms per step (+3.0%). Higher than the first session's +4% / +9%, which had no step timing; the remaining difference is between sessions on different boxes and is not separated here |
+
+Not measured: any of this on a model larger than opt-125m; the planner's
+other rules (queue, KV pressure, host overhead) on real vLLM, since those
+findings were not supported on this workload.
 
 ## Nsight Systems cross-check of the step spans (2026-09-08, RTX A5000)
 

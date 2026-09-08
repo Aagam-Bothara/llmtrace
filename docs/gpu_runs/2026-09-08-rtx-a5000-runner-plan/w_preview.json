@@ -1,0 +1,29 @@
+{
+  "name": "mixed_prompts",
+  "seed": 0,
+  "requests": 132,
+  "workload_hash": "sha256:cb947bf846960652",
+  "span_s": 2.975,
+  "classes": {
+    "short": {
+      "count": 120,
+      "prompt_len": "32",
+      "max_tokens": "128",
+      "arrival": "constant at 40/s from 0s",
+      "prompt_tokens_total": 3840,
+      "max_output_tokens_total": 15360,
+      "first_arrival_s": 0.0,
+      "last_arrival_s": 2.975
+    },
+    "long": {
+      "count": 12,
+      "prompt_len": "1536",
+      "max_tokens": "8",
+      "arrival": "constant at 5/s from 0.4s",
+      "prompt_tokens_total": 18432,
+      "max_output_tokens_total": 96,
+      "first_arrival_s": 0.4,
+      "last_arrival_s": 2.6
+    }
+  }
+}

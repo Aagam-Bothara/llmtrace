@@ -1,0 +1,18 @@
+llmtrace doctor (environment)
+
+  [     ok] python: 3.11.11
+  [     ok] vllm: 0.11.0 (verified target)
+  [     ok] engine core process: in-process (VLLM_ENABLE_V1_MULTIPROCESSING=0)
+  [     ok] torch.cuda: torch 2.8.0+cu128, 1 CUDA device(s)
+  [     ok] nvml: driver 580.159.04, 1 device(s)
+  [   warn] pyarrow: not importable; pip install llmtrace[parquet]
+            -> no output_format=parquet
+  [     ok] rich: importable
+
+  signals:
+    yes  request traces (traces_*)
+    yes  batch membership and chunk sizes (batches_*)
+    yes  queue/prefill spans per request
+    yes  vLLM per-step stats (vllm_stats_*)
+    yes  GPU step spans (gpu_steps_*)
+    yes  GPU telemetry and energy (gpu_*)

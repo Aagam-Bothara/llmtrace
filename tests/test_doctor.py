@@ -82,8 +82,10 @@ class TestRunDir:
         checks, signals = _by_name(rep)
         assert checks["manifest"].status == "ok" and checks["requests finished"].status == "ok"
         assert signals["request traces"].available and signals["batch membership and chunk sizes"].available
-        assert not signals["GPU step spans"].available  # fake engine: executor timing needs torch.cuda
-        assert signals["GPU step spans"].reason  # the health reason is carried over
+        # the fake engine's executor is bracketed with real CUDA events when torch.cuda exists (a GPU box), else not
+        cuda = bool((m.health.get("cuda_timing") or {}).get("available"))
+        assert signals["GPU step spans"].available == cuda
+        assert cuda or signals["GPU step spans"].reason  # without CUDA the health reason is carried over
         assert signals["vLLM per-step stats"].available  # the fake engine exposes a logger_manager
         assert rep.errors == [] and m.status == "ok"
 

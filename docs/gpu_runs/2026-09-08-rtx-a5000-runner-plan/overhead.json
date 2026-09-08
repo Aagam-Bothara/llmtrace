@@ -1,0 +1,94 @@
+{
+ "wall_s": {
+  "untraced_generate": [
+   0.8240901529788971,
+   0.8077949956059456,
+   0.8180295685306191
+  ],
+  "untraced_engine_loop": [
+   0.8418961865827441,
+   0.8426329297944903,
+   0.8523875316604972
+  ],
+  "traced_generate": [
+   0.875261596404016,
+   0.881119548343122,
+   0.891919837333262
+  ],
+  "traced_engine_loop": [
+   0.940435498021543,
+   0.96767932549119,
+   0.9637958090752363
+  ],
+  "traced_engine_loop_nospans": [
+   0.9235826367512345,
+   0.9415768599137664,
+   0.9355505546554923
+  ]
+ },
+ "steps_observed": {
+  "traced_generate": [
+   256,
+   256,
+   256
+  ],
+  "traced_engine_loop": [
+   256,
+   256,
+   256
+  ],
+  "traced_engine_loop_nospans": [
+   256,
+   256,
+   256
+  ]
+ },
+ "finish_reasons": {
+  "traced_generate_0": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_0": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_nospans_0": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_generate_1": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_1": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_nospans_1": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_generate_2": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_2": {
+   "stop": 7,
+   "length": 57
+  },
+  "traced_engine_loop_nospans_2": {
+   "stop": 7,
+   "length": 57
+  }
+ },
+ "config": {
+  "model": "facebook/opt-125m",
+  "num_prompts": 64,
+  "max_tokens": 256,
+  "repeat": 3,
+  "sample_interval_ms": 50,
+  "out": "/workspace/gpu/overhead_traces",
+  "json": "/workspace/gpu/overhead.json",
+  "gpu_step_timing": "both"
+ }
+}

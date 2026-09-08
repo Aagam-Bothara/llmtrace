@@ -1,0 +1,4 @@
+2026-09-08T22:06:53Z
+NVIDIA RTX A5000, 580.159.04, 24564 MiB
+3.11.11 torch 2.8.0+cu128 vllm 0.11.0 transformers 4.57.6 llmtrace 0.2.0
+git n/a

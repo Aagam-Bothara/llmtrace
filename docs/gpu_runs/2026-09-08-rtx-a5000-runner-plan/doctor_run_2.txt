@@ -1,0 +1,13 @@
+llmtrace doctor (run)
+
+  [     ok] manifest: vllm, model facebook/opt-125m, config baseline, workload sha256:cb947bf846960652
+  [     ok] requests finished: 132 finished, 136 expected (incl. settle requests)
+  [     ok] load generator: arrival delay p50 1.02 ms, max 3.61 ms
+
+  signals:
+    yes  request traces (traces_*)
+    yes  batch membership and chunk sizes (batches_*)
+    yes  GPU telemetry and energy (gpu_*)
+    yes  vLLM per-step stats (vllm_stats_*)
+    yes  collector self-events (collector_*)
+    yes  GPU step spans (gpu_steps_*)

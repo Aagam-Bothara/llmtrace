@@ -348,11 +348,14 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 @click.option("--no-ignore-eos", is_flag=True, help="Let requests stop at EOS (work then differs across configs)")
 @click.option("--no-warmup", is_flag=True, help="vllm: skip the untraced warm-up replay")
 @click.option("--settle", type=int, default=4, show_default=True, help="vllm: traced settling requests before the measured replay")
+@click.option("--in-process", is_flag=True,
+              help="vllm: run the engine in this process instead of one spawned process per run (memory of a previous engine "
+                   "is then not reliably released; only for a single run)")
 def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out_dir: str, model: Optional[str], overwrite: bool,
         config_name: str, changes: Tuple[str, ...], engine_kwargs: str, repeat: int, collection_interval: float, enable_nvtx: bool,
-        no_ignore_eos: bool, no_warmup: bool, settle: int) -> None:
+        no_ignore_eos: bool, no_warmup: bool, settle: int, in_process: bool) -> None:
     """Replay a workload spec under llmtrace and write run directories (raw data + manifest)."""
-    from llmtrace.runner import RunOptions, run_workload
+    from llmtrace.runner import RunOptions, run_workload, run_workload_isolated
     from llmtrace.workload import WorkloadSpec
 
     try:
@@ -409,14 +412,17 @@ def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out
         opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=name, scheduling_change=chg,
                           engine_kwargs=kw, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
                           ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle, overwrite=overwrite)
-        m = run_workload(spec, opts)
+        # real engines get one process each so a previous engine's GPU memory cannot break the next start
+        m = run_workload(spec, opts) if (engine == "fake" or in_process) else run_workload_isolated(spec, opts)
         if m.status != "ok":
             click.echo(f"[{out}] FAILED: {m.error}", err=True)
             failed = True
             continue
         problems = m.extra.get("problems") or []
+        n_settle = int(m.extra.get("settle_requests") or 0)
+        expected = (m.expected_requests or 0) - n_settle
         click.echo(f"[{out}] {m.engine}{' (synthetic)' if m.synthetic else ''} config={m.config_name} workload={m.workload_hash} "
-                   f"steps={m.steps} finished={m.finished}/{m.expected_requests} wall={m.wall_s:.3f}s "
+                   f"steps={m.steps} finished={m.finished}/{expected}{f' (+{n_settle} settle)' if n_settle else ''} wall={m.wall_s:.3f}s "
                    f"arrival delay p50/max {m.arrival_delay_ms_p50} / {m.arrival_delay_ms_max} ms")
         h = m.health or {}
         click.echo(f"    scheduler visible: {h.get('scheduler_visible_during_run')} ({h.get('scheduler_unavailable_reason_during_run')}); "

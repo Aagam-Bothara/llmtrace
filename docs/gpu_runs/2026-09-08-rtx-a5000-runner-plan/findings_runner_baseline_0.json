@@ -1,0 +1,291 @@
+[
+  {
+    "hypothesis": "queue_overload",
+    "status": "not_supported",
+    "summary": "No request waited >= 100 ms in the queue.",
+    "affected_requests": [],
+    "affected_count": 0,
+    "supporting_events": [
+      {
+        "source": "traces_*.jsonl:spans[phase=queue]",
+        "statement": "queue wait p95 across requests with a queue span",
+        "value": 0.5194796249270439,
+        "unit": "ms"
+      }
+    ],
+    "missing_evidence": [
+      "vLLM per-step waiting counts (stat_loggers hook)"
+    ],
+    "assumptions": [
+      "queue wait is the time from add_request to the first engine step that scheduled the request (in-process scheduler), or vLLM's own queued_time for finished requests",
+      "the threshold separates ordinary scheduling delay from overload for this workload"
+    ],
+    "competing_explanations": [
+      "load-generator lateness rather than scheduler queueing (compare manifest arrival delays with the queue spans)",
+      "requests waited for KV-cache blocks rather than for step capacity (see kv_cache_pressure)",
+      "one large prefill chunk consumed the step's token budget (see long_prompt_interference)"
+    ],
+    "confidence_limits": [
+      "queue wait is step-granular (resolved to the end of the step that first scheduled the request)",
+      "vLLM's queued_time carries no request ids, so affected requests come only from in-process queue spans"
+    ],
+    "suggested_experiment": null,
+    "parameters": {
+      "threshold_ms": 100.0
+    }
+  },
+  {
+    "hypothesis": "long_prompt_interference",
+    "status": "supported",
+    "summary": "97 request(s) decoded or waited in 12 step(s) that also prefilled a chunk > 128 tokens; those steps took 7.6 ms vs 1.5 ms for the rest. They waited while the scheduler spent its token budget on other work.",
+    "affected_requests": [
+      "short-0008",
+      "short-0009",
+      "short-0010",
+      "short-0011",
+      "short-0012",
+      "short-0013",
+      "short-0014",
+      "short-0015",
+      "short-0016",
+      "short-0017",
+      "short-0018",
+      "short-0019",
+      "short-0020",
+      "short-0021",
+      "short-0022",
+      "short-0023",
+      "short-0024",
+      "short-0025",
+      "short-0026",
+      "short-0027",
+      "short-0028",
+      "short-0029",
+      "short-0030",
+      "short-0031",
+      "short-0032",
+      "short-0033",
+      "short-0034",
+      "short-0035",
+      "short-0036",
+      "short-0037",
+      "short-0038",
+      "short-0039",
+      "short-0040",
+      "short-0041",
+      "short-0042",
+      "short-0043",
+      "short-0044",
+      "short-0045",
+      "short-0046",
+      "short-0047",
+      "short-0048",
+      "short-0049",
+      "short-0050",
+      "short-0051",
+      "short-0052",
+      "short-0053",
+      "short-0054",
+      "short-0055",
+      "short-0056",
+      "short-0057"
+    ],
+    "affected_count": 97,
+    "supporting_events": [
+      {
+        "source": "batches_*.jsonl:scheduled_tokens",
+        "statement": "engine steps carrying a prefill chunk above the threshold",
+        "value": 12.0,
+        "unit": "steps"
+      },
+      {
+        "source": "batches_*.jsonl:step_end_monotonic-monotonic",
+        "statement": "median duration of those steps",
+        "value": 7.598754949867725,
+        "unit": "ms"
+      },
+      {
+        "source": "batches_*.jsonl:step_end_monotonic-monotonic",
+        "statement": "median duration of all other steps",
+        "value": 1.4686165377497673,
+        "unit": "ms"
+      },
+      {
+        "source": "traces_*.jsonl:batch_ids",
+        "statement": "requests that shared such a step without owning the chunk",
+        "value": 97.0,
+        "unit": "requests"
+      },
+      {
+        "source": "traces_*.jsonl:ttft_ms",
+        "statement": "TTFT p95 of sharing requests",
+        "value": 7.966550998389721,
+        "unit": "ms"
+      },
+      {
+        "source": "traces_*.jsonl:ttft_ms",
+        "statement": "TTFT p95 of non-sharing requests",
+        "value": 2.984287217259407,
+        "unit": "ms"
+      }
+    ],
+    "missing_evidence": [],
+    "assumptions": [
+      "an engine step's duration is set mainly by the largest prefill chunk it carries",
+      "every request scheduled in a step waits for the whole step, so sharing a long step delays its tokens"
+    ],
+    "competing_explanations": [
+      "the long steps were slow for another reason: first-time batch shapes or CUDA-graph capture (see warm-up in the manifest), host stalls (see host_overhead), or the tracer's own drains (see tracer_observer_effect)",
+      "the sharing requests' TTFT came from queue wait before they were scheduled, not from the step they shared (compare their queue spans)"
+    ],
+    "confidence_limits": [
+      "this is co-occurrence of step membership and step duration; cause is established only by the replay with long_prefill_token_threshold changed",
+      "GPU step spans, when present, show the step was GPU compute but not whose tokens consumed it"
+    ],
+    "suggested_experiment": "Replay with long_prefill_token_threshold set to a smaller per-step chunk (e.g. 256) and compare the sharing requests' TTFT p95 and worst inter-token stall against the long requests' TTFT cost.",
+    "parameters": {
+      "chunk_threshold": 128,
+      "slowdown_factor": 2.0,
+      "chunk_owners": [
+        "long-0000",
+        "long-0001",
+        "long-0002",
+        "long-0003",
+        "long-0004",
+        "long-0005",
+        "long-0006",
+        "long-0007",
+        "long-0008",
+        "long-0009",
+        "long-0010",
+        "long-0011"
+      ]
+    }
+  },
+  {
+    "hypothesis": "kv_cache_pressure",
+    "status": "not_supported",
+    "summary": "KV-cache usage stayed below 90% (max 1%).",
+    "affected_requests": [],
+    "affected_count": 0,
+    "supporting_events": [
+      {
+        "source": "batches_*.jsonl:kv_cache_usage_fraction",
+        "statement": "max KV-cache usage",
+        "value": 0.008124813079453674,
+        "unit": "fraction"
+      },
+      {
+        "source": "batches_*.jsonl:kv_cache_usage_fraction",
+        "statement": "steps with usage >= 90%",
+        "value": 0.0,
+        "unit": "steps"
+      }
+    ],
+    "missing_evidence": [
+      "preemption counts (vLLM stat_loggers hook)"
+    ],
+    "assumptions": [
+      "KV-cache usage at or above the threshold means block allocation can fail for new tokens",
+      "preemptions reported by vLLM in the same run are caused by that shortage"
+    ],
+    "competing_explanations": [
+      "high usage without preemptions is ordinary steady state for a full batch (not a problem by itself)",
+      "preemptions can also follow priority scheduling or a request longer than max_model_len allows"
+    ],
+    "confidence_limits": [
+      "vLLM stats carry no request ids: the requests alive during high-usage steps are known only with batch metadata",
+      "usage is sampled once per step; a shortage inside a step is not visible"
+    ],
+    "suggested_experiment": null,
+    "parameters": {
+      "usage_threshold": 0.9,
+      "source": "batches_*.jsonl:kv_cache_usage_fraction"
+    }
+  },
+  {
+    "hypothesis": "host_overhead",
+    "status": "not_supported",
+    "summary": "Host-side time is 15% of a typical step; steps are GPU-bound.",
+    "affected_requests": [],
+    "affected_count": 0,
+    "supporting_events": [
+      {
+        "source": "gpu_steps_*.jsonl:gpu_span_ms",
+        "statement": "median GPU span per step",
+        "value": 1.3212159872055054,
+        "unit": "ms"
+      },
+      {
+        "source": "gpu_steps_*.jsonl:host_step_ms",
+        "statement": "median host step time",
+        "value": 1.5554213896393776,
+        "unit": "ms"
+      },
+      {
+        "source": "gpu_steps_*.jsonl:host_overhead_ms/host_step_ms",
+        "statement": "median share of step time not spanned by the GPU",
+        "value": 0.14654835243932468,
+        "unit": "fraction"
+      },
+      {
+        "source": "gpu_steps_*.jsonl",
+        "statement": "steps with a resolved GPU span",
+        "value": 1834.0,
+        "unit": "steps"
+      }
+    ],
+    "missing_evidence": [
+      "GPU busy time (CUPTI); the CUDA-event span includes launch gaps"
+    ],
+    "assumptions": [
+      "host_step_ms - gpu_span_ms is time the GPU stream was not spanned by the model forward (scheduling, input preparation, output processing, tracing)"
+    ],
+    "competing_explanations": [
+      "the span excludes work on vLLM's other streams and includes launch gaps inside the span, so a high host share on a tiny model can be launch-bound GPU idle time rather than host work (Nsight cross-check: decode steps of a 125M model were 58% busy inside the span)"
+    ],
+    "confidence_limits": [
+      "measured only with UniProcExecutor on the blocking execute path; the tracer's own per-step cost is inside the host share"
+    ],
+    "suggested_experiment": null,
+    "parameters": {
+      "share_threshold": 0.5
+    }
+  },
+  {
+    "hypothesis": "tracer_observer_effect",
+    "status": "not_supported",
+    "summary": "No engine step overlapping a tracer drain was unusually long.",
+    "affected_requests": [],
+    "affected_count": 0,
+    "supporting_events": [
+      {
+        "source": "collector_*.jsonl",
+        "statement": "collector drains recorded",
+        "value": 32.0,
+        "unit": "drains"
+      },
+      {
+        "source": "collector_*.jsonl:duration_ms",
+        "statement": "longest drain",
+        "value": 0.101516954600811,
+        "unit": "ms"
+      }
+    ],
+    "missing_evidence": [],
+    "assumptions": [
+      "a collector drain that overlaps an engine step and is a material part of that step's excess over the median delayed it"
+    ],
+    "competing_explanations": [
+      "the overlapping step was long for its own reasons (a large prefill chunk, a first-time shape)"
+    ],
+    "confidence_limits": [
+      "the drain's duration is measured by the collector thread; GIL contention it caused inside the step is inferred, not measured"
+    ],
+    "suggested_experiment": null,
+    "parameters": {
+      "factor": 2.0,
+      "steps": []
+    }
+  }
+]

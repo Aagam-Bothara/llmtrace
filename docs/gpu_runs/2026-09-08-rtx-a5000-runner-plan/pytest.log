@@ -1,0 +1,25 @@
+..........................................s............................. [ 30%]
+.....................F.................................................. [ 60%]
+........................................................................ [ 90%]
+........................                                                 [100%]
+=================================== FAILURES ===================================
+___________________ TestRunDir.test_run_report_lists_signals ___________________
+
+self = <test_doctor.TestRunDir object at 0x79ec44123c10>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_run_report_lists_signals0')
+
+    def test_run_report_lists_signals(self, tmp_path):
+        m = self._run(tmp_path)
+        rep = run_report(str(tmp_path / "r"))
+        checks, signals = _by_name(rep)
+        assert checks["manifest"].status == "ok" and checks["requests finished"].status == "ok"
+        assert signals["request traces"].available and signals["batch membership and chunk sizes"].available
+>       assert not signals["GPU step spans"].available  # fake engine: executor timing needs torch.cuda
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert not True
+E        +  where True = Signal(name='GPU step spans (gpu_steps_*)', available=True, reason=None).available
+
+tests/test_doctor.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_doctor.py::TestRunDir::test_run_report_lists_signals - Asse...
+1 failed, 238 passed, 1 skipped in 16.69s

@@ -1,0 +1,76 @@
+INFO 09-08 22:07:23 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:07:25 [utils.py:233] non-default args: {'gpu_memory_utilization': 0.5, 'disable_log_stats': True, 'model': 'facebook/opt-125m'}
+WARNING 09-08 22:07:25 [model.py:371] The global random seed is set to 0. Since VLLM_ENABLE_V1_MULTIPROCESSING is set to False, this may affect the random state of the Python process that launched vLLM.
+INFO 09-08 22:07:33 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:07:33 [model.py:1510] Using max model len 2048
+INFO 09-08 22:07:33 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 22:07:35 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":512,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:07:36 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:07:36 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:07:36 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:07:36 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:07:36 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:07:37 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+INFO 09-08 22:07:39 [weight_utils.py:413] Time spent downloading weights for facebook/opt-125m: 2.673984 seconds
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.17it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.16it/s]
+
+INFO 09-08 22:07:39 [default_loader.py:267] Loading weights took 0.25 seconds
+INFO 09-08 22:07:40 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 3.247493 seconds
+INFO 09-08 22:07:42 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:07:42 [backends.py:559] Dynamo bytecode transform time: 1.64 s
+INFO 09-08 22:07:43 [backends.py:197] Cache the graph for dynamic shape for later use
+[rank0]:W0908 22:07:43.873000 1100 torch/_inductor/utils.py:1436] [0/0] Not enough SMs to use max_autotune_gemm mode
+INFO 09-08 22:07:47 [backends.py:218] Compiling a graph for dynamic shape takes 5.09 s
+INFO 09-08 22:07:49 [monitor.py:34] torch.compile takes 6.73 s in total
+INFO 09-08 22:07:49 [gpu_worker.py:298] Available KV cache memory: 11.02 GiB
+INFO 09-08 22:07:49 [kv_cache_utils.py:1087] GPU KV cache size: 321,008 tokens
+INFO 09-08 22:07:49 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 156.74x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   9%|▉         | 6/67 [00:00<00:01, 51.10it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  24%|██▍       | 16/67 [00:00<00:00, 76.32it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  37%|███▋      | 25/67 [00:00<00:00, 81.86it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  52%|█████▏    | 35/67 [00:00<00:00, 88.38it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  69%|██████▊   | 46/67 [00:00<00:00, 93.55it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  84%|████████▎ | 56/67 [00:00<00:00, 89.74it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  99%|█████████▊| 66/67 [00:00<00:00, 84.88it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 67/67 [00:00<00:00, 81.79it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  26%|██▌       | 9/35 [00:00<00:00, 82.88it/s]Capturing CUDA graphs (decode, FULL):  57%|█████▋    | 20/35 [00:00<00:00, 93.46it/s]Capturing CUDA graphs (decode, FULL):  86%|████████▌ | 30/35 [00:00<00:00, 93.12it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 35/35 [00:00<00:00, 93.87it/s]
+INFO 09-08 22:07:51 [gpu_model_runner.py:3480] Graph capturing finished in 2 secs, took 0.21 GiB
+INFO 09-08 22:07:51 [core.py:210] init engine (profile, create kv cache, warmup model) took 11.36 seconds
+INFO 09-08 22:07:52 [llm.py:306] Supported_tasks: ('generate',)
+Adding requests:   0%|          | 0/4 [00:00<?, ?it/s]Adding requests: 100%|██████████| 4/4 [00:00<00:00, 1522.43it/s]
+Processed prompts:   0%|          | 0/4 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 4/4 [00:00<00:00, 12.51it/s, est. speed input: 175.21 toks/s, output: 1101.29 toks/s]Processed prompts: 100%|██████████| 4/4 [00:00<00:00, 12.51it/s, est. speed input: 175.21 toks/s, output: 1101.29 toks/s]Processed prompts: 100%|██████████| 4/4 [00:00<00:00, 12.51it/s, est. speed input: 175.21 toks/s, output: 1101.29 toks/s]
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 6014.55it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 33.08it/s, est. speed input: 463.15 toks/s, output: 876.61 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.77it/s, est. speed input: 137.99 toks/s, output: 586.37 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.77it/s, est. speed input: 1102.49 toks/s, output: 18225.44 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 78.73it/s, est. speed input: 1102.49 toks/s, output: 18225.44 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 5675.77it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 32.87it/s, est. speed input: 460.24 toks/s, output: 871.12 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.23it/s, est. speed input: 129.85 toks/s, output: 551.85 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.23it/s, est. speed input: 1037.99 toks/s, output: 17159.25 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 74.13it/s, est. speed input: 1037.99 toks/s, output: 17159.25 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 7196.08it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 35.34it/s, est. speed input: 494.77 toks/s, output: 936.46 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.90it/s, est. speed input: 140.42 toks/s, output: 596.76 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.90it/s, est. speed input: 1122.40 toks/s, output: 18554.52 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 80.16it/s, est. speed input: 1122.40 toks/s, output: 18554.52 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 5957.95it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 33.12it/s, est. speed input: 463.78 toks/s, output: 877.82 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.16it/s, est. speed input: 128.87 toks/s, output: 547.69 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.16it/s, est. speed input: 1030.15 toks/s, output: 17029.62 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 73.57it/s, est. speed input: 1030.15 toks/s, output: 17029.62 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 7025.08it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 34.71it/s, est. speed input: 486.05 toks/s, output: 919.95 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.80it/s, est. speed input: 138.68 toks/s, output: 589.37 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.80it/s, est. speed input: 1108.47 toks/s, output: 18324.24 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 79.17it/s, est. speed input: 1108.47 toks/s, output: 18324.24 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 5922.07it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 32.89it/s, est. speed input: 460.46 toks/s, output: 871.53 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.06it/s, est. speed input: 127.29 toks/s, output: 540.99 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.06it/s, est. speed input: 1017.57 toks/s, output: 16821.54 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 72.68it/s, est. speed input: 1017.57 toks/s, output: 16821.54 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+untraced_generate      median 0.8180s  all [0.8241, 0.8078, 0.818]
+untraced_engine_loop   median 0.8426s  all [0.8419, 0.8426, 0.8524]
+traced_generate        median 0.8811s  all [0.8753, 0.8811, 0.8919]
+traced_engine_loop     median 0.9638s  all [0.9404, 0.9677, 0.9638]
+traced_engine_loop_nospans median 0.9356s  all [0.9236, 0.9416, 0.9356]
+engine steps observed per traced run: {'traced_generate': [256, 256, 256], 'traced_engine_loop': [256, 256, 256], 'traced_engine_loop_nospans': [256, 256, 256]}
+finish reasons per traced run: {'traced_generate_0': {'stop': 7, 'length': 57}, 'traced_engine_loop_0': {'stop': 7, 'length': 57}, 'traced_engine_loop_nospans_0': {'stop': 7, 'length': 57}, 'traced_generate_1': {'stop': 7, 'length': 57}, 'traced_engine_loop_1': {'stop': 7, 'length': 57}, 'traced_engine_loop_nospans_1': {'stop': 7, 'length': 57}, 'traced_generate_2': {'stop': 7, 'length': 57}, 'traced_engine_loop_2': {'stop': 7, 'length': 57}, 'traced_engine_loop_nospans_2': {'stop': 7, 'length': 57}}
+generate     traced/untraced = 1.077  (+63.1 ms per run over 256 recorded steps = +0.246 ms per step)
+engine_loop  traced/untraced = 1.144  (+121.2 ms per run over 256 recorded steps = +0.473 ms per step)
+gpu_step_timing on/off = 1.030  (+0.110 ms per step for CUDA events)
+OVERHEAD_DONE
+[rank0]:[W908 22:08:07.813261697 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

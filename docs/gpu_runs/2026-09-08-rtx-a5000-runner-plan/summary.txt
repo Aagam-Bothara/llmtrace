@@ -1,0 +1,92 @@
+2026-09-08T22:06:53Z
+NVIDIA RTX A5000, 580.159.04, 24564 MiB
+3.11.11 torch 2.8.0+cu128 vllm 0.11.0 transformers 4.57.6 llmtrace 0.2.0
+git n/a
+=== doctor (environment)
+doctor exit=0
+=== CPU suite on the GPU box
+pytest exit=1 1 failed, 238 passed, 1 skipped in 16.69s
+=== workload template
+Workload template written to /workspace/gpu/w.json
+=== A. llmtrace run --engine vllm
+runner baseline 0 exit=1 :: 
+runner capped 0 exit=1 :: 
+runner baseline 1 exit=1 :: 
+runner capped 1 exit=1 :: 
+=== B. experiments/mixed_prompts/run.py
+driver baseline exit=1 :: 
+driver capped exit=1 :: 
+=== doctor (run dir)
+doctor run exit=2
+Usage: llmtrace doctor [OPTIONS] [RUN_DIR]
+Try 'llmtrace doctor --help' for help.
+
+Error: Invalid value for '[RUN_DIR]': Path '/workspace/gpu/runner/baseline_0' does not exist.
+=== findings (runner baseline_0)
+=== analyze.py: runner vs driver runs (same analysis code on both)
+--- analysis_runner_0
+--- analysis_runner_1
+--- analysis_driver_0
+=== decide: runner repeats + driver repeat as a third repeat of each config
+decide exit=1
+Traceback (most recent call last):
+  File "/usr/local/bin/llmtrace", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/click/core.py", line 1631, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/click/core.py", line 1552, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/click/core.py", line 2032, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/click/core.py", line 1415, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/click/core.py", line 910, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/cli.py", line 273, in decide
+    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None, slos=parsed_slos or None)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/control_plane/decision.py", line 313, in evaluate
+    reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos) for dd in dirs]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/control_plane/decision.py", line 313, in <listcomp>
+    reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos) for dd in dirs]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/control_plane/decision.py", line 241, in evaluate_repeat
+    traces = io.load_traces([d])
+             ^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/io.py", line 67, in load_traces
+    for f in _expand(paths, "traces"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/llmtrace/llmtrace/io.py", line 60, in _expand
+    raise FileNotFoundError(str(p))
+FileNotFoundError: /workspace/gpu/runner/baseline_0
+=== C. plan from runner baseline_0
+plan exit=2
+Usage: llmtrace plan [OPTIONS] RUN_DIR
+Try 'llmtrace plan --help' for help.
+
+Error: Invalid value for 'RUN_DIR': Path '/workspace/gpu/runner/baseline_0' does not exist.
+run --plan exit=2
+decide planned exit=2
+Usage: llmtrace decide [OPTIONS]
+Try 'llmtrace decide --help' for help.
+
+Error: Missing option '--config'.
+=== D. overhead matrix (gpu_step_timing on/off)
+overhead exit=0
+untraced_generate      median 0.8180s  all [0.8241, 0.8078, 0.818]
+untraced_engine_loop   median 0.8426s  all [0.8419, 0.8426, 0.8524]
+traced_generate        median 0.8811s  all [0.8753, 0.8811, 0.8919]
+traced_engine_loop     median 0.9638s  all [0.9404, 0.9677, 0.9638]
+traced_engine_loop_nospans median 0.9356s  all [0.9236, 0.9416, 0.9356]
+generate     traced/untraced = 1.077  (+63.1 ms per run over 256 recorded steps = +0.246 ms per step)
+engine_loop  traced/untraced = 1.144  (+121.2 ms per run over 256 recorded steps = +0.473 ms per step)
+gpu_step_timing on/off = 1.030  (+0.110 ms per step for CUDA events)
+OVERHEAD_DONE
+ALL_DONE

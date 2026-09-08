@@ -48,7 +48,7 @@ Package: `llmtrace/` (about 7,400 lines after this phase, including the syntheti
 | Experiments | Work-identical replay (`ignore_eos`, token-id prompts, seeds), manifests with scheduled vs actual arrivals, `decide` with eligibility rules, repeats | Only one workload shape existed before this phase; no goodput/SLO metric; uncertainty is min/median/max over repeats, no interval estimate |
 | Visualization | Perfetto trace, HTML report | Static |
 | Serving path | Sync `LLMEngine` (full), `AsyncLLM` (request level + stats) | The OpenAI server process itself has no hook point |
-| Overhead | +4% / +9% wall on opt-125m (256 steps); collector drains and warm-up artifacts found and fixed from the traces | Not measured with GPU step timing on vs off; not measured on a 7B model |
+| Overhead | +4% / +9% wall on opt-125m without step timing, +7.7% / +14.4% with it (256 steps); CUDA-event cost 0.11 ms per step; collector drains and warm-up artifacts found and fixed from the traces | Not measured on a 7B model |
 
 Provenance is carried in the records rather than in a single place:
 `prompt_length_source`, `ttft_unavailable_reason`, `output_kind`,
@@ -114,8 +114,8 @@ Gaps:
   manually on GPU (`examples/vllm_smoke_test.py`, `vllm_async_smoke_test.py`)
   whose pass/fail is recorded in `docs/gpu_runs/*`. There is no marker-based
   GPU integration suite that a self-hosted runner could execute.
-* `_run_vllm` in the new runner mirrors the GPU-validated experiment driver
-  line by line but has not itself run on hardware.
+* The generic runner's vLLM path is validated on one GPU (RTX A5000, session
+  2); the experiment driver is still a separate copy of the same protocol.
 * Findings are tested on synthetic traces but there is no benchmark suite of
   "known bottleneck -> expected finding" scenarios with accuracy accounting.
 * `utils/batch_analyzer.py` and `utils/latency_explainer.py` (older
@@ -208,8 +208,8 @@ Next, in order (files named):
 
 | # | Item | Files | Why first |
 |---|------|-------|-----------|
-| 1 | Run `llmtrace run --engine vllm` on a GPU for baseline and capped, confirm it reproduces the experiment's numbers, then make `experiments/mixed_prompts/run.py` a thin wrapper | `llmtrace/runner.py`, `experiments/mixed_prompts/run.py`, `docs/GPU_VALIDATION.md` | Removes the last duplicated driver only after the generic one is validated |
-| 2 | Overhead matrix with GPU step timing on/off and on the 7B model | `scripts/gpu_overhead.py` (done), evidence | The remaining measurement-foundation gap |
+| 1 | Done (GPU session 2): the generic runner reproduces the experiment driver on an RTX A5000. Still open: make `experiments/mixed_prompts/run.py` a thin wrapper over `llmtrace.runner` | `experiments/mixed_prompts/run.py` | The driver is now redundant code |
+| 2 | Done for opt-125m (GPU session 2): CUDA events 0.11 ms per step. Still open: the 7B model | evidence | |
 | 3 | Done (second phase): findings context fields and `insufficient_evidence` | `control_plane/findings.py` | |
 | 4 | Done (second phase): goodput under SLOs, bootstrap intervals, marginal candidates | `control_plane/decision.py`, `cli.py` | |
 | 5 | Done (second phase): experiment planner and `run --plan` | `control_plane/experiments.py`, `cli.py` | Validated on the synthetic engine only; the candidates' effects on real vLLM are what the GPU session must show |

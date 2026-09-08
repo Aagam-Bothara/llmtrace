@@ -39,8 +39,10 @@ VLLM_ENABLE_V1_MULTIPROCESSING=0 llmtrace run --workload w.json --engine vllm --
 llmtrace doctor ./runs/gpu_base/r0
 ```
 
-This generic runner mirrors the driver validated in `experiments/mixed_prompts`
-but has not itself been run on a GPU yet.
+Each real engine runs in its own spawned process (a second vLLM engine in one
+process fails on free GPU memory); `--in-process` disables that for a single
+run. The runner was validated against the experiment driver on an RTX A5000
+(see `docs/GPU_VALIDATION.md`).
 
 In your own code:
 

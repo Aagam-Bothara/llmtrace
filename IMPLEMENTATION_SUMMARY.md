@@ -81,6 +81,16 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   (kernels plus CUDA-graph executions); 58% busy on decode steps of this
   launch-bound model, 84% on 1536-token prefill steps
   (`scripts/nsys_step_compare.py`).
+* Generic runner (`llmtrace run --engine vllm`) on RTX A5000: reproduces the
+  experiment driver's verdicts on the same workload; `decide` treats runner
+  and driver runs as repeats of one work-identical configuration.
+* Plan loop on real vLLM (RTX A5000): plan from a baseline run, six engines in
+  separate processes, `decide` selects the 512-token cap; monotone
+  dose-response across caps 1024/512/256.
+* vLLM per-step stats through the post-hoc `stat_loggers` attach on the sync
+  engine (RTX A5000), with `disable_log_stats=False`.
+* Overhead matrix with GPU step timing on/off on opt-125m (RTX A5000): CUDA
+  events cost 0.11 ms per step (+3.0%).
 * Qwen2.5-7B on A100 at TP=1 and TP=2: the mixed-prompt experiment reproduces
   (improved 3/3 and 2/2), with `decide` selecting the capped configs for a
   50 ms short-TTFT target and reporting the energy-per-token cost of TP=2.
@@ -97,10 +107,8 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 
 * Behaviour under preemption, speculative decoding, `n > 1`, abort under load,
   pipeline parallelism, models above 7B. The span-vs-busy gap is characterized
-  on opt-125m only; the event-recording overhead itself is not measured
-  (`scripts/gpu_overhead.py --gpu-step-timing both` is ready).
-* `llmtrace run --engine vllm`: mirrors the validated experiment driver
-  (warm-up, settle, `ignore_eos`, manifests) but has not run on a GPU.
+  on opt-125m only; the event-recording overhead is measured on opt-125m
+  only (0.11 ms per step), not on larger models.
 * Throttle-reason bits other than `none`.
 * Overhead on models where a step takes longer than a few milliseconds
   (expected to be smaller in relative terms; not measured).

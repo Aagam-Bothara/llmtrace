@@ -107,8 +107,15 @@ class TestDecideUsesFullHealth:
         dec = evaluate({"lossy": [d]}, Target.parse("short ttft_p95 <= 20ms"))
         r = dec.configs[0].repeats[0]
         assert r.eligible and r.meets_target and r.joules_per_output_token is None and r.device_joules is None
-        assert any("read error" in t for t in r.telemetry_problems)
+        assert any("read error" in t for t in r.telemetry_problems) and r.energy_withheld
         assert any("energy not compared" in n for n in dec.notes)
+        # a problem with another signal keeps the energy figures and says so
+        stats_only = self._run(tmp_path, "so", _health(vllm_stats__unavailable_reason="no logger_manager"))
+        io.write_jsonl(tmp_path / "so" / "gpu_x.jsonl", const_power(0.0, 1.0, 0.1, 100.0))
+        d2 = evaluate({"so": [stats_only]}, Target.parse("short ttft_p95 <= 20ms"))
+        r_so = d2.configs[0].repeats[0]
+        assert not r_so.energy_withheld and r_so.device_joules is not None
+        assert any("telemetry incomplete:" in n and "energy not compared" not in n for n in d2.notes)
         writer_lossy = self._run(tmp_path, "wl", _health(writer__dropped={"traces": 0, "gpu": 10}))
         io.write_jsonl(tmp_path / "wl" / "gpu_x.jsonl", const_power(0.0, 1.0, 0.1, 100.0))
         rw = evaluate({"wl": [writer_lossy]}, Target.parse("short ttft_p95 <= 20ms")).configs[0].repeats[0]
@@ -174,6 +181,27 @@ class TestRunDirReuse:
         assert second.returncode == 2 and "already holds a run" in second.stdout
         assert subprocess.run(cmd + ["--overwrite"], capture_output=True, text=True, timeout=120).returncode == 0
         assert len(io.load_traces([str(tmp_path / "e")])) == 3
+
+
+class TestIsolatedRun:
+    def test_child_process_writes_manifest_and_parent_reads_it(self, tmp_path):
+        from llmtrace.runner import run_workload_isolated
+        out = tmp_path / "iso"
+        m = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(out)), timeout_s=300)
+        assert m.status == "ok" and m.finished == 2 and len(io.load_traces([str(out)])) == 2
+        with pytest.raises(FileExistsError):
+            run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(out)))
+        m2 = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(out), overwrite=True), timeout_s=300)
+        assert m2.status == "ok" and len(io.load_traces([str(out)])) == 2
+
+    def test_child_failure_is_a_failed_manifest(self, tmp_path):
+        from llmtrace.runner import run_workload_isolated
+        out = tmp_path / "bad"
+        m = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(out), engine_kwargs={"bogus": 1}), timeout_s=300)
+        assert m.status == "failed" and "TypeError" in (m.error or "")
+        out2 = tmp_path / "nope"
+        m2 = run_workload_isolated(_spec(), RunOptions(engine="nope", out_dir=str(out2)), timeout_s=300)
+        assert m2.status == "failed"
 
 
 class TestPlanReproducesSource:

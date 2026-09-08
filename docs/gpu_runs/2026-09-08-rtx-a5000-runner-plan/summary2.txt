@@ -1,0 +1,130 @@
+=== A. llmtrace run --engine vllm
+runner baseline 0 exit=0 :: [rank0]:[W908 22:09:48.296095467 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stabl
+    scheduler visible: True (None); executor visible: True (None)
+    telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+runner capped 0 exit=0 :: [rank0]:[W908 22:10:17.419944314 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stabl
+    scheduler visible: True (None); executor visible: True (None)
+    telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+runner baseline 1 exit=0 :: [rank0]:[W908 22:10:42.860028434 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stabl
+    scheduler visible: True (None); executor visible: True (None)
+    telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+runner capped 1 exit=0 :: [rank0]:[W908 22:11:06.093415998 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stabl
+    scheduler visible: True (None); executor visible: True (None)
+    telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+=== B. experiments/mixed_prompts/run.py
+driver baseline exit=0 :: effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+driver capped exit=0 :: effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+=== doctor (run dir)
+doctor run exit=0
+llmtrace doctor (run)
+
+  [     ok] manifest: vllm, model facebook/opt-125m, config baseline, workload sha256:cb947bf846960652
+  [     ok] requests finished: 132 finished, 136 expected (incl. settle requests)
+  [     ok] load generator: arrival delay p50 0.98 ms, max 3.50 ms
+  [   warn] telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+            -> metrics that depend on this signal are reported as unavailable
+
+  signals:
+    yes  request traces (traces_*)
+    yes  batch membership and chunk sizes (batches_*)
+    yes  GPU telemetry and energy (gpu_*)
+    no   vLLM per-step stats (vllm_stats_*)  (engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?))
+    yes  collector self-events (collector_*)
+    yes  GPU step spans (gpu_steps_*)
+=== findings (runner baseline_0)
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+[supported] long_prompt_interference: 97 request(s) decoded or waited in 12 step(s) that also prefilled a chunk > 128 tokens; those steps took 7.6 ms vs 1.5 ms for the rest. They waited while the scheduler spent its toke
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 1%).
+[not_supported] host_overhead: Host-side time is 15% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+=== analyze.py on runner and driver runs
+--- analysis_runner_0
+  short_itl_ms_max       9.08 -> 4.37 ms  (-51.9%)
+  short_ttft_ms_p95      7.93 -> 2.85 ms  (-64.0%)
+  long_ttft_ms_p50       8.31 -> 17.63 ms  (112.1%)
+verdict: improved on [short_ttft_ms_p95 -64.0%, short_itl_ms_max -51.9%] (threshold 20.0%); long-request TTFT p50 change 112.1% (cost)
+--- analysis_runner_1
+  short_itl_ms_max       11.65 -> 4.51 ms  (-61.3%)
+  short_ttft_ms_p95      8.28 -> 2.89 ms  (-65.1%)
+  long_ttft_ms_p50       8.68 -> 17.58 ms  (102.5%)
+verdict: improved on [short_ttft_ms_p95 -65.1%, short_itl_ms_max -61.3%] (threshold 20.0%); long-request TTFT p50 change 102.5% (cost)
+--- analysis_driver_0
+  short_itl_ms_max       8.95 -> 4.72 ms  (-47.3%)
+  short_ttft_ms_p95      7.90 -> 3.09 ms  (-60.9%)
+  long_ttft_ms_p50       8.29 -> 17.84 ms  (115.3%)
+verdict: improved on [short_ttft_ms_p95 -60.9%, short_itl_ms_max -47.3%] (threshold 20.0%); long-request TTFT p50 change 115.3% (cost)
+=== decide: runner repeats + driver repeat
+decide exit=0
+target: short ttft_p95 <= 5 ms
+slo: short: ttft <= 5 ms, tpot <= 3 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  3/3     no                   7.9 [7.9..8.3]       [7.9..8.1]      90%     4878   0.0349  0.99       yes
+capped         yes  3/3    yes                   2.9 [2.9..3.1]       [2.9..3.1]     100%     4880   0.0355  0.99       yes
+
+note: baseline (baseline_0): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: baseline (baseline_1): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: baseline (baseline_0): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: capped (capped_0): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: capped (capped_1): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: capped (capped_0): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: capped
+recommendation (advisory): capped meets 'short ttft_p95 <= 5 ms' in every repeat with the highest median goodput (100% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/gpu/decision_5ms.json
+=== C. plan from runner baseline_0
+plan exit=0
+experiment plan from /workspace/gpu/runner/baseline_0 (workload sha256:cb947bf846960652), 2 repeats each
+source: vllm, facebook/opt-125m
+baseline engine kwargs (reproduced for every run): max_num_batched_tokens=8192, max_num_seqs=256, max_model_len=2048, enable_chunked_prefill=True, long_prefill_token_threshold=0, max_num_partial_prefills=1, max_long_partial_prefills=1, scheduling_policy=fcfs, block_size=16, gpu_memory_utilization=0.5, enable_prefix_caching=True, dtype=float16, seed=0, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1
+baseline effective: long_prefill_token_threshold=0, max_num_batched_tokens=8192, max_num_seqs=256, gpu_memory_utilization=0.5, enable_prefix_caching=True, max_model_len=2048
+
+[cap1024] --set long_prefill_token_threshold=1024
+    from: long_prompt_interference. steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 1024 tokens per step bounds step time (largest observed chunk 1536)
+    expect: short-request TTFT p95 and worst inter-token stall fall
+    cost: long-request TTFT rises (prefill spread over more steps); prefill throughput may fall
+[cap512] --set long_prefill_token_threshold=512
+    from: long_prompt_interference. steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 512 tokens per step bounds step time (largest observed chunk 1536)
+    expect: short-request TTFT p95 and worst inter-token stall fall
+    cost: long-request TTFT rises (prefill spread over more steps); prefill throughput may fall
+skipped: queue_overload: not_supported
+skipped: kv_cache_pressure: not_supported
+skipped: host_overhead: not_supported
+note: every candidate is a fresh engine started by llmtrace run; no running server is modified
+Plan written to /workspace/gpu/plan.json; execute with: llmtrace run --plan /workspace/gpu/plan.json --workload <spec.json> --engine <fake|vllm> --out <dir>
+run --plan exit=1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[/workspace/gpu/planned/baseline/r0] vllm config=baseline workload=sha256:cb947bf846960652 steps=1837 finished=132/136 wall=3.167s arrival delay p50/max 0.8902531117200851 / 3.1561326235531872 ms
+[/workspace/gpu/planned/baseline/r1] FAILED: ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memo
+[/workspace/gpu/planned/cap1024/r0] FAILED: ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memor
+[/workspace/gpu/planned/cap1024/r1] FAILED: ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memor
+[/workspace/gpu/planned/cap512/r0] FAILED: ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memory
+[/workspace/gpu/planned/cap512/r1] FAILED: ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memory
+compare with: llmtrace decide --target '<class> ttft_p95 <= <ms>' --config baseline=/workspace/gpu/planned/baseline/r0,/workspace/gpu/planned/baseline/r1 --config cap1024=/workspace/gpu/planned/cap1024/r0,/workspace/gpu/
+[rank0]:[W908 22:12:29.031989438 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stabl
+decide planned exit=0
+target: short ttft_p95 <= 5 ms
+slo: short: ttft <= 5 ms, tpot <= 3 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline        NO  1/2     no                   7.9 [7.9..7.9]       [3.2..8.0]      90%     4881   0.0361  0.99       yes
+cap1024         NO  0/2     no                   n/a [n/a..n/a]              n/a      n/a      n/a      n/a   n/a       n/a
+cap512          NO  0/2     no                   n/a [n/a..n/a]              n/a      n/a      n/a      n/a   n/a       n/a
+
+note: baseline: only 1 eligible repeat; run-to-run variation is unknown
+note: cap1024: only 0 eligible repeat; run-to-run variation is unknown
+note: cap512: only 0 eligible repeat; run-to-run variation is unknown
+note: baseline: 1 repeat(s) failed or empty (ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memory used by other processes.)
+note: baseline (r0): telemetry incomplete, energy not compared: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+note: cap1024: 2 repeat(s) failed or empty (ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memory used by other processes.)
+note: cap512: 2 repeat(s) failed or empty (ValueError: Free memory on device (11.75/23.55 GiB) on startup is less than desired GPU memory utilization (0.5, 11.77 GiB). Decrease GPU memory utilization or reduce GPU memory used by other processes.)
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: none
+recommendation (advisory): No configuration met the target in every repeat; see per-repeat values and notes.
+Decision written to /workspace/gpu/decision_planned.json
+ALL_DONE2

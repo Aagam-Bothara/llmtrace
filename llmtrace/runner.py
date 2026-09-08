@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -208,7 +208,10 @@ def _run_vllm(spec: WorkloadSpec, specs: List[RequestSpec], opts: RunOptions) ->
 
     if os.environ.get("VLLM_ENABLE_V1_MULTIPROCESSING", "1") != "0":
         print("WARNING: VLLM_ENABLE_V1_MULTIPROCESSING is not 0; batch metadata and GPU spans (needed by the diagnosis) will be missing")
-    kwargs: Dict[str, Any] = {"model": opts.model, "max_model_len": 2048, "gpu_memory_utilization": 0.5, "enable_chunked_prefill": True}
+    # vllm.LLM sets disable_log_stats=True unless told otherwise (vllm/entrypoints/llm.py, 0.11.0), which removes
+    # engine.logger_manager and with it vLLM's own per-step stats; ask for them unless the caller overrides.
+    kwargs: Dict[str, Any] = {"model": opts.model, "max_model_len": 2048, "gpu_memory_utilization": 0.5, "enable_chunked_prefill": True,
+                              "disable_log_stats": False}
     kwargs.update(opts.engine_kwargs)
     kwargs.update(opts.scheduling_change)
     llm = LLM(**kwargs)
@@ -234,13 +237,88 @@ def _run_vllm(spec: WorkloadSpec, specs: List[RequestSpec], opts: RunOptions) ->
         drive(engine, settle, params, time.monotonic, lambda t: None, vocab, spec.seed, spec.min_token_id)
     res = drive(engine, specs, params, time.monotonic, sleep_until, vocab, spec.seed, spec.min_token_id)
     tracer.stop()
-    return {"engine": "vllm", "model": opts.model, "steps": res["steps"], "wall_s": res["wall_s"], "health": tracer.health(),
+    info = {"engine": "vllm", "model": opts.model, "steps": res["steps"], "wall_s": res["wall_s"], "health": tracer.health(),
             "finished": len(res["finished"]), "collection_interval_s": opts.collection_interval_s,
             "warmup_requests": len(warm), "settle_requests": len(settle), "arrivals": res["arrivals"],
             "tracer_config": tracer.config.model_dump(), "ignore_eos": opts.ignore_eos,
             "effective_engine_config": engine_effective_config(engine), "engine_version": __import__("vllm").__version__,
             "model_revision": getattr(engine.model_config, "revision", None), "synthetic": False,
             "config_name": opts.config_name, "scheduling_change": dict(opts.scheduling_change)}
+    _teardown_vllm(llm, engine)
+    return info
 
 
-__all__ = ["drive", "RunOptions", "run_workload", "prepare_run_dir", "existing_run_files"]
+def _teardown_vllm(llm: Any, engine: Any) -> None:
+    """Best-effort release of the engine's GPU memory inside this process. vLLM 0.11.0's LLM has no close();
+    a second engine started in the same process otherwise fails on free memory (seen on the RTX A5000 session).
+    ``run_workload_isolated`` is the reliable path: one process per engine."""
+    import gc
+
+    core = getattr(engine, "engine_core", None)
+    for obj, name in ((core, "shutdown"), (engine, "shutdown")):
+        fn = getattr(obj, name, None)
+        if callable(fn):
+            try:
+                fn()
+            except Exception:
+                pass
+    try:
+        from vllm.distributed.parallel_state import destroy_distributed_environment, destroy_model_parallel  # type: ignore
+
+        destroy_model_parallel()
+        destroy_distributed_environment()
+    except Exception:
+        pass
+    del llm, engine, core
+    gc.collect()
+    try:
+        import torch  # type: ignore
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def _isolated_entry(spec_json: str, opts_dict: Dict[str, Any]) -> None:
+    from llmtrace.workload import WorkloadSpec as _WS
+
+    run_workload(_WS.model_validate_json(spec_json), RunOptions(**opts_dict))
+
+
+def run_workload_isolated(spec: WorkloadSpec, opts: RunOptions, timeout_s: Optional[float] = None) -> RunManifest:
+    """Run ``run_workload`` in a fresh (spawned) process and return the manifest it wrote.
+
+    One engine per process is the only reliable way to run several vLLM engines in sequence: memory, CUDA
+    context and torch.distributed state die with the child. A child that exits without writing a manifest
+    (crash, kill, timeout) is recorded as a failed run in ``out_dir``."""
+    import multiprocessing as mp
+
+    prepare_run_dir(opts.out_dir, opts.overwrite)  # refuse a reused directory before spawning
+    child_opts = asdict(opts)
+    child_opts["overwrite"] = True  # the parent already cleared it; the child must not refuse its own directory
+    ctx = mp.get_context("spawn")
+    proc = ctx.Process(target=_isolated_entry, args=(spec.model_dump_json(), child_opts), daemon=False)
+    proc.start()
+    proc.join(timeout_s)
+    if proc.is_alive():
+        proc.kill()
+        proc.join()
+        exit_note = f"timed out after {timeout_s} s and was killed"
+    else:
+        exit_note = f"exit code {proc.exitcode}"
+    m = RunManifest.read(opts.out_dir)
+    if m is None:
+        m = RunManifest(label=opts.label or Path(opts.out_dir).name, engine=opts.engine, synthetic=opts.engine == "fake",
+                        model=opts.model, status="failed", error=f"run process ended without a manifest ({exit_note})",
+                        workload=spec.model_dump(exclude_none=True), workload_hash=spec.hash(), seed=spec.seed,
+                        config_name=opts.config_name, scheduling_change=dict(opts.scheduling_change),
+                        engine_kwargs=dict(opts.engine_kwargs))
+        m.write(opts.out_dir)
+    elif proc.exitcode not in (0, None) and m.status == "ok":
+        m.extra = {**m.extra, "problems": list(m.extra.get("problems") or []) + [f"run process {exit_note}"]}
+        m.write(opts.out_dir)
+    return m
+
+
+__all__ = ["drive", "RunOptions", "run_workload", "run_workload_isolated", "prepare_run_dir", "existing_run_files"]

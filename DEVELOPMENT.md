@@ -40,8 +40,14 @@ experiment validated) under `LLMTracer`, and writes raw data only:
 `collector_*`, `workload.json`, `manifest.json`, `run_info.json`. Failures
 leave `status: failed` in the manifest. Derived summaries are produced by
 `analyze` / `findings` / `decide` / `visualize` and never written into the
-run directory by the runner. A directory that already holds a run is
-refused (`FileExistsError`; `--overwrite` removes the previous run's llmtrace
+run directory by the runner. Real engines get one spawned process each
+(`run_workload_isolated`): vLLM 0.11.0's `LLM` has no close, and a second
+engine started in the same process fails on free GPU memory (seen on the RTX
+A5000 session); the child writes the manifest and the parent reads it back,
+recording a child that died without one as a failed run. The runner passes
+`disable_log_stats=False` to `LLM(...)`, because `vllm.LLM` otherwise disables
+stats logging and there is no `logger_manager` to attach to. A directory that
+already holds a run is refused (`FileExistsError`; `--overwrite` removes the previous run's llmtrace
 files first): two runs written into one directory would load as one run with
 twice the traces and a manifest expecting half of them.
 

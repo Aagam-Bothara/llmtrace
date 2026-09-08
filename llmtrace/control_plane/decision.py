@@ -156,7 +156,8 @@ class RepeatResult(BaseModel):
     incomplete: int = 0
     health_ok: Optional[bool] = None
     health_problems: List[str] = Field(default_factory=list)
-    telemetry_problems: List[str] = Field(default_factory=list)  # secondary signals missing or lossy (energy reported unavailable)
+    telemetry_problems: List[str] = Field(default_factory=list)  # secondary signals missing or lossy
+    energy_withheld: bool = False  # GPU telemetry missing or lossy: energy figures set to None for this repeat
     arrival_delay_ms_max: Optional[float] = None
     duration_s: Optional[float] = None
     output_tokens: int = 0
@@ -295,7 +296,7 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         attainment_fraction=(sum(1 for v in vals if v <= target.value_ms) / len(vals)) if vals else None,
         target_values_ms=list(vals), goodput=gp, goodput_requests=gp_n, slo_metric_coverage=gp_cov,
         requests=len(res.traces), expected_requests=expected, completed=completed, aborted=aborted, incomplete=incomplete,
-        health_ok=health_ok, health_problems=hp, telemetry_problems=tele,
+        health_ok=health_ok, health_problems=hp, telemetry_problems=tele, energy_withheld=not energy_ok,
         arrival_delay_ms_max=manifest.arrival_delay_ms_max if manifest else None,
         duration_s=dur, output_tokens=out_tokens, tokens_per_s=out_tokens / dur, requests_per_s=len(res.traces) / dur,
         device_joules=L.device_joules if energy_ok else None,
@@ -361,7 +362,8 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
             if r.status == "ineligible":
                 notes.append(f"{c.name} ({Path(r.run_dir).name}): ineligible: " + "; ".join(r.problems))
             elif r.telemetry_problems:
-                notes.append(f"{c.name} ({Path(r.run_dir).name}): telemetry incomplete, energy not compared: " + "; ".join(r.telemetry_problems))
+                what = "telemetry incomplete, energy not compared" if r.energy_withheld else "telemetry incomplete"
+                notes.append(f"{c.name} ({Path(r.run_dir).name}): {what}: " + "; ".join(r.telemetry_problems))
         if c.work_identical_across_repeats is False:
             notes.append(f"{c.name}: output token counts differ across repeats (work not identical; use ignore_eos / fixed max_tokens)")
     notes.append("throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it "

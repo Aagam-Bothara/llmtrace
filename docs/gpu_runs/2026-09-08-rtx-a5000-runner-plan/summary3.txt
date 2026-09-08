@@ -1,0 +1,52 @@
+=== A2. runner baseline_2 with vLLM stats logging enabled (disable_log_stats=False default)
+runner baseline_2 exit=0
+[/workspace/gpu/runner/baseline_2] vllm config=baseline workload=sha256:cb947bf846960652 steps=1710 finished=132/132 (+4 settle) wall=3.179s arrival delay p50/max 1.0189896449446234 / 3.607039339840412 ms
+    scheduler visible: True (None); executor visible: True (None)
+    yes  GPU telemetry and energy (gpu_*)
+    yes  vLLM per-step stats (vllm_stats_*)
+vllm_stats records: 1714; with kv usage: 1714; finished-request stats with queued_time: 136
+=== C2. plan -> run --plan (one process per engine) -> decide
+plan exit=0
+source: vllm, facebook/opt-125m
+[cap1024] --set long_prefill_token_threshold=1024
+[cap512] --set long_prefill_token_threshold=512
+skipped: queue_overload: not_supported
+skipped: kv_cache_pressure: not_supported
+skipped: host_overhead: not_supported
+run --plan exit=0
+[/workspace/gpu/planned/baseline/r0] vllm config=baseline workload=sha256:cb947bf846960652 steps=1690 finished=132/132 (+4 settle) wall=3.176s arrival delay p50/max 1.0945651680230872 / 4.79371696710551 ms
+[/workspace/gpu/planned/baseline/r1] vllm config=baseline workload=sha256:cb947bf846960652 steps=1572 finished=132/132 (+4 settle) wall=3.178s arrival delay p50/max 0.9773509576915806 / 4.195632785558345 ms
+[/workspace/gpu/planned/cap1024/r0] vllm config=cap1024 workload=sha256:cb947bf846960652 steps=1699 finished=132/132 (+4 settle) wall=3.176s arrival delay p50/max 1.213698647916317 / 3.602987714111716 ms
+[/workspace/gpu/planned/cap1024/r1] vllm config=cap1024 workload=sha256:cb947bf846960652 steps=1701 finished=132/132 (+4 settle) wall=3.176s arrival delay p50/max 1.138545572757721 / 3.542923741042592 ms
+[/workspace/gpu/planned/cap512/r0] vllm config=cap512 workload=sha256:cb947bf846960652 steps=1721 finished=132/132 (+4 settle) wall=3.175s arrival delay p50/max 1.0483529418703341 / 3.3841473981737202 ms
+[/workspace/gpu/planned/cap512/r1] vllm config=cap512 workload=sha256:cb947bf846960652 steps=1716 finished=132/132 (+4 settle) wall=3.176s arrival delay p50/max 1.041959412395932 / 4.3077833950517785 ms
+decide planned exit=0
+target: short ttft_p95 <= 5 ms
+slo: short: ttft <= 5 ms, tpot <= 3 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  2/2     no                   8.3 [8.1..8.4]       [8.0..8.6]      89%     4865   0.0342  0.99       yes
+cap1024        yes  2/2     no                   6.1 [6.0..6.2]       [5.9..6.7]      89%     4867   0.0352  0.99       yes
+cap512         yes  2/2    yes                   4.8 [4.8..4.9]       [4.7..5.0]      98%     4867   0.0354  0.99       yes
+
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: cap512
+recommendation (advisory): cap512 meets 'short ttft_p95 <= 5 ms' in every repeat with the highest median goodput (98% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/gpu/decision_planned.json
+--- planned baseline vs baseline r0
+  short_itl_ms_max       11.18 -> 11.18 ms  (0.0%)
+  short_ttft_ms_p95      8.15 -> 8.15 ms  (0.0%)
+  long_ttft_ms_p50       8.57 -> 8.57 ms  (0.0%)
+verdict: no_meaningful_change on [short_ttft_ms_p95 0.0%, short_itl_ms_max 0.0%] (threshold 20.0%); long-request TTFT p50 change 0.0% (cost)
+--- planned cap1024 vs baseline r0
+  short_itl_ms_max       11.18 -> 8.79 ms  (-21.4%)
+  short_ttft_ms_p95      8.15 -> 6.17 ms  (-24.2%)
+  long_ttft_ms_p50       8.57 -> 10.99 ms  (28.2%)
+verdict: improved on [short_ttft_ms_p95 -24.2%, short_itl_ms_max -21.4%] (threshold 20.0%); long-request TTFT p50 change 28.2% (cost)
+--- planned cap512 vs baseline r0
+  short_itl_ms_max       11.18 -> 6.29 ms  (-43.7%)
+  short_ttft_ms_p95      8.15 -> 4.82 ms  (-40.9%)
+  long_ttft_ms_p50       8.57 -> 13.89 ms  (62.1%)
+verdict: improved on [short_ttft_ms_p95 -40.9%, short_itl_ms_max -43.7%] (threshold 20.0%); long-request TTFT p50 change 62.1% (cost)
+1 MiB
+ALL_DONE3

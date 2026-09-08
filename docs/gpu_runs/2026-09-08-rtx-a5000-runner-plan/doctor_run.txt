@@ -1,0 +1,15 @@
+llmtrace doctor (run)
+
+  [     ok] manifest: vllm, model facebook/opt-125m, config baseline, workload sha256:cb947bf846960652
+  [     ok] requests finished: 132 finished, 136 expected (incl. settle requests)
+  [     ok] load generator: arrival delay p50 0.98 ms, max 3.50 ms
+  [   warn] telemetry: vLLM stats unavailable: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+            -> metrics that depend on this signal are reported as unavailable
+
+  signals:
+    yes  request traces (traces_*)
+    yes  batch membership and chunk sizes (batches_*)
+    yes  GPU telemetry and energy (gpu_*)
+    no   vLLM per-step stats (vllm_stats_*)  (engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?))
+    yes  collector self-events (collector_*)
+    yes  GPU step spans (gpu_steps_*)

@@ -1,0 +1,12 @@
+target: short ttft_p95 <= 5 ms
+slo: short: ttft <= 5 ms, tpot <= 3 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  2/2     no                   8.3 [8.1..8.4]       [8.0..8.6]      89%     4865   0.0342  0.99       yes
+cap1024        yes  2/2     no                   6.1 [6.0..6.2]       [5.9..6.7]      89%     4867   0.0352  0.99       yes
+cap512         yes  2/2    yes                   4.8 [4.8..4.9]       [4.7..5.0]      98%     4867   0.0354  0.99       yes
+
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: cap512
+recommendation (advisory): cap512 meets 'short ttft_p95 <= 5 ms' in every repeat with the highest median goodput (98% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/gpu/decision_planned.json

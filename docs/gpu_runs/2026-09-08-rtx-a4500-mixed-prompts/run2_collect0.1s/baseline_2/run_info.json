@@ -1,0 +1,46 @@
+{
+  "engine": "vllm",
+  "model": "facebook/opt-125m",
+  "effective_scheduler_config": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "enable_chunked_prefill": true,
+    "long_prefill_token_threshold": 0,
+    "policy": "fcfs"
+  },
+  "steps": 1713,
+  "wall_s": 3.172170400619507,
+  "health": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 1713
+  },
+  "finished": 132,
+  "collection_interval_s": 0.1,
+  "warmup_requests": 9,
+  "config_name": "baseline",
+  "scheduling_change": {},
+  "workload": {
+    "num_short": 120,
+    "short_rate_per_s": 40.0,
+    "short_prompt_len": 32,
+    "short_max_tokens": 128,
+    "num_long": 12,
+    "long_prompt_len": 1536,
+    "long_max_tokens": 8,
+    "first_long_at_s": 0.4,
+    "long_every_s": 0.2,
+    "seed": 0
+  },
+  "synthetic": false
+}

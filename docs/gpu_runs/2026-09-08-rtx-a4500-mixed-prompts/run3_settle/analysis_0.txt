@@ -1,0 +1,34 @@
+== /workspace/exp_gpu3/baseline_0
+long  n=12 completed=12  TTFT p50/p95 = 8.80/9.04 ms   TPOT p50/p95 = 2.03/2.06 ms   ITL p50/p99/max = 1.89/8.10/8.10 ms
+other n=4 completed=4  TTFT p50/p95 = 3.50/3.94 ms   TPOT p50/p95 = 1.56/1.56 ms   ITL p50/p99/max = 1.44/3.07/3.07 ms
+short n=120 completed=120  TTFT p50/p95 = 2.41/8.38 ms   TPOT p50/p95 = 1.90/1.98 ms   ITL p50/p99/max = 1.62/2.74/8.24 ms
+steps: 1712, of which 12 carried a prefill chunk > 128 tokens (largest 1536).
+  step duration p50: with long chunk 7.99 ms vs without 1.62 ms
+  step time ~ 1.62 ms + 4.110 us/token (r2=0.834)
+  1 step(s) exceed the token model by > 3.24 ms (unexplained stalls):
+    step 5 at 0.008s: 8.24 ms measured vs 1.75 ms predicted for 32 tokens
+short requests: 98/120 shared at least one step with a long prefill chunk; 4% of all short-request step time was in such steps.
+  TPOT p95: affected 1.98 ms vs unaffected 1.82 ms; TTFT p95: affected 8.40 ms vs unaffected 3.63 ms
+
+== /workspace/exp_gpu3/capped_0
+long  n=12 completed=12  TTFT p50/p95 = 18.57/18.73 ms   TPOT p50/p95 = 2.13/2.15 ms   ITL p50/p99/max = 2.19/3.03/3.04 ms
+other n=4 completed=4  TTFT p50/p95 = 3.65/4.12 ms   TPOT p50/p95 = 1.57/1.57 ms   ITL p50/p99/max = 1.39/3.23/3.23 ms
+short n=120 completed=120  TTFT p50/p95 = 2.39/3.08 ms   TPOT p50/p95 = 1.91/1.99 ms   ITL p50/p99/max = 1.62/2.96/17.16 ms
+steps: 1703, of which 72 carried a prefill chunk > 128 tokens (largest 256).
+  step duration p50: with long chunk 2.82 ms vs without 1.62 ms
+  step time ~ 1.60 ms + 4.962 us/token (r2=0.264)
+  2 step(s) exceed the token model by > 3.24 ms (unexplained stalls):
+    step 70 at 0.109s: 17.16 ms measured vs 1.78 ms predicted for 36 tokens
+    step 5 at 0.008s: 7.68 ms measured vs 1.76 ms predicted for 32 tokens
+short requests: 97/120 shared at least one step with a long prefill chunk; 8% of all short-request step time was in such steps.
+  TPOT p95: affected 1.99 ms vs unaffected 1.83 ms; TTFT p95: affected 3.06 ms vs unaffected 7.87 ms
+
+== comparison (candidate vs baseline; negative = faster)
+  short_itl_ms_p99       2.74 -> 2.96 ms  (8.1%)
+  short_itl_ms_max       8.24 -> 17.16 ms  (108.2%)
+  short_tpot_ms_p95      1.98 -> 1.99 ms  (0.3%)
+  short_tpot_ms_p50      1.90 -> 1.91 ms  (0.2%)
+  short_ttft_ms_p95      8.38 -> 3.08 ms  (-63.2%)
+  long_ttft_ms_p50       8.80 -> 18.57 ms  (110.9%)
+  long_tpot_ms_p50       2.03 -> 2.13 ms  (4.9%)
+verdict: worse on [short_ttft_ms_p95 -63.2%, short_itl_ms_max 108.2%] (threshold 20.0%); long-request TTFT p50 change 110.9% (cost)

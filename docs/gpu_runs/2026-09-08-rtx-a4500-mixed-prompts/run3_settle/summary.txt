@@ -1,0 +1,43 @@
+=== baseline run 0
+baseline run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1708,
+  "wall_s": 3.19062203168869,
+=== capped run 0
+capped run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1699,
+  "wall_s": 3.1723679676651955,
+=== baseline run 1
+baseline run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1711,
+  "wall_s": 3.1736701503396034,
+=== capped run 1
+capped run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1705,
+  "wall_s": 3.1745900362730026,
+=== baseline run 2
+baseline run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1717,
+  "wall_s": 3.172526143491268,
+=== capped run 2
+capped run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1683,
+  "wall_s": 3.173713006079197,
+=== analysis
+  short_tpot_ms_p95      1.98 -> 1.99 ms  (0.3%)
+  short_ttft_ms_p95      8.38 -> 3.08 ms  (-63.2%)
+  long_ttft_ms_p50       8.80 -> 18.57 ms  (110.9%)
+verdict: worse on [short_ttft_ms_p95 -63.2%, short_itl_ms_max 108.2%] (threshold 20.0%); long-request TTFT p50 change 110.9% (cost)
+  short_tpot_ms_p95      1.97 -> 2.00 ms  (1.3%)
+  short_ttft_ms_p95      8.39 -> 3.09 ms  (-63.2%)
+  long_ttft_ms_p50       8.81 -> 18.63 ms  (111.5%)
+verdict: no_meaningful_change on [short_ttft_ms_p95 -63.2%, short_itl_ms_max -3.6%] (threshold 20.0%); long-request TTFT p50 change 111.5% (cost)
+  short_tpot_ms_p95      1.98 -> 2.01 ms  (1.7%)
+  short_ttft_ms_p95      8.42 -> 3.11 ms  (-63.1%)
+  long_ttft_ms_p50       8.85 -> 18.61 ms  (110.4%)
+verdict: worse on [short_ttft_ms_p95 -63.1%, short_itl_ms_max 117.4%] (threshold 20.0%); long-request TTFT p50 change 110.4% (cost)

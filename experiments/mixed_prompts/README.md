@@ -1,7 +1,7 @@
 # Experiment: short requests mixed with long prompts
 
-Status: prepared and exercised on the CPU fake engine only. **No GPU run yet.**
-Nothing here shows that the diagnosis is right on real hardware.
+Status: run on one GPU (results below). Everything before the results section
+is the design; the synthetic dry run at the end is not evidence.
 
 ## Question
 
@@ -98,6 +98,55 @@ metadata, which only exists with the in-process scheduler.
   and ITL max by at least 20% versus `baseline` in all repeats, with ITL p99,
   TPOT and the long-request TTFT cost reported alongside. Anything less is
   reported as no meaningful change.
+
+
+## Results: GPU run 2026-09-08 (RTX A4500, vLLM 0.11.0, opt-125m)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-a4500-mixed-prompts/` (four run sets;
+the first three exposed measurement artifacts that were fixed in the driver and
+in llmtrace itself, see that directory's README). Final set: `run4_full_warmup`,
+three interleaved repeats per configuration, untraced full-workload warm-up, a
+traced settling phase, collector interval 0.1 s. Effective scheduler config
+recorded by the driver: `max_num_batched_tokens=8192`, `max_num_seqs=256`,
+chunked prefill on, FCFS; `long_prefill_token_threshold` 0 vs 256.
+
+**Do the traces explain the slowdown?** Yes, in every baseline run:
+
+* 12 of ~1700 steps carried a 1536-token prefill chunk; they took 8.0 to 8.5 ms
+  against 1.6 ms for the rest (step-time fit 1.6 ms + 4.1 to 4.5 us per
+  scheduled token, r2 0.82 to 0.89).
+* 97 of 120 short requests shared at least one such step. Short requests that
+  did had TTFT p95 8.4 ms vs 2.5 ms for those that did not, and TPOT p95 2.0 vs
+  1.8 ms.
+* No step exceeded the token model by more than 2x the median (no unexplained
+  stalls) in the final set.
+
+**Does the scheduling change help?** Verdict `improved` in 3 of 3 repeats:
+
+| metric (short requests unless noted) | baseline | capped (256) | change |
+|---|---|---|---|
+| TTFT p95 | 8.33 to 8.38 ms | 3.03 to 3.08 ms | -63% (all repeats) |
+| ITL max (worst stall) | 8.05 to 8.54 ms | 3.08 to 3.93 ms | -54% to -62% |
+| ITL p99 | 2.5 to 2.6 ms | 2.9 to 3.0 ms | +12% to +16% (more, milder chunk steps) |
+| TPOT p95 | 2.00 ms | 1.96 ms | -2% |
+| long-request TTFT p50 (cost) | 8.8 ms | 18.5 to 18.6 ms | +110% to +113% |
+| long-request TPOT p50 | 2.04 ms | 2.11 ms | +3% |
+
+Reading: capping long-prompt prefill at 256 tokens per step bounds the step
+time that short requests and new arrivals wait on, at the price of doubling
+the long request's own time to first token. Whether that trade is worth it is
+a product decision; the traces make it visible and quantified.
+
+Scope: one tiny model on one GPU with ~1.6 ms decode steps. Larger models have
+longer steps and different prefill/decode cost ratios; the mechanism is the
+same but the magnitudes are not transferable.
+
+**Measurement lessons recorded from the first three sets** (all visible in
+the committed traces): llmtrace's own collector caused ~10 ms stalls once per
+second at the old 1.0 s default (now 0.1 s); first-time batch shapes cost 8 to
+23 ms and must be warmed up with the actual workload; the per-step
+"unexplained stall" report in `analyze.py` was added because these artifacts
+initially masqueraded as scheduler effects.
 
 ## Synthetic dry run (fake engine, invented cost model; not evidence)
 

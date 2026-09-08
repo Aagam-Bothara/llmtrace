@@ -112,6 +112,18 @@ class TestDiagnosis:
         assert m["us_per_token"] == pytest.approx(8.0, rel=0.01)  # (10-2) ms over 998 extra tokens
         assert "shared at least one step with a long prefill chunk" in explain(a)
 
+    def test_unexplained_stall_is_reported(self):
+        # 20 uniform 2 ms decode steps, then one 30 ms step with the same token count: not explained by tokens.
+        batches = [_batch(i, ["short-0"], {"short-0": 1}, 0.002) for i in range(20)]
+        batches.append(_batch(20, ["short-0"], {"short-0": 1}, 0.030))
+        batches.append(_batch(21, ["short-0", "long-0"], {"short-0": 1, "long-0": 1000}, 0.010))
+        tr = [_trace("short-0", [b.batch_id for b in batches], tpot=2.0)]
+        a = analyze_run(tr, batches, 128)
+        u = a["unexplained_stalls"]
+        assert u["count"] == 1 and u["top"][0]["step_index"] == 20
+        assert u["top"][0]["residual_ms"] > 20
+        assert "unexplained stalls" in explain(a) and "step 20 at 20.000s" in explain(a)
+
     def test_no_batches_reports_unavailable(self):
         a = analyze_run([_trace("short-0", [], tpot=2.0)], [], 128)
         assert not a["batch_metadata_available"] and a["step_time_model"] is None

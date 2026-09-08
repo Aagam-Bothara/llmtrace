@@ -110,6 +110,22 @@ def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_
             model = {"intercept_ms": intercept, "us_per_token": slope * 1000.0,
                      "r2": 1 - ss_res / ss_tot if ss_tot > 0 else None}
 
+    # Stalls the token model cannot explain: residual = duration - (a + b * tokens). These are
+    # candidates for effects outside the scheduler (warm-up, GC, the tracer's own collector, ...).
+    unexplained = None
+    if model is not None and steps:
+        t_first = min(s["step_index"] for s in steps)
+        first_mono = min(b.monotonic for b in batches if b.monotonic is not None)
+        resid = []
+        for s, b in zip(steps, [b for b in batches if b.monotonic is not None and b.step_end_monotonic is not None]):
+            pred = model["intercept_ms"] + model["us_per_token"] / 1000.0 * s["scheduled_tokens"]
+            resid.append({"step_index": s["step_index"], "offset_s": b.monotonic - first_mono, "duration_ms": s["duration_ms"],
+                          "predicted_ms": pred, "residual_ms": s["duration_ms"] - pred, "scheduled_tokens": s["scheduled_tokens"],
+                          "long_chunk": s["long_chunk"]})
+        base = statistics.median(s["duration_ms"] for s in steps)
+        big = sorted((r for r in resid if r["residual_ms"] > 2.0 * base), key=lambda r: -r["residual_ms"])
+        unexplained = {"threshold_ms": 2.0 * base, "count": len(big), "top": big[:8], "first_step_index": t_first}
+
     # Interference attribution for short requests, over the steps each request participated in.
     step_by_id = {s["batch_id"]: s for s in steps}
     per_short = []
@@ -138,7 +154,7 @@ def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_
         "ttft_ms_unaffected": _stats([p["ttft_ms"] for p in unaffected if p["ttft_ms"] is not None]),
     }
     return {"latency": latency, "steps": step_summary, "step_time_model": model, "interference": interference,
-            "batch_metadata_available": bool(steps)}
+            "unexplained_stalls": unexplained, "batch_metadata_available": bool(steps)}
 
 
 def explain(a: Dict[str, Any]) -> str:
@@ -159,6 +175,13 @@ def explain(a: Dict[str, Any]) -> str:
     if a["step_time_model"]:
         m = a["step_time_model"]
         lines.append(f"  step time ~ {_f(m['intercept_ms'])} ms + {_f(m['us_per_token'], 3)} us/token (r2={_f(m['r2'], 3)})")
+    u = a.get("unexplained_stalls")
+    if u:
+        lines.append(f"  {u['count']} step(s) exceed the token model by > {_f(u['threshold_ms'])} ms (unexplained stalls):")
+        for r in u["top"][:5]:
+            lines.append(f"    step {r['step_index']} at {r['offset_s']:.3f}s: {_f(r['duration_ms'])} ms measured vs "
+                         f"{_f(r['predicted_ms'])} ms predicted for {r['scheduled_tokens']} tokens"
+                         f"{' (long chunk)' if r['long_chunk'] else ''}")
     i = a["interference"]
     lines.append(f"short requests: {i['short_requests_sharing_a_long_chunk_step']}/{i['short_requests_with_step_data']} "
                  f"shared at least one step with a long prefill chunk; "

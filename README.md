@@ -8,8 +8,9 @@ rule-based diagnoses.
 
 ## Status: smoke-tested on one GPU
 
-Validated once on real vLLM 0.11.0 (RTX A5000, `facebook/opt-125m`, 2026-09-08);
-see [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
+Validated on real vLLM 0.11.0 with `facebook/opt-125m` (RTX A5000 smoke run and
+RTX A4500 diagnosis experiment, 2026-09-08); see
+[docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
 Larger models, multi-GPU, preemption and speculative decoding are untested.
 
 | Area | Status |
@@ -21,6 +22,7 @@ Larger models, multi-GPU, preemption and speculative decoding are untested.
 | Timing (TTFT/TPOT) | Verified through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
 | Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
 | Rules-based diagnosis, CLI `analyze` / `compare`, offline analysis | Implemented and CPU-tested |
+| Diagnosis experiment (short requests mixed with long prompts) | Run on one GPU: traces attribute the short-request tail to steps carrying 1536-token prefill chunks; `long_prefill_token_threshold=256` cut short TTFT p95 by 63% and worst stall by 54 to 62%, doubling long-request TTFT (`experiments/mixed_prompts/README.md`) |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
 | AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |
 | Multi-node / distributed tracing, DCGM, dashboards | Not implemented |

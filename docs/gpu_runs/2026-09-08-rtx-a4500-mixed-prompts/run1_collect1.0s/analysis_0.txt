@@ -1,0 +1,27 @@
+== /workspace/exp_gpu/baseline_0
+long  n=12 completed=12  TTFT p50/p95 = 9.14/17.87 ms   TPOT p50/p95 = 2.11/2.70 ms   ITL p50/p99/max = 2.05/16.94/16.94 ms
+short n=120 completed=120  TTFT p50/p95 = 2.71/8.67 ms   TPOT p50/p95 = 1.95/2.36 ms   ITL p50/p99/max = 1.68/3.60/16.94 ms
+steps: 1604, of which 12 carried a prefill chunk > 128 tokens (largest 1536).
+  step duration p50: with long chunk 8.29 ms vs without 1.65 ms
+  step time ~ 1.69 ms + 5.243 us/token (r2=0.766)
+short requests: 98/120 shared at least one step with a long prefill chunk; 5% of all short-request step time was in such steps.
+  TPOT p95: affected 2.37 ms vs unaffected 1.84 ms; TTFT p95: affected 9.23 ms vs unaffected 3.81 ms
+
+== /workspace/exp_gpu/capped_0
+long  n=12 completed=12  TTFT p50/p95 = 18.79/28.90 ms   TPOT p50/p95 = 2.12/2.16 ms   ITL p50/p99/max = 2.19/11.62/12.67 ms
+short n=120 completed=120  TTFT p50/p95 = 2.49/3.42 ms   TPOT p50/p95 = 1.89/2.02 ms   ITL p50/p99/max = 1.62/3.00/22.27 ms
+steps: 1692, of which 72 carried a prefill chunk > 128 tokens (largest 256).
+  step duration p50: with long chunk 2.85 ms vs without 1.62 ms
+  step time ~ 1.59 ms + 6.160 us/token (r2=0.223)
+short requests: 98/120 shared at least one step with a long prefill chunk; 8% of all short-request step time was in such steps.
+  TPOT p95: affected 2.03 ms vs unaffected 1.88 ms; TTFT p95: affected 3.42 ms vs unaffected 4.09 ms
+
+== comparison (candidate vs baseline; negative = faster)
+  short_itl_ms_p99       3.60 -> 3.00 ms  (-16.7%)
+  short_itl_ms_max       16.94 -> 22.27 ms  (31.4%)
+  short_tpot_ms_p95      2.36 -> 2.02 ms  (-14.5%)
+  short_tpot_ms_p50      1.95 -> 1.89 ms  (-2.7%)
+  short_ttft_ms_p95      8.67 -> 3.42 ms  (-60.5%)
+  long_ttft_ms_p50       9.14 -> 18.79 ms  (105.6%)
+  long_tpot_ms_p50       2.11 -> 2.12 ms  (0.7%)
+verdict: worse on [short_ttft_ms_p95 -60.5%, short_itl_ms_max 31.4%] (threshold 20.0%); long-request TTFT p50 change 105.6% (cost)

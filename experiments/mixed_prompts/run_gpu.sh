@@ -5,6 +5,7 @@ set -u
 MODEL="${1:-facebook/opt-125m}"
 OUT="${2:-$PWD/exp_gpu}"
 REPEAT="${3:-3}"
+COLLECT="${4:-0.1}"   # tracer collection interval (s); see run.py --collection-interval
 mkdir -p "$OUT"
 export VLLM_ENABLE_V1_MULTIPROCESSING=0   # in-process scheduler: batch metadata is required
 SUMMARY="$OUT/summary.txt"; : > "$SUMMARY"
@@ -16,7 +17,8 @@ for i in $(seq 0 $((REPEAT - 1))); do
   for cfg in baseline capped; do
     d="$OUT/${cfg}_$i"
     echo "=== $cfg run $i" | tee -a "$SUMMARY"
-    python experiments/mixed_prompts/run.py --engine vllm --config "$cfg" --model "$MODEL" --out "$d" > "$d.log" 2>&1
+    python experiments/mixed_prompts/run.py --engine vllm --config "$cfg" --model "$MODEL" --out "$d" \
+        --collection-interval "$COLLECT" > "$d.log" 2>&1
     echo "$cfg run $i exit=$?" | tee -a "$SUMMARY"
     grep -E "effective scheduler config|steps|wall_s|PROBLEM" "$d.log" | tee -a "$SUMMARY"
   done

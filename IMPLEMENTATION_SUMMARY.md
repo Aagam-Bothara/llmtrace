@@ -49,6 +49,11 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   skipped whole by a module-level pyarrow skip (fixed afterwards; not re-run
   on hardware).
 
+* Diagnosis experiment (`experiments/mixed_prompts`): on one GPU the traces
+  attribute the short-request tail to long-prefill steps, and one scheduling
+  change improved it in 3/3 repeats with the cost quantified. Also found and
+  fixed a tracer-induced stall (collector interval) using the same traces.
+
 ## Implemented but unverified on hardware
 
 * Behaviour under chunked prefill across steps, preemption, speculative

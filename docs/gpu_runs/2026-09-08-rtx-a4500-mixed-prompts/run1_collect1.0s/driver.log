@@ -1,0 +1,44 @@
+=== baseline run 0
+baseline run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1604,
+  "wall_s": 3.1805007234215736,
+=== capped run 0
+capped run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1692,
+  "wall_s": 3.1784072294831276,
+=== baseline run 1
+baseline run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1712,
+  "wall_s": 3.1760355308651924,
+=== capped run 1
+capped run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1701,
+  "wall_s": 3.178937293589115,
+=== baseline run 2
+baseline run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1706,
+  "wall_s": 3.1764238625764847,
+=== capped run 2
+capped run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1678,
+  "wall_s": 3.180165484547615,
+=== analysis
+  short_tpot_ms_p95      2.36 -> 2.02 ms  (-14.5%)
+  short_ttft_ms_p95      8.67 -> 3.42 ms  (-60.5%)
+  long_ttft_ms_p50       9.14 -> 18.79 ms  (105.6%)
+verdict: worse on [short_ttft_ms_p95 -60.5%, short_itl_ms_max 31.4%] (threshold 20.0%); long-request TTFT p50 change 105.6% (cost)
+  short_tpot_ms_p95      1.95 -> 1.98 ms  (1.7%)
+  short_ttft_ms_p95      8.53 -> 3.45 ms  (-59.5%)
+  long_ttft_ms_p50       8.91 -> 18.75 ms  (110.5%)
+verdict: no_meaningful_change on [short_ttft_ms_p95 -59.5%, short_itl_ms_max 0.2%] (threshold 20.0%); long-request TTFT p50 change 110.5% (cost)
+  short_tpot_ms_p95      1.96 -> 2.03 ms  (3.4%)
+  short_ttft_ms_p95      8.57 -> 3.46 ms  (-59.7%)
+  long_ttft_ms_p50       8.94 -> 18.89 ms  (111.2%)
+verdict: no_meaningful_change on [short_ttft_ms_p95 -59.7%, short_itl_ms_max 4.3%] (threshold 20.0%); long-request TTFT p50 change 111.2% (cost)
+results: /workspace/exp_gpu.tar.gz

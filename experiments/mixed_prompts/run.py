@@ -82,7 +82,7 @@ def run_fake(config: Dict[str, Any], specs: List[RequestSpec], out_dir: str, wl:
 
 
 def run_vllm(config: Dict[str, Any], specs: List[RequestSpec], out_dir: str, wl: WorkloadConfig, model: str,
-             engine_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+             engine_kwargs: Dict[str, Any], collection_interval_s: float) -> Dict[str, Any]:
     from vllm import LLM, SamplingParams
 
     from llmtrace import LLMTracer, TracerConfig
@@ -100,17 +100,29 @@ def run_vllm(config: Dict[str, Any], specs: List[RequestSpec], out_dir: str, wl:
     effective = {k: getattr(sched_cfg, k, None) for k in
                  ("max_num_batched_tokens", "max_num_seqs", "enable_chunked_prefill", "long_prefill_token_threshold", "policy")}
     print("effective scheduler config:", effective)
-    # Warm-up (untraced) so compilation / allocation is not part of the measured run.
-    llm.generate([make_prompt(specs[0], vocab, wl.seed)], SamplingParams(max_tokens=4))
+    # Warm-up (untraced): replay the whole workload once with the same arrival schedule, so every
+    # batch shape the measured run will hit has been seen. GPU runs 1-3 showed first-time-shape
+    # stalls (~23 ms at the first 5-request mixed batch, ~8 ms at the first lone 32-token prefill)
+    # that a smaller warm-up did not cover and that dominated the ITL max comparison.
+    warm = [RequestSpec(f"warm-{s.request_id}", s.kind, s.arrival_s, s.prompt_len, s.max_tokens) for s in specs]
+    drive(engine, warm, lambda s: with_cumulative_outputs(SamplingParams(temperature=0.0, max_tokens=s.max_tokens)),
+          time.monotonic, lambda t: time.sleep(max(0.0, t - time.monotonic())), vocab, wl.seed)
 
-    tracer = LLMTracer(TracerConfig(output_dir=out_dir, gpu_sampler={"sample_interval_ms": 50}))
+    tracer = LLMTracer(TracerConfig(output_dir=out_dir, gpu_sampler={"sample_interval_ms": 50},
+                                    collection_interval_s=collection_interval_s))
     tracer.instrument_engine(engine)
+    # Traced settling phase, excluded from the request classes ("settle-*" -> kind "other"): GPU run 2
+    # showed the first traced step of a run taking ~8-9 ms for 32 tokens, which otherwise sets ITL max.
+    settle = [RequestSpec(f"settle-{i}", "other", 0.0, wl.short_prompt_len, 4) for i in range(4)]
+    drive(engine, settle, lambda s: with_cumulative_outputs(SamplingParams(temperature=0.0, max_tokens=s.max_tokens)),
+          time.monotonic, lambda t: None, vocab, wl.seed)
     res = drive(engine, specs,
                 lambda s: with_cumulative_outputs(SamplingParams(temperature=0.0, max_tokens=s.max_tokens)),
                 time.monotonic, lambda t: time.sleep(max(0.0, t - time.monotonic())), vocab, wl.seed)
     tracer.stop()
     return {"engine": "vllm", "model": model, "effective_scheduler_config": effective, "steps": res["steps"],
-            "wall_s": res["wall_s"], "health": tracer.health()["instrumentation"], "finished": len(res["finished"])}
+            "wall_s": res["wall_s"], "health": tracer.health()["instrumentation"], "finished": len(res["finished"]),
+            "collection_interval_s": collection_interval_s, "warmup_requests": len(warm), "settle_requests": len(settle)}
 
 
 def main() -> int:
@@ -127,6 +139,9 @@ def main() -> int:
     parser.add_argument("--long-every", type=float, default=WorkloadConfig.long_every_s, help="seconds between long prompts")
     parser.add_argument("--short-tokens", type=int, default=WorkloadConfig.short_max_tokens)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--collection-interval", type=float, default=0.1,
+                        help="llmtrace collector drain interval (s). Large drains serialize many batch records under "
+                             "the GIL and stall the engine thread; GPU run 1 saw ~10 ms stalls at 1.0 s intervals.")
     args = parser.parse_args()
 
     wl = WorkloadConfig(num_short=args.num_short, short_rate_per_s=args.short_rate, num_long=args.num_long,
@@ -139,7 +154,7 @@ def main() -> int:
     if args.engine == "fake":
         info = run_fake(config, specs, str(out), wl)
     else:
-        info = run_vllm(config, specs, str(out), wl, args.model, json.loads(args.engine_kwargs))
+        info = run_vllm(config, specs, str(out), wl, args.model, json.loads(args.engine_kwargs), args.collection_interval)
     info.update({"config_name": args.config, "scheduling_change": config, "workload": wl.to_dict(),
                  "synthetic": args.engine == "fake"})
     (out / "run_info.json").write_text(json.dumps(info, indent=2, default=str))

@@ -161,7 +161,29 @@ Not yet exercised on hardware: larger models, chunked prefill across steps,
 preemption, speculative decoding, `n > 1`, multi-GPU, abort under load,
 `require_gpu` failure path on real NVML.
 
+## Diagnosis experiment (2026-09-08, RTX A4500)
+
+See `experiments/mixed_prompts/README.md` (results section) and
+`docs/gpu_runs/2026-09-08-rtx-a4500-mixed-prompts/`. Summary: baseline traces
+attribute the short-request TTFT tail to steps carrying a 1536-token prefill
+chunk (8 ms vs 1.6 ms steps); `long_prefill_token_threshold=256` reduced
+short TTFT p95 by 63% and the worst short-request stall by 54 to 62% in 3/3
+repeats, while doubling long-request TTFT.
+
 ## Findings from GPU runs
+
+* 2026-09-08, RTX A4500, mixed-prompt experiment run 1: with the default 1.0 s
+  collector interval, the engine step that coincided with each drain (~500
+  batch records serialized by the writer thread under the GIL) took ~10 ms
+  longer than the token model predicts, in every run and both configs
+  (`docs/gpu_runs/2026-09-08-rtx-a4500-mixed-prompts/run1`). With a 0.1 s
+  interval (run 2) no such stalls appeared. `collection_interval_s` now
+  defaults to 0.1. Serialization cost is still paid on the engine's process;
+  it is only spread out, not removed.
+* Same runs: the first traced step after a single-prompt warm-up took ~23 ms
+  (first mixed batch shape), and the first traced step of each run ~8 ms; the
+  experiment driver now warms up with a mixed workload and runs a traced
+  settling phase before measuring.
 
 * 2026-09-08, RunPod RTX A5000 (driver 580.159.04), Python 3.11, vLLM 0.11.0:
   `pip install vllm==0.11.0` resolved `transformers` to 5.16.1, and every

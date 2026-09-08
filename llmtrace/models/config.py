@@ -115,7 +115,11 @@ class TracerConfig(_StrictModel):
     )
 
     collection_interval_s: float = Field(
-        default=1.0, gt=0, description="How often the collector thread drains buffers to disk"
+        default=0.1,
+        gt=0,
+        description="How often the collector thread drains buffers to the writer. Serialization runs under "
+        "the GIL, so large drains stall the engine thread: on vLLM 0.11.0/opt-125m, 1.0 s drains of ~500 "
+        "batch records caused ~10 ms step stalls; 0.1 s drains did not (docs/GPU_VALIDATION.md).",
     )
     max_buffered_events: int = Field(
         default=10_000,

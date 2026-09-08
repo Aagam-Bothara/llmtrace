@@ -25,8 +25,9 @@ from pydantic import BaseModel, Field
 class ArrivalRecord(BaseModel):
     request_id: str
     scheduled_s: float  # intended arrival offset from run start
-    actual_s: Optional[float] = None  # when add_request() was actually called
-    delay_ms: Optional[float] = None
+    actual_s: Optional[float] = None  # stamped immediately before add_request() is called
+    delay_ms: Optional[float] = None  # (actual - scheduled) * 1000; load-generator lateness
+    submit_ms: Optional[float] = None  # how long the add_request() call itself took
 
 
 class RunManifest(BaseModel):
@@ -58,6 +59,7 @@ class RunManifest(BaseModel):
     arrival_delay_ms_max: Optional[float] = None
     steps: Optional[int] = None
     wall_s: Optional[float] = None
+    expected_requests: Optional[int] = None
     finished: Optional[int] = None
     health: Dict[str, Any] = Field(default_factory=dict)
     extra: Dict[str, Any] = Field(default_factory=dict)

@@ -159,8 +159,11 @@ effect) and reports each as supported, not supported, or not evaluable with
 the missing evidence named. `decide` compares configurations (each a set of
 repeats) against a stated target: which meet it in every repeat, throughput,
 energy per output token with telemetry coverage, run-to-run range, failed
-repeats, and whether the work was identical. It is advisory and changes
-nothing.
+repeats, and whether the work was identical. A repeat counts toward a
+candidate only if every selected request has the target metric, every
+expected request completed (no aborted or incomplete ones), and the tracer's
+health was clean; ineligible repeats are listed with reasons. It is advisory
+and changes nothing.
 
 `visualize` writes a self-contained HTML report (request timeline with
 queue/prefill/decode phases, step durations over time and versus scheduled

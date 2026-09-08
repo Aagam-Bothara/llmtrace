@@ -2,11 +2,13 @@
 
 Given a run directory (traces_*, batches_*, gpu_*):
 
-1. Per request class (short/long): TTFT and TPOT percentiles, plus the
-   inter-token latency (ITL) distribution: the durations of every engine step a
-   request was scheduled in, from batch metadata. A request's average TPOT
-   hides a single slow step; ITL p99 does not, and it is what a long prefill
-   chunk co-scheduled with decodes is expected to move.
+1. Per request class (short/long): TTFT and TPOT percentiles; ``ttft_sched``
+   (TTFT from the *intended* arrival, i.e. engine TTFT plus load-generator
+   delay from the manifest); ``step_ms`` (durations of the engine steps the
+   request was scheduled in, a per-token compute proxy); and ``itl_ms``, the
+   real inter-token latency: intervals between the request's successive step
+   ends from its first-token step onward, including steps it was not scheduled
+   in. A request's average TPOT hides a single slow interval; ITL max does not.
 2. Per engine step (from batch metadata): duration, scheduled tokens, and whether
    the step carried a "long prefill chunk" (a single request scheduled with more
    than ``chunk_threshold`` tokens).
@@ -43,6 +45,8 @@ from typing import Any, Dict, List, Optional
 
 from llmtrace import io
 from llmtrace.control_plane.reporter import percentile
+from llmtrace.control_plane.steps import per_request_intervals, ttft_from_scheduled_ms
+from llmtrace.manifest import RunManifest
 from llmtrace.models.trace import BatchMetadata, RequestTrace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -54,19 +58,23 @@ def _stats(values: List[float]) -> Dict[str, Optional[float]]:
             "p99": percentile(values, 99), "max": max(values) if values else None}
 
 
-def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_threshold: int = 128) -> Dict[str, Any]:
+def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_threshold: int = 128,
+                arrival_delays_ms: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     by_kind: Dict[str, List[RequestTrace]] = {}
     for t in traces:
         by_kind.setdefault(kind_of(t.request_id), []).append(t)
-    step_dur = {b.batch_id: (b.step_end_monotonic - b.monotonic) * 1000.0
-                for b in batches if b.monotonic is not None and b.step_end_monotonic is not None}
+    step_ms, itl_ms = per_request_intervals(traces, batches)
+    delays = arrival_delays_ms or {}
     latency = {
         kind: {
             "requests": len(ts),
             "completed": sum(1 for t in ts if t.status.value == "completed"),
             "ttft_ms": _stats([t.ttft_ms for t in ts if t.ttft_ms is not None]),
+            "ttft_sched_ms": _stats([v for v in (ttft_from_scheduled_ms(t, delays.get(t.request_id)) for t in ts) if v is not None]),
+            "arrival_delay_ms": _stats([delays[t.request_id] for t in ts if t.request_id in delays]),
             "tpot_ms": _stats([t.tpot_ms for t in ts if t.tpot_ms is not None]),
-            "itl_ms": _stats([step_dur[b] for t in ts for b in t.batch_ids if b in step_dur]),
+            "step_ms": _stats([v for t in ts for v in step_ms.get(t.request_id, [])]),
+            "itl_ms": _stats([v for t in ts for v in itl_ms.get(t.request_id, [])]),
             "queue_ms": _stats([t.queue_duration_ms for t in ts if t.queue_duration_ms > 0]),
         }
         for kind, ts in sorted(by_kind.items())
@@ -161,9 +169,12 @@ def explain(a: Dict[str, Any]) -> str:
     lines = []
     for kind, m in a["latency"].items():
         lines.append(f"{kind:5} n={m['requests']} completed={m['completed']}  TTFT p50/p95 = "
-                     f"{_f(m['ttft_ms']['p50'])}/{_f(m['ttft_ms']['p95'])} ms   TPOT p50/p95 = "
-                     f"{_f(m['tpot_ms']['p50'])}/{_f(m['tpot_ms']['p95'])} ms   ITL p50/p99/max = "
-                     f"{_f(m['itl_ms']['p50'])}/{_f(m['itl_ms']['p99'])}/{_f(m['itl_ms']['max'])} ms")
+                     f"{_f(m['ttft_ms']['p50'])}/{_f(m['ttft_ms']['p95'])} ms"
+                     + (f" (from intended arrival p95 {_f(m['ttft_sched_ms']['p95'])} ms, arrival delay max "
+                        f"{_f(m['arrival_delay_ms']['max'])} ms)" if m["ttft_sched_ms"]["n"] else "")
+                     + f"   TPOT p50/p95 = {_f(m['tpot_ms']['p50'])}/{_f(m['tpot_ms']['p95'])} ms   "
+                     f"ITL p50/p99/max = {_f(m['itl_ms']['p50'])}/{_f(m['itl_ms']['p99'])}/{_f(m['itl_ms']['max'])} ms   "
+                     f"step p50/max = {_f(m['step_ms']['p50'])}/{_f(m['step_ms']['max'])} ms")
     if not a["batch_metadata_available"]:
         lines.append("No batch metadata: step-level diagnosis unavailable (run with VLLM_ENABLE_V1_MULTIPROCESSING=0).")
         return "\n".join(lines)
@@ -196,19 +207,22 @@ def compare(base: Dict[str, Any], cand: Dict[str, Any], min_improvement_pct: flo
         return a["latency"].get(kind, {}).get(metric, {}).get(stat)
 
     rows = {}
-    for kind, metric, stat in (("short", "itl_ms", "p99"), ("short", "itl_ms", "max"), ("short", "tpot_ms", "p95"),
-                               ("short", "tpot_ms", "p50"), ("short", "ttft_ms", "p95"),
-                               ("long", "ttft_ms", "p50"), ("long", "tpot_ms", "p50")):
+    for kind, metric, stat in (("short", "itl_ms", "p99"), ("short", "itl_ms", "max"), ("short", "step_ms", "max"),
+                               ("short", "tpot_ms", "p95"), ("short", "tpot_ms", "p50"), ("short", "ttft_ms", "p95"),
+                               ("short", "ttft_sched_ms", "p95"), ("long", "ttft_ms", "p50"), ("long", "tpot_ms", "p50")):
         b, c = pick(base, kind, metric, stat), pick(cand, kind, metric, stat)
         rows[f"{kind}_{metric}_{stat}"] = {"baseline": b, "candidate": c,
                                            "change_pct": ((c - b) / b * 100.0) if b and c is not None else None}
-    # Verdict metrics: short-request TTFT p95 (arrival stall) and ITL max (in-flight stall);
-    # ITL needs batch metadata and falls back to TPOT p95 without it.
-    stall_metric = "short_itl_ms_max" if rows["short_itl_ms_max"]["change_pct"] is not None else "short_tpot_ms_p95"
+    # Verdict metrics: short-request TTFT p95 (arrival stall) and real ITL max (in-flight stall).
+    # Without batch metadata in *both* runs the stall metric falls back to TPOT p95. Every verdict
+    # metric must be present in both runs; otherwise the verdict is "unavailable" and says what is missing.
+    has_itl = all(a["latency"].get("short", {}).get("itl_ms", {}).get("n") for a in (base, cand))
+    stall_metric = "short_itl_ms_max" if has_itl else "short_tpot_ms_p95"
     tail_metrics = {"short_ttft_ms_p95": rows["short_ttft_ms_p95"]["change_pct"], stall_metric: rows[stall_metric]["change_pct"]}
     long_cost = rows["long_ttft_ms_p50"]["change_pct"]
-    changes = [c for c in tail_metrics.values() if c is not None]
-    if not changes:
+    missing = [k for k, v in tail_metrics.items() if v is None]
+    changes = list(tail_metrics.values())
+    if missing:
         verdict = "unavailable"
     elif any(c >= min_improvement_pct for c in changes):
         verdict = "worse"
@@ -216,7 +230,7 @@ def compare(base: Dict[str, Any], cand: Dict[str, Any], min_improvement_pct: flo
         verdict = "improved"
     else:
         verdict = "no_meaningful_change"
-    return {"rows": rows, "verdict_metrics": tail_metrics, "long_ttft_change_pct": long_cost,
+    return {"rows": rows, "verdict_metrics": tail_metrics, "missing_metrics": missing, "long_ttft_change_pct": long_cost,
             "verdict": verdict, "min_improvement_pct": min_improvement_pct}
 
 
@@ -229,7 +243,9 @@ def _pct(v: Optional[float]) -> str:
 
 
 def load_and_analyze(run_dir: str, chunk_threshold: int) -> Dict[str, Any]:
-    return analyze_run(io.load_traces([run_dir]), io.load_batches([run_dir]), chunk_threshold)
+    manifest = RunManifest.read(run_dir)
+    delays = {a.request_id: a.delay_ms for a in manifest.arrivals if a.delay_ms is not None} if manifest else None
+    return analyze_run(io.load_traces([run_dir]), io.load_batches([run_dir]), chunk_threshold, delays)
 
 
 def main() -> int:
@@ -259,7 +275,8 @@ def main() -> int:
             print(f"  {name:22} {_f(r['baseline'])} -> {_f(r['candidate'])} ms  ({_f(r['change_pct'], 1)}%)")
         metrics = ", ".join(f"{k} {_f(v, 1)}%" for k, v in cmp["verdict_metrics"].items())
         print(f"verdict: {cmp['verdict']} on [{metrics}] (threshold {cmp['min_improvement_pct']}%); "
-              f"long-request TTFT p50 change {_f(cmp['long_ttft_change_pct'], 1)}% (cost)")
+              f"long-request TTFT p50 change {_f(cmp['long_ttft_change_pct'], 1)}% (cost)"
+              + (f"; missing: {', '.join(cmp['missing_metrics'])}" if cmp["missing_metrics"] else ""))
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=2, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
     return 0

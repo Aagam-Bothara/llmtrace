@@ -100,15 +100,17 @@ class TestDecision:
         with pytest.raises(ValueError):
             Target.parse("fast please")
 
-    def _run(self, tmp_path, name, ttfts, fail=False, tokens=4):
+    def _run(self, tmp_path, name, ttfts, fail=False, tokens=4, status="completed", manifest=None):
         d = tmp_path / name
         d.mkdir()
         if fail:
             (d / "manifest.json").write_text(RunManifest(status="failed", error="CUDA out of memory").model_dump_json())
             return str(d)
         traces = [RequestTrace(request_id=f"short-{i}", start_time=0.0, end_time=1.0, prompt_length=4, output_length=tokens,
-                               model_name="m", ttft_ms=v) for i, v in enumerate(ttfts)]
+                               model_name="m", ttft_ms=v, status=status) for i, v in enumerate(ttfts)]
         io.write_jsonl(d / "traces_x.jsonl", traces)
+        if manifest is not None:
+            manifest.write(str(d))
         return str(d)
 
     def test_evaluate_with_failed_config_and_work_check(self, tmp_path):
@@ -126,6 +128,45 @@ class TestDecision:
         assert "Advisory" in dec.recommendation
         text = format_decision(dec)
         assert "big_batch" in text and "NO" in text and "candidates meeting the target" in text
+
+    def test_repeat_missing_target_metric_is_ineligible(self, tmp_path):
+        good = self._run(tmp_path, "g", [10, 20, 30])
+        partial = self._run(tmp_path, "p", [10, None, 30])  # one request without TTFT
+        dec = evaluate({"cfg": [good, partial]}, Target.parse("short ttft_p95 <= 100ms"))
+        c = dec.configs[0]
+        assert c.repeats[1].status == "ineligible" and c.repeats[1].metric_coverage == pytest.approx(2 / 3)
+        assert "present for only 67%" in c.repeats[1].problems[0]
+        assert c.meets_target_all_repeats is False and dec.candidates == []
+        assert any("ineligible" in n for n in dec.notes)
+        dec2 = evaluate({"cfg": [good, partial]}, Target.parse("short ttft_p95 <= 100ms"), min_metric_coverage=0.5)
+        assert dec2.candidates == ["cfg"]  # only when the user explicitly relaxes coverage
+
+    def test_aborted_requests_make_a_repeat_ineligible(self, tmp_path):
+        aborted = self._run(tmp_path, "a", [1.0, 2.0], status="aborted")
+        dec = evaluate({"cfg": [aborted]}, Target.parse("short ttft_p95 <= 100ms"))
+        r = dec.configs[0].repeats[0]
+        assert r.status == "ineligible" and r.aborted == 2 and dec.candidates == []
+        assert "aborted" in r.problems[0]
+
+    def test_expected_request_count_and_health_from_manifest(self, tmp_path):
+        short = self._run(tmp_path, "s", [1.0, 2.0], manifest=RunManifest(expected_requests=3, health={"instrumentation_errors": 0}))
+        sick = self._run(tmp_path, "h", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation_errors": 2}))
+        fine = self._run(tmp_path, "f", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation_errors": 0}))
+        dec = evaluate({"short": [short], "sick": [sick], "fine": [fine]}, Target.parse("short ttft_p95 <= 100ms"))
+        by = {c.name: c for c in dec.configs}
+        assert "2 traced requests but 3 expected" in by["short"].repeats[0].problems[0]
+        assert "health not clean" in by["sick"].repeats[0].problems[0]
+        assert dec.candidates == ["fine"]
+
+    def test_ttft_sched_target_uses_manifest_delays(self, tmp_path):
+        m = RunManifest(expected_requests=2, arrivals=[ArrivalRecord(request_id="short-0", scheduled_s=0, actual_s=0.05, delay_ms=50.0),
+                                                       ArrivalRecord(request_id="short-1", scheduled_s=0, actual_s=0.0, delay_ms=0.0)])
+        d = self._run(tmp_path, "d", [10.0, 10.0], manifest=m)
+        eng = evaluate({"c": [d]}, Target.parse("short ttft_p95 <= 20ms"))
+        sched = evaluate({"c": [d]}, Target.parse("short ttft_sched_p95 <= 20ms"))
+        assert eng.candidates == ["c"] and sched.candidates == []  # 60 ms from intended arrival
+        assert sched.configs[0].repeats[0].target_value_ms == pytest.approx(60.0)
+        assert sched.configs[0].repeats[0].arrival_delay_ms_max == pytest.approx(50.0)
 
     def test_cli_decide_and_findings(self, tmp_path):
         a = self._run(tmp_path, "a0", [10, 20]); b = self._run(tmp_path, "b0", [5, 6])
@@ -170,4 +211,5 @@ class TestManifestAndCollectorEvents:
         m = RunManifest.read(str(out))
         assert m.status == "ok" and m.synthetic and len(m.arrivals) == 7 and m.workload_hash
         assert m.scheduling_change == {"long_prefill_token_threshold": 256} and m.tracer_config["collection_interval_s"] > 0
+        assert m.expected_requests == 7 and all(a.submit_ms is not None and a.submit_ms >= 0 for a in m.arrivals)
         assert all(a.delay_ms is not None and a.delay_ms >= -0.01 for a in m.arrivals)  # driver tolerance is 1 us

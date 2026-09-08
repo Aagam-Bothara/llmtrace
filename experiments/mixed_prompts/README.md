@@ -46,9 +46,12 @@ are recorded, not assumed.
 
 From llmtrace's files only (`traces_*`, `batches_*`), no extra instrumentation:
 
-1. TTFT/TPOT percentiles per request class, plus inter-token latency (ITL):
-   the durations of every engine step a request was scheduled in, from batch
-   metadata. Average TPOT hides one slow step among 128; ITL p99 does not.
+1. TTFT/TPOT percentiles per request class; TTFT from the *intended* arrival
+   (engine TTFT plus the load generator's recorded delay); `step_ms`, the
+   durations of the engine steps a request was scheduled in (a compute proxy);
+   and `itl_ms`, the real inter-token latency: intervals between the request's
+   successive step ends from its first-token step onward, including steps it
+   was not scheduled in. Average TPOT hides one slow interval; ITL max does not.
 2. Per-step duration and scheduled tokens from batch metadata; steps carrying a
    prefill chunk above `--chunk-threshold` (default 128 tokens) are flagged.
 3. Short-request interference: share of each short request's step time spent in
@@ -56,9 +59,11 @@ From llmtrace's files only (`traces_*`, `batches_*`), no extra instrumentation:
 4. Step-time model: least-squares `duration = a + b * scheduled_tokens`.
 5. `--compare`: side-by-side change with an explicit verdict (threshold 20%)
    on two stall metrics, short-request **TTFT p95** and **ITL max**: `improved`
-   only if both improve, `worse` if either regresses, else `no_meaningful_change`.
-   ITL p99, TPOT and the long-request TTFT cost are reported alongside. Without
-   batch metadata the ITL part falls back to TPOT p95.
+   only if both improve, `worse` if either regresses, else `no_meaningful_change`;
+   `unavailable` (with the missing metrics named) if either is missing in
+   either run. ITL p99, step max, TPOT, TTFT from intended arrival and the
+   long-request TTFT cost are reported alongside. Without batch metadata in
+   both runs the stall part falls back to TPOT p95.
 
 Why not ITL p99: the mechanism produces rare stalls (in the synthetic dry run
 the long-chunk steps are under 1% of steps), and capping spreads each stall

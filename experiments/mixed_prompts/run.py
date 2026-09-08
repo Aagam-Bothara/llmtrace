@@ -49,10 +49,11 @@ def drive(engine: Any, specs: List[RequestSpec], make_params: Callable[[RequestS
     while pending or engine.has_unfinished_requests():
         while pending and now() - t0 + eps >= pending[0].arrival_s:
             spec = pending.pop(0)
-            engine.add_request(spec.request_id, make_prompt(spec, vocab_size, seed), make_params(spec))
-            actual = now() - t0
-            arrivals.append(ArrivalRecord(request_id=spec.request_id, scheduled_s=spec.arrival_s, actual_s=actual,
-                                          delay_ms=(actual - spec.arrival_s) * 1000.0))
+            prompt, params = make_prompt(spec, vocab_size, seed), make_params(spec)
+            submit = now()  # submission time: stamped before the call, not after it returns
+            engine.add_request(spec.request_id, prompt, params)
+            arrivals.append(ArrivalRecord(request_id=spec.request_id, scheduled_s=spec.arrival_s, actual_s=submit - t0,
+                                          delay_ms=(submit - t0 - spec.arrival_s) * 1000.0, submit_ms=(now() - submit) * 1000.0))
         if engine.has_unfinished_requests():
             steps += 1
             for out in engine.step():
@@ -192,6 +193,7 @@ def main() -> int:
     manifest.engine_version = info.get("engine_version")
     manifest.model_revision = info.get("model_revision")
     manifest.steps, manifest.wall_s, manifest.finished, manifest.health = info["steps"], info["wall_s"], info["finished"], info["health"]
+    manifest.expected_requests = len(specs)
     manifest.extra = {k: v for k, v in info.items() if k not in ("health", "effective_engine_config")}
     manifest.write(str(out))
     (out / "run_info.json").write_text(json.dumps(info, indent=2, default=str))

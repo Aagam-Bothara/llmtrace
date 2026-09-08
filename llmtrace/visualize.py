@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from llmtrace import io
 from llmtrace.control_plane.reporter import percentile
+from llmtrace.control_plane.steps import per_request_intervals
 from llmtrace.data_plane.vllm_stats import VLLMIterationRecord
 from llmtrace.models.trace import BatchMetadata, GPUSample, RequestTrace
 
@@ -193,7 +194,7 @@ def _fmt(v: Optional[float], d: int = 2) -> str:
 
 
 def _latency_rows(run: RunData) -> List[Dict[str, Any]]:
-    step_dur = {b.batch_id: (run.b_end(b) - run.b_start(b)) * 1000 for b in run.batches if run.b_end(b) is not None}
+    step_ms, itl_ms = per_request_intervals(run.traces, run.batches)
     by: Dict[str, List[RequestTrace]] = {}
     for t in run.traces:
         by.setdefault(run.request_class(t), []).append(t)
@@ -201,10 +202,12 @@ def _latency_rows(run: RunData) -> List[Dict[str, Any]]:
     for cls, ts in sorted(by.items()):
         ttft = [t.ttft_ms for t in ts if t.ttft_ms is not None]
         tpot = [t.tpot_ms for t in ts if t.tpot_ms is not None]
-        itl = [step_dur[b] for t in ts for b in t.batch_ids if b in step_dur]
+        itl = [v for t in ts for v in itl_ms.get(t.request_id, [])]
+        steps = [v for t in ts for v in step_ms.get(t.request_id, [])]
         rows.append({"class": cls, "n": len(ts), "ttft_p50": percentile(ttft, 50), "ttft_p95": percentile(ttft, 95),
                      "tpot_p50": percentile(tpot, 50), "tpot_p95": percentile(tpot, 95),
-                     "itl_p99": percentile(itl, 99), "itl_max": max(itl) if itl else None})
+                     "itl_p99": percentile(itl, 99), "itl_max": max(itl) if itl else None,
+                     "step_max": max(steps) if steps else None})
     return rows
 
 
@@ -290,10 +293,12 @@ def _run_section(run: RunData, chunk_threshold: int) -> str:
     colors = [LONG_CHUNK if s["biggest"] > chunk_threshold else BAR for s in steps]
     titles = [f"step {s['idx']}: {s['dur']:.2f} ms, {s['tokens']} tokens (biggest chunk {s['biggest']})" for s in steps]
     rows = _latency_rows(run)
-    table = ["<table><tr><th>class</th><th>n</th><th>TTFT p50</th><th>TTFT p95</th><th>TPOT p50</th><th>TPOT p95</th><th>ITL p99</th><th>ITL max</th></tr>"]
+    table = ["<table><tr><th>class</th><th>n</th><th>TTFT p50</th><th>TTFT p95</th><th>TPOT p50</th><th>TPOT p95</th>"
+             "<th>ITL p99</th><th>ITL max</th><th>step max</th></tr>"]
     for r in rows:
         table.append(f"<tr><td>{html.escape(r['class'])}</td><td>{r['n']}</td><td>{_fmt(r['ttft_p50'])}</td><td>{_fmt(r['ttft_p95'])}</td>"
-                     f"<td>{_fmt(r['tpot_p50'])}</td><td>{_fmt(r['tpot_p95'])}</td><td>{_fmt(r['itl_p99'])}</td><td>{_fmt(r['itl_max'])}</td></tr>")
+                     f"<td>{_fmt(r['tpot_p50'])}</td><td>{_fmt(r['tpot_p95'])}</td><td>{_fmt(r['itl_p99'])}</td><td>{_fmt(r['itl_max'])}</td>"
+                     f"<td>{_fmt(r['step_max'])}</td></tr>")
     table.append("</table>")
     table = ['<div class="table-wrap">'] + table + ["</div>"]
     power = [(run.rel(run.s_time(s)), s.power_draw_watts) for s in sorted(run.samples, key=run.s_time) if s.power_draw_watts is not None]
@@ -303,6 +308,8 @@ def _run_section(run: RunData, chunk_threshold: int) -> str:
         f"<p class='lede'>{len(run.traces)} requests, {len(steps)} scheduler steps, {len(run.samples)} GPU samples; "
         f"clock: {run.clock}" + (f"; median step {med:.2f} ms" if med else "") + ". All latencies in milliseconds.</p>",
         "".join(table),
+        "<p>ITL: intervals between a request's successive step ends from its first token onward (real inter-token latency). "
+        "step: duration of the engine steps the request was scheduled in (compute proxy).</p>",
         "<h3>Request timeline</h3>", _svg_gantt(run),
         "<h3>Step duration over time</h3><p>Red bars: the step carried a single prefill chunk larger than "
         f"{chunk_threshold} tokens. Every short request decoding in that step waits for it.</p>",

@@ -54,9 +54,12 @@ Request completion
 - [ ] a second `llm.generate()` after `stop()` works normally (engine restored)
 - [ ] abort path: add a long request via the raw engine, call `engine.abort_request([...])` while traced, confirm `status == aborted`
 
-Timing checks
+Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which forces FINAL_ONLY outputs; B = raw engine loop with CUMULATIVE outputs via `run_engine_with_timing`)
+- [ ] Phase A: `output_kind == final_only`, `ttft_ms`/`tpot_ms` are null with a FINAL_ONLY reason; token counts still match
+- [ ] Phase B: generated text identical to phase A (temperature 0)
 - [ ] `output_length` equals the engine's token count per request; `prompt_length` equals `len(prompt_token_ids)` and `prompt_length_source == engine_prompt_token_ids`
-- [ ] `ttft_ms` > 0 for every completed request with output; `tpot_ms` > 0 where `output_length >= 2`
+- [ ] Phase B: `ttft_ms` > 0 for every completed request with output; `tpot_ms` > 0 where `output_length >= 2`
+- [ ] Run B only: each batch's `num_prefill`/`num_decode` matches expectations (first batch all prefill; with chunked prefill on, long prompts stay prefill for several steps)
 - [ ] `total_duration_ms` of each request <= `generate()` wall time
 - [ ] p50 TPOT is plausible for the model on that GPU (compare with vLLM's own logged stats if `--disable-log-stats` is off)
 - [ ] Run B only: queue + prefill == TTFT for each request (to floating point)
@@ -75,7 +78,7 @@ Tracing enabled vs disabled
 
 Failure surfacing
 - [ ] with `strict_instrumentation=True`, inject a fault (e.g. monkeypatch `_on_step_completed`) and confirm the exception surfaces after the engine call
-- [ ] with `require_gpu=True` and `CUDA_VISIBLE_DEVICES=` unset/NVML blocked, confirm `start()` raises
+- [ ] with `require_gpu=True` and NVML blocked, confirm `instrument_engine()` raises **and** the engine is restored (`"step" not in engine.__dict__`), no `llmtrace-*` threads remain
 
 ## Things likely to need adjustment after the first run
 

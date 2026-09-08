@@ -96,9 +96,13 @@ class LLMTracer:
     # -------------------------------------------------------------- lifecycle
 
     def instrument_engine(self, engine: Any) -> None:
-        """Instrument a vLLM LLMEngine and start collection."""
+        """Instrument a vLLM LLMEngine and start collection.
+
+        Transactional: if collection cannot start (e.g. ``require_gpu=True`` and
+        NVML is unavailable) the engine is restored before the error propagates.
+        """
         self.vllm_instrumentation.instrument_engine(engine)
-        self.start()
+        self.start()  # on failure start() restores the engine itself
 
     def start(self) -> None:
         if self._state == "running":
@@ -106,13 +110,33 @@ class LLMTracer:
             return
         if self._state == "stopped":
             raise RuntimeError("LLMTracer cannot be restarted; create a new instance")
-        self.trace_writer.start()
-        self.gpu_sampler.start()  # raises only if require_gpu=True and NVML is unavailable
-        self._stop_event.clear()
-        self._collector = threading.Thread(target=self._collect_loop, name="llmtrace-collector", daemon=True)
-        self._collector.start()
+        try:
+            self.trace_writer.start()
+            self.gpu_sampler.start()  # raises only if require_gpu=True and NVML is unavailable
+            self._stop_event.clear()
+            self._collector = threading.Thread(target=self._collect_loop, name="llmtrace-collector", daemon=True)
+            self._collector.start()
+        except BaseException:
+            self._abort_start()
+            raise
         self._state = "running"
         logger.info("llmtrace started (session %s, output %s)", self.session_id, self.config.output_dir)
+
+    def _abort_start(self) -> None:
+        """Undo a partially started tracer: restore the engine, stop threads, release NVML."""
+        logger.error("llmtrace failed to start; restoring engine and releasing resources")
+        self._stop_event.set()
+        if self._collector is not None:
+            self._collector.join()
+            self._collector = None
+        try:
+            self.vllm_instrumentation.uninstrument_engine()
+        finally:
+            try:
+                self.gpu_sampler.stop()
+            finally:
+                self.trace_writer.stop()
+                self._state = "stopped"
 
     def stop(self) -> None:
         """Stop collection, restore the engine, drain buffers and flush files. Idempotent."""

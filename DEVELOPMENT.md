@@ -32,10 +32,12 @@ was read from the tagged source (not guessed):
 | `LLMEngine.abort_request` | same | `(request_ids: list[str]) -> None` |
 | `LLM._add_request` | `vllm/entrypoints/llm.py` | calls `add_request(request_id, prompt, params, lora_request=..., ...)` positionally |
 | `LLM._run_engine` | same | `while has_unfinished_requests(): step()` |
+| `LLM._validate_and_add_requests` | same | sets `sp.output_kind = RequestOutputKind.FINAL_ONLY` for every `generate()` call, so first-token timing is not observable through `generate()` (use `llmtrace.vllm_helpers.run_engine_with_timing`) |
 | Engine core client | `vllm/v1/engine/core_client.py` | `InprocClient.engine_core.scheduler` in-process; `SyncMPClient` otherwise |
 | Multiprocessing default | `vllm/envs.py` | `VLLM_ENABLE_V1_MULTIPROCESSING` defaults to `1` |
 | `SchedulerOutput` | `vllm/v1/core/sched/output.py` | `scheduled_new_reqs: list[NewRequestData]`, `num_scheduled_tokens: dict[str,int]`, `total_num_scheduled_tokens`, `finished_req_ids` |
 | `Scheduler` | `vllm/v1/core/sched/scheduler.py` | `schedule() -> SchedulerOutput`, `.requests: dict[str, Request]`, `.running`, `.waiting`, `kv_cache_manager.usage: float` |
+| `Scheduler._update_after_schedule` | same | called at the end of `schedule()` before it returns; advances `Request.num_computed_tokens` by the step's scheduled tokens (prefill/decode classification subtracts them back) |
 | `Request` | `vllm/v1/request.py` | `num_prompt_tokens`, `num_computed_tokens` |
 | `RequestOutput` | `vllm/outputs.py` | `request_id`, `prompt_token_ids`, `outputs: list[CompletionOutput]`, `finished`, `metrics` (never set by V1), `num_cached_tokens` |
 | `CompletionOutput` | same | `index`, `token_ids`, `finish_reason` |
@@ -79,6 +81,11 @@ and is out of scope; wrapping a coroutine function raises `InstrumentationError`
   first step that scheduled the request, `prefill` = that step start to first
   token step end (includes the first decode step; step granularity).
   Without it, a single `time_to_first_token` span; no boundary is inferred.
+* Prefill vs decode per batch: `computed_before = num_computed_tokens -
+  num_scheduled_tokens[req]` (because `schedule()` has already advanced the
+  counter); prefill iff `computed_before < num_prompt_tokens`. Prefix-cache
+  hits start the counter above 0; preemption resets it, so a resumed request
+  counts as prefill again.
 * Batches: `batch_id` is llmtrace's own (`<session>-s<step>-b<seq>`), because
   `SchedulerOutput` has no identifier; `request_ids` are the engine's.
   `step_end_monotonic` is stamped when the step returns so batches are real
@@ -105,7 +112,9 @@ share a domain, otherwise wall clock, and records which (`ledger.clock`).
 5. Sweep elementary intervals between all interval boundaries. Energy in an
    interval with no active request is `idle`; otherwise it is split by policy
    (`equal_share`; `proportional_tokens` weights by prompt+output tokens).
-   Phase breakdown follows span overlap within the interval.
+   Span edges are boundaries too, so each elementary interval is wholly inside
+   or outside every span and phase energy is the integrated curve over the
+   span, not a time fraction of the request total.
 6. Requests whose window has < 2 power samples or coverage below
    `min_coverage_fraction` get no figure; their share goes to
    `unattributable`. Under `window_only` all active-interval energy is
@@ -126,6 +135,10 @@ confidence probabilities. Diagnosis rules carry a `score` used for ranking.
   flush (no read-modify-write append).
 * `LLMTracer.stop()` order: stop collector, restore engine (collect leftovers),
   stop sampler, final drain, write incomplete requests, stop writer, log health.
+* `LLMTracer.start()` is transactional: if any component fails to start (e.g.
+  `require_gpu=True` without NVML) the engine is restored, threads are stopped,
+  NVML is released, the tracer is left `stopped`, and the original error is
+  re-raised.
 
 ## Tests
 

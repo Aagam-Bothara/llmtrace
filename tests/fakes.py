@@ -108,6 +108,9 @@ class FakeClock:
 
 @dataclass
 class _Req:
+    """Mirrors vllm.v1.request.Request: num_computed_tokens counts every token whose KV
+    has been scheduled for computation (prompt and generated), like the real scheduler."""
+
     request_id: str
     prompt_token_ids: List[int]
     params: Any
@@ -118,6 +121,11 @@ class _Req:
     finish_reason: Optional[str] = None
     emitted: int = 0  # tokens already sent in DELTA mode
     arrival_step: int = 0
+    scheduled_once: bool = False
+
+    @property
+    def num_tokens(self) -> int:
+        return self.num_prompt_tokens + len(self.generated)
 
 
 class FakeKVCacheManager:
@@ -136,26 +144,11 @@ class FakeScheduler:
         self.kv_cache_manager = FakeKVCacheManager()
 
     def schedule(self) -> SchedulerOutput:
-        e = self.engine
-        new, cached, tokens = [], CachedRequestData(), {}
-        for req in e._order():
-            if req.finished:
-                continue
-            if req.num_computed_tokens == 0 and not req.generated:
-                new.append(NewRequestData(req.request_id, list(req.prompt_token_ids), 0))
-                tokens[req.request_id] = min(req.num_prompt_tokens, e.prefill_chunk)
-            else:
-                cached.req_ids.append(req.request_id)
-                cached.num_computed_tokens.append(req.num_computed_tokens)
-                tokens[req.request_id] = (
-                    min(req.num_prompt_tokens - req.num_computed_tokens, e.prefill_chunk)
-                    if req.num_computed_tokens < req.num_prompt_tokens
-                    else 1
-                )
+        out = self.engine._do_schedule()
         self.running = [r for r in self.requests.values() if not r.finished]
         self.waiting = []
         self.kv_cache_manager.usage = min(1.0, 0.1 * len(self.running))
-        return SchedulerOutput(new, cached, tokens, sum(tokens.values()), set())
+        return out
 
 
 class FakeInprocClient:
@@ -242,9 +235,7 @@ class FakeLLMEngine:
         if sched is not None:
             sched.schedule()
         else:
-            # Emulate the scheduler bookkeeping without exposing it.
-            for req in self._order():
-                pass
+            self._do_schedule()  # same bookkeeping, just not reachable from outside
         self.clock.advance(self.step_seconds)
         if self.step_sleep_s:
             import time
@@ -255,9 +246,7 @@ class FakeLLMEngine:
             if req.finished:
                 continue
             if req.num_computed_tokens < req.num_prompt_tokens:
-                req.num_computed_tokens = min(req.num_prompt_tokens, req.num_computed_tokens + self.prefill_chunk)
-                if req.num_computed_tokens < req.num_prompt_tokens:
-                    continue  # chunked prefill still running: no output this step
+                continue  # chunked prefill still running: no output this step
             if isinstance(req.params, PoolingParams):
                 req.finished = True
                 outputs.append(PoolingRequestOutput(req.request_id, PoolingOutput([0.0]), list(req.prompt_token_ids), True))
@@ -274,6 +263,27 @@ class FakeLLMEngine:
         return outputs
 
     # --- helpers --------------------------------------------------------------
+
+    def _do_schedule(self) -> SchedulerOutput:
+        """Real vLLM 0.11.0 order: build SchedulerOutput, then _update_after_schedule()
+        advances num_computed_tokens by the scheduled tokens *before* schedule() returns."""
+        new, cached, tokens = [], CachedRequestData(), {}
+        for req in self._order():
+            if req.finished:
+                continue
+            remaining = req.num_tokens - req.num_computed_tokens  # decode: exactly the new token(s)
+            n = min(remaining, self.prefill_chunk) if req.num_computed_tokens < req.num_prompt_tokens else remaining
+            if not req.scheduled_once:
+                new.append(NewRequestData(req.request_id, list(req.prompt_token_ids), req.num_computed_tokens))
+                req.scheduled_once = True
+            else:
+                cached.req_ids.append(req.request_id)
+                cached.num_computed_tokens.append(req.num_computed_tokens)
+            tokens[req.request_id] = n
+        out = SchedulerOutput(new, cached, tokens, sum(tokens.values()), set())
+        for rid, n in tokens.items():  # _update_after_schedule()
+            self._requests[rid].num_computed_tokens += n
+        return out
 
     def _scheduler(self) -> Optional[FakeScheduler]:
         core = getattr(self.engine_core, "engine_core", None)

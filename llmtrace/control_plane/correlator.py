@@ -374,7 +374,15 @@ class Correlator:
                 if b > a:
                     events.append((a, 1, rid))
                     events.append((b, -1, rid))
-        boundaries = sorted({run_start, run_end} | {e[0] for e in events})
+        # Span edges are boundaries too, so every elementary interval lies wholly inside or
+        # outside each phase span and phase energy is the integrated curve, not a time fraction.
+        span_edges = set()
+        for t in traces:
+            for span in t.spans:
+                for x in self._span_bounds(span, clock):
+                    if run_start < x < run_end:
+                        span_edges.add(x)
+        boundaries = sorted({run_start, run_end} | {e[0] for e in events} | span_edges)
         events.sort(key=lambda e: (e[0], e[1]))  # ends before starts at equal times
 
         allocs: Dict[str, _Alloc] = {}
@@ -406,9 +414,8 @@ class Correlator:
                 alloc.joules += share
                 for span in by_id[rid].spans:
                     sa, sb = self._span_bounds(span, clock)
-                    ov = min(sb, b) - max(sa, a)
-                    if ov > 0:
-                        alloc.phase[span.phase] = alloc.phase.get(span.phase, 0.0) + share * ov / (b - a)
+                    if sa <= a and sb >= b:  # interval lies inside the span (never partial, see above)
+                        alloc.phase[span.phase] = alloc.phase.get(span.phase, 0.0) + share
         return allocs, idle
 
     # ---------------------------------------------------------------- helpers

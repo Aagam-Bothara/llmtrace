@@ -40,6 +40,15 @@ tracer.print_analysis(analysis)
 `LLMTracer` is synchronous. Its GPU sampler, collector and writer are
 background threads, so they keep running while `llm.generate()` blocks.
 
+`llm.generate()` forces FINAL_ONLY outputs in vLLM 0.11.0, so it yields
+completion, token and energy data but no TTFT/TPOT. For timing, drive the
+engine with cumulative outputs:
+
+```python
+from llmtrace.vllm_helpers import run_engine_with_timing
+outputs = run_engine_with_timing(llm.llm_engine, prompts, SamplingParams(max_tokens=64))
+```
+
 Only the synchronous `LLMEngine` used by `vllm.LLM` is supported. `AsyncLLM`
 (the OpenAI server) is rejected with `InstrumentationError`.
 
@@ -80,8 +89,8 @@ plus any top-level `TracerConfig` field.
 
 * `ttft_ms`: arrival at `add_request` to the end of the engine step in which
   the first output token became visible. Includes queue wait. Step-granular.
-  `null` with `ttft_unavailable_reason` for zero-token, FINAL_ONLY or pooling
-  requests.
+  `null` with `ttft_unavailable_reason` for zero-token, FINAL_ONLY (which is
+  what `LLM.generate()` uses) or pooling requests.
 * `tpot_ms`: (last token step end - first token step end) / (tokens after the
   first observation). `null` when fewer than two token observations exist.
 * Spans `queue` and `prefill` exist only when the scheduler was in-process;

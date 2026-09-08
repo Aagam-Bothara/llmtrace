@@ -210,7 +210,7 @@ class TestFailureIsolation:
         class Weird:
             num_scheduled_tokens = "not a dict"
 
-        sched.schedule = instr._wrap_schedule(lambda: Weird())
+        sched.schedule = instr._wrap_schedule(lambda: (engine._do_schedule(), Weird())[1])  # bookkeeping still runs
         _add(engine, "r1", max_tokens=1)
         outputs = engine.step()
         assert outputs[0].finished
@@ -237,6 +237,30 @@ class TestSchedulerVisibility:
         assert traces["r1"].batch_ids == [b.batch_id for b in batches]
         assert traces["r2"].batch_ids == [batches[0].batch_id]
         assert traces["r1"].scheduler_visible
+
+    def test_prefill_classified_from_pre_execution_state(self, clock):
+        # Real order: schedule() returns with num_computed_tokens already advanced.
+        engine = FakeLLMEngine(clock=clock, prefill_chunk=4)
+        instr = VLLMInstrumentation(monotonic=clock.monotonic, wall=clock.time)
+        instr.instrument_engine(engine)
+        sched = engine.engine_core.engine_core.scheduler
+        engine.add_request("r", {"prompt_token_ids": list(range(10))}, SamplingParams(max_tokens=2))
+        observed = []
+        wrapped = sched.schedule
+
+        def outer():
+            out = wrapped()
+            observed.append((sched.requests["r"].num_computed_tokens, out.num_scheduled_tokens["r"]))
+            return out
+
+        sched.schedule = outer
+        run_to_completion(engine)
+        sched.schedule = wrapped
+        # After each schedule() the counter already includes that step's tokens (4, 8, 10, 11, ...).
+        assert observed[:3] == [(4, 4), (8, 4), (10, 2)]
+        batches = instr.drain_batch_metadata()
+        kinds = [(b.num_prefill, b.num_decode) for b in batches]
+        assert kinds == [(1, 0), (1, 0), (1, 0), (0, 1)]  # 3 prefill chunks (last one yields token 1), 1 decode
 
     def test_batches_are_not_drainable_before_the_step_ends(self, engine, instr):
         instr.instrument_engine(engine)

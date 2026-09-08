@@ -168,6 +168,35 @@ class TestAllocation:
         assert e.decode_joules == pytest.approx(100.0)
         assert e.time_to_first_token_joules is None
 
+    def test_phase_energy_integrates_varying_power(self):
+        # Power ramps 0 -> 200 W over [0, 2]: first second holds 50 J, second second 150 J.
+        samples = [mk_sample(0.1 * i, 100.0 * i * 0.1 * 1.0 * 1.0 * 1.0, 0) for i in range(21)]
+        spans = [
+            RequestSpan(phase=SpanPhase.QUEUE, start_time=0.0, end_time=1.0, duration_ms=1000),
+            RequestSpan(phase=SpanPhase.DECODE, start_time=1.0, end_time=2.0, duration_ms=1000),
+        ]
+        res = corr().correlate([trace("a", 0.0, 2.0, spans=spans)], samples)
+        e = res.traces[0].energy
+        assert e.attributed_joules == pytest.approx(200.0)
+        assert e.queue_joules == pytest.approx(50.0)
+        assert e.decode_joules == pytest.approx(150.0)
+        assert res.ledger.conservation_error_joules < 1e-9
+
+    def test_phase_energy_with_overlapping_requests_and_varying_power(self):
+        samples = [mk_sample(0.1 * i, 10.0 * i, 0) for i in range(21)]  # 0 -> 200 W over [0, 2]
+        a = trace("a", 0.0, 2.0, spans=[RequestSpan(phase=SpanPhase.DECODE, start_time=0.5, end_time=2.0, duration_ms=1500)])
+        b = trace("b", 1.0, 2.0, spans=[RequestSpan(phase=SpanPhase.DECODE, start_time=1.0, end_time=1.5, duration_ms=500)])
+        res = corr().correlate([a, b], samples)
+        by = {t.request_id: t.energy for t in res.traces}
+        # device energy on [0,2] = 200 J; [0,1] = 50 J (a alone); [1,2] = 150 J shared -> 75 each
+        assert by["a"].attributed_joules == pytest.approx(125.0)
+        assert by["b"].attributed_joules == pytest.approx(75.0)
+        # a's decode span [0.5,2]: alone on [0.5,1] = 50-12.5 = 37.5 J, plus half of [1,2] = 75 -> 112.5
+        assert by["a"].decode_joules == pytest.approx(112.5)
+        # b's decode span [1,1.5]: half of integral on [1,1.5] = 0.5 * (100+150)/2*0.5 = 31.25
+        assert by["b"].decode_joules == pytest.approx(31.25)
+        assert res.ledger.conservation_error_joules < 1e-9
+
     def test_cost(self):
         res = corr(energy_price_usd_per_kwh=0.36).correlate([trace("r", 0.0, 1.0)], const_power(0.0, 1.0, 0.1, 3600.0))
         assert res.traces[0].energy.attributed_joules == pytest.approx(3600.0)

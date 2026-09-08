@@ -217,6 +217,24 @@ class TestTracer:
         analysis = tracer.analyze()
         assert analysis.total_device_joules is None and analysis.num_with_energy == 0
 
+    def test_failed_start_restores_engine_and_releases_everything(self, tmp_path):
+        cfg = TracerConfig(output_dir=str(tmp_path), gpu_sampler={"require_gpu": True})
+        tracer = LLMTracer(cfg, gpu_backend=FakeNVMLBackend({}, fail_open=True))
+        engine = FakeLLMEngine()
+        with pytest.raises(RuntimeError, match="required"):
+            tracer.instrument_engine(engine)
+        assert "step" not in engine.__dict__ and "add_request" not in engine.__dict__
+        assert not tracer.vllm_instrumentation.is_instrumented
+        assert tracer.trace_writer._thread is None and tracer.trace_writer._stopped
+        assert tracer._collector is None and tracer._state == "stopped"
+        assert not any(t.name.startswith("llmtrace-") for t in threading.enumerate())
+        tracer.stop()  # no-op, no error
+        with pytest.raises(RuntimeError, match="cannot be restarted"):
+            tracer.start()
+        # The engine still works normally, untraced.
+        engine.add_request("r", {"prompt_token_ids": [1]}, SamplingParams(max_tokens=1))
+        assert run_to_completion(engine)[0].finished
+
     def test_unknown_option_raises_and_shortcuts_apply(self, tmp_path):
         with pytest.raises(ValueError, match="Unknown LLMTracer option"):
             LLMTracer(output_dir=str(tmp_path), sample_rate=5)

@@ -91,6 +91,21 @@ Set `VLLM_ENABLE_V1_MULTIPROCESSING=0` before creating the `LLM` to keep the
 engine core in-process; that is the only configuration in which the scheduler
 is reachable and batch metadata plus queue/prefill spans are recorded.
 
+**`LLM.generate()` cannot expose first-token timing.** In vLLM 0.11.0 it
+forces `SamplingParams.output_kind = FINAL_ONLY`, so each request produces one
+output at completion. Under `generate()` llmtrace records completion, token
+counts, batches and energy, and reports `ttft_ms`/`tpot_ms` as unavailable
+with that reason. To measure TTFT/TPOT, drive the engine directly with
+cumulative outputs:
+
+```python
+from llmtrace.vllm_helpers import run_engine_with_timing
+
+tracer.instrument_engine(llm.llm_engine)
+outputs = run_engine_with_timing(llm.llm_engine, prompts, SamplingParams(max_tokens=32))
+tracer.stop()
+```
+
 ## CPU-only synthetic example
 
 ```bash

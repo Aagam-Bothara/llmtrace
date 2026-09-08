@@ -118,6 +118,31 @@ class TestFirstTokenAndTPOT:
         assert t.prompt_length == 3
 
 
+class TestEngineLoopHelper:
+    def test_run_engine_with_timing_forces_cumulative_without_mutating_params(self, clock):
+        from llmtrace.vllm_helpers import run_engine_with_timing
+
+        engine, instr = make(clock, step_seconds=0.1)
+        params = SamplingParams(max_tokens=3, output_kind=RequestOutputKind.FINAL_ONLY)  # what LLM.generate() forces
+        outs = run_engine_with_timing(engine, [{"prompt_token_ids": [1, 2]}, "hello there world"], params)
+        assert len(outs) == 2 and all(o.finished for o in outs)
+        assert params.output_kind is RequestOutputKind.FINAL_ONLY  # caller's object untouched
+        traces = {t.request_id: t for t in instr.drain_completed_traces()}
+        assert set(traces) == {o.request_id for o in outs}
+        for t in traces.values():
+            assert t.output_kind == "cumulative"
+            assert t.ttft_ms == pytest.approx(100.0) and t.tpot_ms == pytest.approx(100.0)
+            assert t.output_length == 3
+
+    def test_generate_style_final_only_records_completion_but_no_timing(self, clock):
+        engine, instr = make(clock, step_seconds=0.1)
+        engine.add_request("r", "a b c", SamplingParams(max_tokens=3, output_kind=RequestOutputKind.FINAL_ONLY))
+        run_to_completion(engine)
+        t = one(instr)
+        assert t.output_length == 3 and t.prompt_length == 3 and t.status.value == "completed"
+        assert t.ttft_ms is None and "FINAL_ONLY" in t.ttft_unavailable_reason
+
+
 class TestPromptLength:
     def test_string_prompt_has_no_length_until_engine_reports_tokens(self, clock):
         engine, instr = make(clock)

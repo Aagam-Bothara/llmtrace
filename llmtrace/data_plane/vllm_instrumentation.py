@@ -313,6 +313,7 @@ class VLLMInstrumentation:
                 logger.error("Failed to restore %s.%s: %s", type(p.target).__name__, p.name, exc)
         self._patches.clear()
         self.scheduler_visible = False
+        self.scheduler_unavailable_reason = "not instrumented"
 
     # --------------------------------------------------------------- wrappers
 
@@ -519,14 +520,20 @@ class VLLMInstrumentation:
             if isinstance(getattr(r, "prompt_token_ids", None), (list, tuple))
         ]
 
-        # Prefill/decode classification from the scheduler's own request state
-        # (Request.num_computed_tokens < Request.num_prompt_tokens before this step).
+        # Prefill/decode classification from the scheduler's own request state.
+        # In vLLM 0.11.0, Scheduler.schedule() calls _update_after_schedule() before
+        # returning, which has already advanced Request.num_computed_tokens by this
+        # step's scheduled tokens. Subtract them to recover the pre-execution state
+        # (prefix-cache hits set the initial value; preemption resets it to 0, so a
+        # resumed request correctly counts as prefill again). A request is in
+        # prefill for this step if it had not yet computed its whole prompt.
         requests = getattr(self._scheduler, "requests", None)
         num_prefill = 0
         for rid in req_ids:
             req = requests.get(rid) if isinstance(requests, dict) else None
             if req is not None and hasattr(req, "num_computed_tokens") and hasattr(req, "num_prompt_tokens"):
-                if req.num_computed_tokens < req.num_prompt_tokens:
+                computed_before = int(req.num_computed_tokens) - int(scheduled_tokens.get(rid, 0))
+                if computed_before < int(req.num_prompt_tokens):
                     num_prefill += 1
             elif rid in new_ids:
                 num_prefill += 1

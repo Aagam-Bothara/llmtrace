@@ -92,6 +92,9 @@ class LLMTracer:
         self._collection_errors = 0
         self._last_collection_error: Optional[str] = None
         self._incomplete_written = 0
+        # Captured at instrument time; VLLMInstrumentation resets its own flags on restore.
+        self._scheduler_visible_during_run: Optional[bool] = None
+        self._scheduler_reason_during_run: Optional[str] = None
 
     # -------------------------------------------------------------- lifecycle
 
@@ -101,7 +104,11 @@ class LLMTracer:
         Transactional: if collection cannot start (e.g. ``require_gpu=True`` and
         NVML is unavailable) the engine is restored before the error propagates.
         """
+        if self._state == "stopped":
+            raise RuntimeError("LLMTracer cannot be restarted; create a new instance")
         self.vllm_instrumentation.instrument_engine(engine)
+        self._scheduler_visible_during_run = self.vllm_instrumentation.scheduler_visible
+        self._scheduler_reason_during_run = self.vllm_instrumentation.scheduler_unavailable_reason
         self.start()  # on failure start() restores the engine itself
 
     def start(self) -> None:
@@ -201,6 +208,8 @@ class LLMTracer:
             "state": self._state,
             "session_id": self.session_id,
             "instrumentation": self.vllm_instrumentation.health(),
+            "scheduler_visible_during_run": self._scheduler_visible_during_run,
+            "scheduler_unavailable_reason_during_run": self._scheduler_reason_during_run,
             "gpu_sampler": self.gpu_sampler.stats(),
             "writer": self.trace_writer.stats(),
             "collection_errors": self._collection_errors,

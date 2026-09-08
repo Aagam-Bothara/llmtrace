@@ -235,6 +235,30 @@ class TestTracer:
         engine.add_request("r", {"prompt_token_ids": [1]}, SamplingParams(max_tokens=1))
         assert run_to_completion(engine)[0].finished
 
+    def test_stopped_tracer_rejects_new_engine_before_patching(self, tmp_path):
+        tracer = self._tracer(tmp_path)
+        tracer.start()
+        tracer.stop()
+        engine = FakeLLMEngine()
+        with pytest.raises(RuntimeError, match="cannot be restarted"):
+            tracer.instrument_engine(engine)
+        assert "step" not in engine.__dict__ and "add_request" not in engine.__dict__
+        assert not tracer.vllm_instrumentation.is_instrumented
+
+    def test_health_keeps_scheduler_visibility_after_stop(self, tmp_path):
+        tracer = self._tracer(tmp_path)
+        tracer.instrument_engine(FakeLLMEngine())
+        tracer.stop()
+        h = tracer.health()
+        assert h["scheduler_visible_during_run"] is True and h["scheduler_unavailable_reason_during_run"] is None
+        assert h["instrumentation"]["scheduler_visible"] is False  # reset by restore, as documented
+        tracer2 = self._tracer(tmp_path / "b")
+        tracer2.instrument_engine(FakeLLMEngine(in_process_scheduler=False))
+        tracer2.stop()
+        h2 = tracer2.health()
+        assert h2["scheduler_visible_during_run"] is False
+        assert "VLLM_ENABLE_V1_MULTIPROCESSING=0" in h2["scheduler_unavailable_reason_during_run"]
+
     def test_unknown_option_raises_and_shortcuts_apply(self, tmp_path):
         with pytest.raises(ValueError, match="Unknown LLMTracer option"):
             LLMTracer(output_dir=str(tmp_path), sample_rate=5)

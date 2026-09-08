@@ -40,8 +40,9 @@ def run_engine_with_timing(
     """Add ``prompts`` to a synchronous ``LLMEngine`` and step it to completion.
 
     Uses cumulative outputs so llmtrace can observe first-token and per-token
-    timing. Returns the finished ``RequestOutput`` objects in completion order.
-    ``engine`` is ``llm.llm_engine`` for a ``vllm.LLM`` instance.
+    timing. Returns the finished ``RequestOutput`` objects **in input order**
+    (requests may complete in any order). ``engine`` is ``llm.llm_engine`` for
+    a ``vllm.LLM`` instance.
     """
     ids = list(request_ids) if request_ids is not None else [f"llmtrace-{next(_counter)}" for _ in prompts]
     if len(ids) != len(prompts):
@@ -49,9 +50,12 @@ def run_engine_with_timing(
     p = with_cumulative_outputs(params)
     for rid, prompt in zip(ids, prompts):
         engine.add_request(rid, prompt, p)
-    finished: List[Any] = []
+    finished: dict = {}
     while engine.has_unfinished_requests():
         for out in engine.step():
             if getattr(out, "finished", False):
-                finished.append(out)
-    return finished
+                finished[str(out.request_id)] = out
+    missing = [rid for rid in ids if rid not in finished]
+    if missing:
+        raise RuntimeError(f"engine finished without outputs for {missing}")
+    return [finished[rid] for rid in ids]

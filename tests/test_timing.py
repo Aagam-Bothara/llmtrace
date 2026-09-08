@@ -134,6 +134,17 @@ class TestEngineLoopHelper:
             assert t.ttft_ms == pytest.approx(100.0) and t.tpot_ms == pytest.approx(100.0)
             assert t.output_length == 3
 
+    def test_run_engine_with_timing_returns_input_order_despite_completion_order(self, clock):
+        from llmtrace.vllm_helpers import run_engine_with_timing
+
+        engine, instr = make(clock, prefill_chunk=2)  # long prompt needs 3 prefill steps, short one finishes first
+        prompts = [{"prompt_token_ids": list(range(6))}, {"prompt_token_ids": [1]}]
+        outs = run_engine_with_timing(engine, prompts, SamplingParams(max_tokens=1), request_ids=["long", "short"])
+        assert [o.request_id for o in outs] == ["long", "short"]
+        assert [o.prompt_token_ids for o in outs] == [list(range(6)), [1]]
+        traces = {t.request_id: t for t in instr.drain_completed_traces()}
+        assert traces["short"].end_monotonic < traces["long"].end_monotonic  # completion order differed
+
     def test_generate_style_final_only_records_completion_but_no_timing(self, clock):
         engine, instr = make(clock, step_seconds=0.1)
         engine.add_request("r", "a b c", SamplingParams(max_tokens=3, output_kind=RequestOutputKind.FINAL_ONLY))

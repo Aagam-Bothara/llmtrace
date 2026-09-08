@@ -64,9 +64,10 @@ class RunData:
     """Loaded run with a consistent time base."""
 
     def __init__(self, traces: List[RequestTrace], batches: List[BatchMetadata], samples: List[GPUSample], label: str = "run",
-                 vllm_stats: Optional[List[VLLMIterationRecord]] = None):
+                 vllm_stats: Optional[List[VLLMIterationRecord]] = None, gpu_steps: Optional[List[Any]] = None):
         self.traces, self.batches, self.samples, self.label = traces, batches, samples, label
         self.vllm_stats = vllm_stats or []
+        self.gpu_steps = gpu_steps or []
         mono_ok = (
             traces and all(t.start_monotonic is not None and t.end_monotonic is not None for t in traces)
             and all(b.monotonic is not None for b in batches) and all(s.monotonic is not None for s in samples)
@@ -79,7 +80,8 @@ class RunData:
     @classmethod
     def load(cls, run_dir: str, label: Optional[str] = None) -> "RunData":
         d = Path(run_dir)
-        return cls(io.load_traces([d]), io.load_batches([d]), io.load_gpu_samples([d]), label or d.name, io.load_vllm_stats([d]))
+        return cls(io.load_traces([d]), io.load_batches([d]), io.load_gpu_samples([d]), label or d.name, io.load_vllm_stats([d]),
+                   io.load_gpu_steps([d]))
 
     # --- time accessors (seconds, absolute in the chosen clock)
     def t_start(self, t: RequestTrace) -> float:
@@ -131,6 +133,7 @@ def export_chrome_trace(run: RunData, out_path: str) -> Dict[str, int]:
 
     meta(1, None, "engine")
     meta(1, 1, "scheduler steps")
+    span_by = {g.step_index: g for g in run.gpu_steps if g.gpu_span_ms is not None}
     for b in run.batches:
         end = run.b_end(b)
         if end is None:
@@ -141,8 +144,14 @@ def export_chrome_trace(run: RunData, out_path: str) -> Dict[str, int]:
             "args": {"scheduled_tokens": b.total_scheduled_tokens, "num_requests": b.num_requests,
                      "num_prefill": b.num_prefill, "num_decode": b.num_decode,
                      "biggest_chunk": max(b.scheduled_tokens.values()) if b.scheduled_tokens else 0,
-                     "kv_cache_usage": b.kv_cache_usage_fraction, "request_ids": ",".join(b.request_ids)},
+                     "kv_cache_usage": b.kv_cache_usage_fraction, "request_ids": ",".join(b.request_ids),
+                     "gpu_span_ms": span_by[b.step_index].gpu_span_ms if b.step_index in span_by else None},
         })
+        if b.step_index in span_by:
+            g = span_by[b.step_index]
+            ev.append({"name": "gpu span (ms)", "ph": "C", "pid": 1, "ts": run.rel(run.b_start(b)) * us, "args": {"ms": g.gpu_span_ms}})
+            ev.append({"name": "host overhead (ms)", "ph": "C", "pid": 1, "ts": run.rel(run.b_start(b)) * us,
+                       "args": {"ms": max(0.0, (end - run.b_start(b)) * 1000.0 - g.gpu_span_ms)}})
         if b.kv_cache_usage_fraction is not None:
             ev.append({"name": "kv cache usage", "ph": "C", "pid": 1, "ts": run.rel(run.b_start(b)) * us,
                        "args": {"fraction": b.kv_cache_usage_fraction}})

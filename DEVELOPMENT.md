@@ -44,6 +44,7 @@ was read from the tagged source (not guessed):
 | Output kinds | `vllm/sampling_params.py` | `RequestOutputKind.CUMULATIVE` (default) / `DELTA` / `FINAL_ONLY` |
 | Output construction | `vllm/v1/engine/output_processor.py` | `token_ids` cumulative unless DELTA |
 | Finish reasons | `vllm/v1/engine/__init__.py` | `stop`, `length`, `abort` |
+| `EngineCore.model_executor` / `Executor.execute_model` | `vllm/v1/engine/core.py`, `vllm/v1/executor/abstract.py`, `vllm/executor/uniproc_executor.py` | `EngineCore.step()` calls `self.model_executor.execute_model(scheduler_output)` synchronously; with `UniProcExecutor` (world size 1) the worker runs on the same thread, so CUDA events recorded before/after the call on the current stream bracket the step's model execution |
 | `StatLoggerBase` / `StatLoggerFactory` | `vllm/v1/metrics/loggers.py` | `__init__(vllm_config, engine_index)`, `record(scheduler_stats, iteration_stats, engine_idx)`, `log_engine_initialized()`, `log()`; factories are called as `factory(vllm_config, engine_idx)`; vLLM notes the stats classes "are not considered stable interfaces" |
 | `StatLoggerManager` | same | `per_engine_logger_dict: dict[int, list[StatLoggerBase]]`; `record()` iterates that list, so a logger can be appended post-hoc (`LLMEngine.logger_manager`, `None` with `disable_log_stats`) |
 | `SchedulerStats` / `IterationStats` / `FinishedRequestStats` | `vllm/v1/metrics/stats.py` | running/waiting counts, `kv_cache_usage`, prefix-cache stats; per-step tokens, `num_preempted_reqs`, `time_to_first_tokens_iter`, `inter_token_latencies_iter`, finished-request timings (queued/prefill/decode/e2e) **without request ids** |
@@ -134,6 +135,26 @@ causal test. `decision.evaluate()` scores configurations against a parsed
 `Target` (`<class|*> <ttft|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and only
 reports; it recommends the candidate with the highest median throughput among
 those meeting the target in every repeat, labeled advisory.
+
+## GPU span per step (`data_plane/cuda_timing.py`)
+
+With the in-process engine core, llmtrace wraps `model_executor.execute_model`
+and records a `torch.cuda.Event(enable_timing=True)` before and after each
+call on the engine thread's current stream. The elapsed time is the step's
+**GPU span**: an upper bound on GPU busy time (it includes launch gaps on that
+stream) that excludes work on vLLM's other streams (async output copy,
+communication). `host_overhead_ms = host_step_ms - gpu_span_ms`. Events are
+resolved lazily with `query()` at later steps and at collection time, never
+by synchronizing; pending events are bounded and drops counted. Records go to
+`gpu_steps_*.jsonl`, feed the `host_overhead` finding, the experiment's
+per-step GPU/host split, and Perfetto counter tracks. `enable_nvtx` adds an
+NVTX range per step for Nsight Systems. Scope: vLLM's default blocking path
+(`UniProcExecutor.collective_rpc` runs the worker method on the calling
+thread); with async scheduling (`non_block=True`) `execute_model` returns a
+future and the bracket would cover only submission, so spans are not
+meaningful there and that mode is unsupported. Tensor-parallel executors run
+workers in other processes and are out of reach. Status: implemented against
+a fake backend; not yet run on a GPU.
 
 ## Clocks
 

@@ -65,6 +65,13 @@ Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which force
 - [ ] Run B only: queue + prefill == TTFT for each request (to floating point)
 - [ ] `tokens_at_first_observation` is 1 without speculative decoding
 
+GPU step spans (CUDA events; in-process run only)
+- [ ] `health()["executor_visible_during_run"]` is true and `gpu_steps_*.jsonl` has one record per step with `gpu_span_ms`
+- [ ] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
+- [ ] median host share per step recorded; on opt-125m expect a large host share (tiny model), which the `host_overhead` finding should report as supported
+- [ ] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels
+- [ ] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost)
+
 vLLM stats (stat_loggers hook)
 - [ ] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step
 - [ ] `kv_cache_usage`, `num_running_reqs`, `num_waiting_reqs` populated; `num_preempted_reqs` is 0 in the smoke run

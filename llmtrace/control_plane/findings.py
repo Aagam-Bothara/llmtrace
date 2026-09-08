@@ -195,6 +195,34 @@ def check_kv_cache_pressure(traces: List[RequestTrace], batches: List[BatchMetad
                    parameters={"usage_threshold": usage_threshold, "source": events_src})
 
 
+def check_host_overhead(batches: List[BatchMetadata], gpu_steps: List[Any], share_threshold: float = 0.5) -> Finding:
+    """Are engine steps dominated by time the GPU is not spanned (scheduling, input prep, output processing, tracer)?"""
+    resolved = [g for g in gpu_steps if g.gpu_span_ms is not None and g.host_step_ms > 0]
+    if not resolved:
+        return Finding(hypothesis="host_overhead", status="not_evaluable",
+                       summary="No GPU step spans recorded: cannot separate GPU time from host time.",
+                       missing_evidence=["gpu_steps_*.jsonl (CUDA events around execute_model; needs in-process engine core and torch.cuda)"])
+    shares = [max(0.0, g.host_step_ms - g.gpu_span_ms) / g.host_step_ms for g in resolved]
+    med_share = statistics.median(shares)
+    spans = [g.gpu_span_ms for g in resolved]
+    hosts = [g.host_step_ms for g in resolved]
+    events = [Evidence(source="gpu_steps_*.jsonl:gpu_span_ms", statement="median GPU span per step", value=statistics.median(spans), unit="ms"),
+              Evidence(source="gpu_steps_*.jsonl:host_step_ms", statement="median host step time", value=statistics.median(hosts), unit="ms"),
+              Evidence(source="gpu_steps_*.jsonl:host_overhead_ms/host_step_ms", statement="median share of step time not spanned by the GPU",
+                       value=med_share, unit="fraction"),
+              Evidence(source="gpu_steps_*.jsonl", statement="steps with a resolved GPU span", value=float(len(resolved)), unit="steps")]
+    supported = med_share >= share_threshold
+    return Finding(hypothesis="host_overhead", status="supported" if supported else "not_supported",
+                   summary=(f"The GPU was spanned for only {1 - med_share:.0%} of a typical step; {med_share:.0%} is host-side work "
+                            "(scheduling, input preparation, output processing, tracing). Note: the span is an upper bound on GPU busy time."
+                            if supported else f"Host-side time is {med_share:.0%} of a typical step; steps are GPU-bound."),
+                   supporting_events=events, suggested_experiment=(
+                       "Replay with fewer, larger batches (raise max_num_batched_tokens / lower arrival rate) or with tracing "
+                       "disabled, and compare host share per step and throughput." if supported else None),
+                   missing_evidence=["GPU busy time (CUPTI); the CUDA-event span includes launch gaps"],
+                   parameters={"share_threshold": share_threshold})
+
+
 def check_tracer_self_effect(batches: List[BatchMetadata], collector_events: List[Any], factor: float = 2.0) -> Finding:
     """Flag engine steps overlapping a tracer collector drain that are much longer than the median."""
     dur = _step_durations(batches)
@@ -224,10 +252,11 @@ def check_tracer_self_effect(batches: List[BatchMetadata], collector_events: Lis
 
 def evaluate_all(traces: List[RequestTrace], batches: List[BatchMetadata], stats: List[VLLMIterationRecord],
                  collector_events: Optional[List[Any]] = None, chunk_threshold: int = DEFAULT_CHUNK_THRESHOLD,
-                 queue_threshold_ms: float = 100.0, kv_threshold: float = 0.9) -> List[Finding]:
+                 queue_threshold_ms: float = 100.0, kv_threshold: float = 0.9, gpu_steps: Optional[List[Any]] = None) -> List[Finding]:
     out = [check_queue_overload(traces, batches, stats, queue_threshold_ms),
            check_long_prompt_interference(traces, batches, chunk_threshold),
-           check_kv_cache_pressure(traces, batches, stats, kv_threshold)]
+           check_kv_cache_pressure(traces, batches, stats, kv_threshold),
+           check_host_overhead(batches, gpu_steps or [])]
     if collector_events is not None:
         out.append(check_tracer_self_effect(batches, collector_events))
     return out

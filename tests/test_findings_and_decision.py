@@ -87,7 +87,8 @@ class TestFindings:
 
     def test_evaluate_all_and_format(self):
         out = evaluate_all([_trace("short-0")], [], [], [])
-        assert [f.hypothesis for f in out] == ["queue_overload", "long_prompt_interference", "kv_cache_pressure", "tracer_observer_effect"]
+        assert [f.hypothesis for f in out] == ["queue_overload", "long_prompt_interference", "kv_cache_pressure", "host_overhead",
+                                               "tracer_observer_effect"]
         text = format_findings(out)
         assert "[not_evaluable] long_prompt_interference" in text and "missing:" in text
 

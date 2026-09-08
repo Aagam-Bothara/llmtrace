@@ -73,6 +73,22 @@ def common_checks(check: Checks, tracer, engine, files, n_expected: int, wall: f
         check(batches and batches[0].num_prefill == batches[0].num_requests, "first batch is all prefill")
     else:
         check(len(batches) == 0, "no batch metadata without in-process scheduler")
+    # GPU span per step via CUDA events around execute_model: reachable exactly when the scheduler is.
+    exec_visible = bool(health["executor_visible_during_run"])
+    check(exec_visible == expect_scheduler,
+          f"executor visible during run == {expect_scheduler} (was {exec_visible}; reason: {health['executor_unavailable_reason_during_run']})")
+    if exec_visible:
+        gpu_steps = io.load_gpu_steps(files.get("gpu_steps", []))
+        ct = health["cuda_timing"]
+        check(ct["dropped"] == 0 and ct["errors"] == 0 and ct["pending"] == 0, f"cuda timing clean: {ct}")
+        spans = [g for g in gpu_steps if g.gpu_span_ms is not None]
+        check(len(spans) >= len(batches) - 1, f"{len(spans)} GPU spans for {len(batches)} batches")
+        check(all(0 < g.gpu_span_ms <= g.host_step_ms + 0.05 for g in spans), "0 < gpu_span_ms <= host_step_ms for every step")
+        if spans:
+            import statistics as _st
+            print(f"gpu span p50 {_st.median(g.gpu_span_ms for g in spans):.3f} ms, host step p50 "
+                  f"{_st.median(g.host_step_ms for g in spans):.3f} ms, median host share "
+                  f"{_st.median(max(0.0, g.host_overhead_ms) / g.host_step_ms for g in spans):.0%}")
     analysis = tracer.analyze()
     tracer.print_analysis(analysis)
     if analysis.energy_ledger and analysis.energy_ledger.device_joules is not None:

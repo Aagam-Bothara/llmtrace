@@ -9,6 +9,7 @@ from typing import Iterable, List, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
+from llmtrace.data_plane.cuda_timing import StepGpuTiming
 from llmtrace.data_plane.vllm_stats import CollectorEvent, VLLMIterationRecord
 from llmtrace.models.trace import BatchMetadata, GPUSample, RequestTrace
 
@@ -84,6 +85,14 @@ def load_collector_events(paths: Sequence[PathLike]) -> List[CollectorEvent]:
     out: List[CollectorEvent] = []
     for f in _expand(paths, "collector"):
         out.extend(_load_file(f, CollectorEvent))
+    return out
+
+
+def load_gpu_steps(paths: Sequence[PathLike]) -> List[StepGpuTiming]:
+    """Per-step GPU spans from CUDA events (``gpu_steps_*.jsonl``), if recorded."""
+    out: List[StepGpuTiming] = []
+    for f in _expand(paths, "gpu_steps"):
+        out.extend(_load_file(f, StepGpuTiming))
     return out
 
 

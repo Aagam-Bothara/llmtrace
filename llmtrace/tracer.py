@@ -26,6 +26,7 @@ from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.data_plane.gpu_sampler import GPUSampler, SamplerBackend
 from llmtrace.data_plane.trace_writer import TraceWriter
 from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
+from llmtrace.data_plane.cuda_timing import CudaEventBackend, CudaStepTimer
 from llmtrace.data_plane.vllm_stats import (CollectorEvent, VLLMStatsSink, attach_to_engine, detach_from_engine,
                                             make_stat_logger_factory)
 from llmtrace.models.config import TracerConfig
@@ -48,6 +49,7 @@ class LLMTracer:
         config: Optional[TracerConfig] = None,
         *,
         gpu_backend: Optional[SamplerBackend] = None,
+        cuda_backend: Optional[CudaEventBackend] = None,
         **kwargs: Any,
     ):
         """Create a tracer.
@@ -72,11 +74,14 @@ class LLMTracer:
 
         self.session_id = uuid.uuid4().hex[:12]
         self.gpu_sampler = GPUSampler(self.config.gpu_sampler, backend=gpu_backend, clock_domain=self.session_id)
+        self.cuda_timer = (CudaStepTimer(backend=cuda_backend, enable_nvtx=self.config.enable_nvtx, clock_domain=self.session_id)
+                           if self.config.gpu_step_timing else None)
         self.vllm_instrumentation = VLLMInstrumentation(
             enable_batch_metadata=self.config.enable_batch_metadata,
             max_buffered=self.config.max_buffered_events,
             strict=self.config.strict_instrumentation,
             clock_domain=self.session_id,
+            cuda_timer=self.cuda_timer,
         )
         self.trace_writer = TraceWriter(
             output_dir=self.config.output_dir,
@@ -101,6 +106,8 @@ class LLMTracer:
         # Captured at instrument time; VLLMInstrumentation resets its own flags on restore.
         self._scheduler_visible_during_run: Optional[bool] = None
         self._scheduler_reason_during_run: Optional[str] = None
+        self._executor_visible_during_run: Optional[bool] = None
+        self._executor_reason_during_run: Optional[str] = None
 
     # -------------------------------------------------------------- lifecycle
 
@@ -115,6 +122,8 @@ class LLMTracer:
         self.vllm_instrumentation.instrument_engine(engine)
         self._scheduler_visible_during_run = self.vllm_instrumentation.scheduler_visible
         self._scheduler_reason_during_run = self.vllm_instrumentation.scheduler_unavailable_reason
+        self._executor_visible_during_run = self.vllm_instrumentation.executor_visible
+        self._executor_reason_during_run = self.vllm_instrumentation.executor_unavailable_reason
         if self.config.collect_vllm_stats:
             # vLLM's own per-step stats via its stat_loggers hook (works with the multiprocess core).
             # If the engine was built with stat_loggers=[tracer.stat_logger_factory()] this is a no-op.
@@ -226,6 +235,7 @@ class LLMTracer:
             batches = self.vllm_instrumentation.drain_batch_metadata()
             samples = self.gpu_sampler.drain()
             stats = self.vllm_stats.drain()
+            gpu_steps = self.cuda_timer.drain() if self.cuda_timer is not None else []
             if traces:
                 self.trace_writer.write_traces(traces)
             if batches:
@@ -234,6 +244,8 @@ class LLMTracer:
                 self.trace_writer.write_gpu_samples(samples)
             if stats:
                 self.trace_writer.write_vllm_stats(stats)
+            if gpu_steps:
+                self.trace_writer.write_gpu_steps(gpu_steps)
             # Record this drain so the analysis can check whether the tracer itself stalled the engine.
             if traces or batches or samples or stats:
                 self._collector_events.append(CollectorEvent(
@@ -255,6 +267,9 @@ class LLMTracer:
             "instrumentation": self.vllm_instrumentation.health(),
             "scheduler_visible_during_run": self._scheduler_visible_during_run,
             "scheduler_unavailable_reason_during_run": self._scheduler_reason_during_run,
+            "executor_visible_during_run": self._executor_visible_during_run,
+            "executor_unavailable_reason_during_run": self._executor_reason_during_run,
+            "cuda_timing": self.cuda_timer.stats() if self.cuda_timer is not None else {"available": False, "unavailable_reason": "disabled by config"},
             "gpu_sampler": self.gpu_sampler.stats(),
             "vllm_stats": {**self.vllm_stats.stats(), "unavailable_reason": self._stats_attach_reason},
             "writer": self.trace_writer.stats(),

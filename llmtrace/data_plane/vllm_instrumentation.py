@@ -51,6 +51,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from llmtrace.data_plane.cuda_timing import CudaStepTimer
 from llmtrace.models.trace import (
     BatchMetadata,
     RequestSpan,
@@ -128,8 +129,12 @@ class VLLMInstrumentation:
         clock_domain: Optional[str] = None,
         monotonic: Callable[[], float] = time.monotonic,
         wall: Callable[[], float] = time.time,
+        cuda_timer: Optional[CudaStepTimer] = None,
     ):
         self.enable_batch_metadata = enable_batch_metadata
+        self.cuda_timer = cuda_timer  # None: GPU span timing disabled
+        self.executor_visible = False
+        self.executor_unavailable_reason: Optional[str] = "not instrumented"
         self.max_buffered = max_buffered
         self.strict = strict
         self.clock_domain = clock_domain or uuid.uuid4().hex[:12]
@@ -202,6 +207,10 @@ class VLLMInstrumentation:
                 self._attach_scheduler(engine)
             else:
                 self.scheduler_unavailable_reason = "batch metadata disabled by config"
+            if self.cuda_timer is not None:
+                self._attach_executor(engine)
+            else:
+                self.executor_unavailable_reason = "GPU step timing disabled by config"
         except Exception:
             self._restore_all()
             self._engine = None
@@ -288,6 +297,40 @@ class VLLMInstrumentation:
         self.scheduler_visible = True
         self.scheduler_unavailable_reason = None
 
+    def _attach_executor(self, engine: Any) -> None:
+        # Verified path for vLLM 0.11.0 in-process: EngineCore.model_executor.execute_model(scheduler_output),
+        # called synchronously from EngineCore.step() on the engine thread (UniProcExecutor).
+        client = getattr(engine, "engine_core", None)
+        core = getattr(client, "engine_core", None) if client is not None else None
+        executor = getattr(core, "model_executor", None) if core is not None else None
+        assert self.cuda_timer is not None
+        if executor is None or not callable(getattr(executor, "execute_model", None)):
+            self.executor_unavailable_reason = ("model executor not reachable in-process (engine_core client is "
+                                                f"{type(client).__name__ if client is not None else 'None'})")
+            return
+        if not self.cuda_timer.start():
+            self.executor_unavailable_reason = f"CUDA events unavailable: {self.cuda_timer.unavailable_reason}"
+            return
+        if getattr(executor.execute_model, "__llmtrace_wrapped__", False):
+            raise InstrumentationError("model_executor.execute_model is already wrapped by llmtrace")
+        self._patch(executor, "execute_model", self._wrap_execute_model)
+        self.executor_visible = True
+        self.executor_unavailable_reason = None
+
+    def _wrap_execute_model(self, original: Callable) -> Callable:
+        @functools.wraps(original)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            timer = self.cuda_timer
+            if timer is not None:
+                timer.before_execute()
+            try:
+                return original(*args, **kwargs)
+            finally:
+                if timer is not None:
+                    timer.after_execute()
+
+        return wrapper
+
     def _patch(self, target: Any, name: str, factory: Callable[[Callable], Callable]) -> None:
         had_instance_attr = name in getattr(target, "__dict__", {})
         original_instance_value = target.__dict__[name] if had_instance_attr else None
@@ -314,6 +357,8 @@ class VLLMInstrumentation:
         self._patches.clear()
         self.scheduler_visible = False
         self.scheduler_unavailable_reason = "not instrumented"
+        self.executor_visible = False
+        self.executor_unavailable_reason = "not instrumented"
 
     # --------------------------------------------------------------- wrappers
 
@@ -344,15 +389,22 @@ class VLLMInstrumentation:
             self._step_index += 1
             ctx = _StepContext(self._step_index, self._monotonic(), self._wall())
             self._current_step = ctx
+            timer = self.cuda_timer if self.executor_visible else None
+            if timer is not None:
+                self._guard(timer.begin_step, ctx.index, ctx.start_wall, ctx.start_monotonic, f"llmtrace step {ctx.index}")
             try:
                 outputs = original(*args, **kwargs)
             except BaseException:
                 self._current_step = None
+                if timer is not None:
+                    self._guard(timer.end_step, (self._monotonic() - ctx.start_monotonic) * 1000.0)
                 with self._lock:
                     self._publish_batches(ctx, None)  # no end time: the step did not complete
                 raise  # engine failure surfaces unchanged; requests stay active until abort/stop
             end_m = self._monotonic()
             self._current_step = None
+            if timer is not None:
+                self._guard(timer.end_step, (end_m - ctx.start_monotonic) * 1000.0)
             self._guard(self._on_step_completed, outputs, ctx, end_m)
             return outputs
 
@@ -701,6 +753,9 @@ class VLLMInstrumentation:
                 "detected_vllm_version": self.vllm_version,
                 "scheduler_visible": self.scheduler_visible,
                 "scheduler_unavailable_reason": self.scheduler_unavailable_reason,
+                "executor_visible": self.executor_visible,
+                "executor_unavailable_reason": self.executor_unavailable_reason,
+                "cuda_timing": self.cuda_timer.stats() if self.cuda_timer is not None else None,
                 "active_requests": len(self._active),
                 "buffered_traces": len(self._completed),
                 "buffered_batches": len(self._batches),

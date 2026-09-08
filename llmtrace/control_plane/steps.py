@@ -15,7 +15,7 @@ Two distinct per-request quantities are derived from batch metadata:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from llmtrace.models.trace import BatchMetadata, RequestTrace
 
@@ -46,6 +46,11 @@ def per_request_intervals(traces: List[RequestTrace], batches: List[BatchMetadat
     """(step_ms per request, itl_ms per request)."""
     d, e = step_durations(batches), step_ends(batches)
     return ({t.request_id: request_step_ms(t, d) for t in traces}, {t.request_id: request_itl_ms(t, e) for t in traces})
+
+
+def gpu_span_by_step(gpu_steps: List[Any]) -> Dict[int, Any]:
+    """step_index -> StepGpuTiming with a resolved gpu span."""
+    return {g.step_index: g for g in gpu_steps if g.gpu_span_ms is not None}
 
 
 def ttft_from_scheduled_ms(trace: RequestTrace, arrival_delay_ms: Optional[float]) -> Optional[float]:

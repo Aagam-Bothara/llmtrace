@@ -27,6 +27,7 @@ verified vLLM interfaces; **not implemented** = absent.
 | Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
 | Evidence-based findings (`llmtrace findings`) | Implemented; the long-prompt-interference finding validated on the GPU experiment |
 | vLLM engine stats via `stat_loggers` hook | Implemented (fakes only); not yet run on hardware |
+| GPU span per step (CUDA events around `execute_model`), NVTX ranges, `host_overhead` finding | Implemented (fake backend only); not yet run on hardware |
 | Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
 | Diagnosis experiment (short requests mixed with long prompts) | Run on one GPU: traces attribute the short-request tail to steps carrying 1536-token prefill chunks; `long_prefill_token_threshold=256` cut short TTFT p95 by 63% and worst stall by 54 to 62%, doubling long-request TTFT (`experiments/mixed_prompts/README.md`) |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
@@ -57,6 +58,13 @@ and its hash, seed, model and revision, engine and llmtrace versions and git
 commit, effective engine config, GPU and driver, tracer config, per-request
 scheduled versus actual arrival, and `status: failed` with the error when a
 configuration could not run.
+
+**GPU span per step** (`gpu_steps_*.jsonl`, in-process engine core with
+`torch.cuda`): CUDA events recorded before and after each
+`model_executor.execute_model` call give the step's GPU span (an upper bound
+on GPU busy time; launch gaps included, other streams excluded) and the host
+overhead `host_step_ms - gpu_span_ms`. Read lazily, never by synchronizing.
+`enable_nvtx` adds an NVTX range per step for Nsight Systems.
 
 **Collector self-events** (`collector_*.jsonl`): when llmtrace's own drains
 ran and how long they took, so `findings` can flag engine steps the tracer

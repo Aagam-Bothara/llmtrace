@@ -26,7 +26,7 @@ _SENTINEL: Tuple[str, Optional[List[Any]]] = ("__stop__", None)
 class TraceWriter:
     """Writes RequestTrace / BatchMetadata / GPUSample records to files."""
 
-    DATA_TYPES = ("traces", "batches", "gpu", "vllm_stats", "collector")
+    DATA_TYPES = ("traces", "batches", "gpu", "vllm_stats", "collector", "gpu_steps")
 
     def __init__(
         self,
@@ -108,6 +108,9 @@ class TraceWriter:
 
     def write_collector_events(self, events: Sequence[BaseModel]) -> None:
         self._submit("collector", list(events))
+
+    def write_gpu_steps(self, records: Sequence[BaseModel]) -> None:
+        self._submit("gpu_steps", list(records))
 
     def _submit(self, data_type: str, items: List[Any]) -> None:
         if not items:

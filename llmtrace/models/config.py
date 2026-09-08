@@ -113,6 +113,14 @@ class TracerConfig(_StrictModel):
         default=True,
         description="Record scheduler batches when the vLLM scheduler is reachable in-process",
     )
+    gpu_step_timing: bool = Field(
+        default=True,
+        description="Record each engine step's GPU span with CUDA events around model_executor.execute_model "
+        "(in-process engine core and torch.cuda required; never synchronizes). Off silently when unavailable.",
+    )
+    enable_nvtx: bool = Field(
+        default=False, description="Bracket each engine step with an NVTX range (for Nsight Systems); needs gpu_step_timing"
+    )
     collect_vllm_stats: bool = Field(
         default=True,
         description="Record vLLM's own per-step stats (KV usage, queue depth, preemptions, its TTFT/ITL samples) "

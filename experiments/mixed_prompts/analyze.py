@@ -59,7 +59,7 @@ def _stats(values: List[float]) -> Dict[str, Optional[float]]:
 
 
 def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_threshold: int = 128,
-                arrival_delays_ms: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+                arrival_delays_ms: Optional[Dict[str, float]] = None, gpu_steps: Optional[List[Any]] = None) -> Dict[str, Any]:
     by_kind: Dict[str, List[RequestTrace]] = {}
     for t in traces:
         by_kind.setdefault(kind_of(t.request_id), []).append(t)
@@ -96,8 +96,24 @@ def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_
             "num_prefill": b.num_prefill, "biggest_chunk": biggest,
             "long_chunk": biggest > chunk_threshold, "request_ids": set(b.request_ids),
         })
+    span_by = {g.step_index: g for g in (gpu_steps or []) if g.gpu_span_ms is not None}
+    for s in steps:
+        g = span_by.get(s["step_index"])
+        s["gpu_span_ms"] = g.gpu_span_ms if g else None
+        s["host_overhead_ms"] = (s["duration_ms"] - g.gpu_span_ms) if g else None
     with_chunk = [s for s in steps if s["long_chunk"]]
     without = [s for s in steps if not s["long_chunk"]]
+    gpu_split = None
+    if span_by:
+        resolved = [s for s in steps if s["gpu_span_ms"] is not None]
+        gpu_split = {
+            "steps_with_gpu_span": len(resolved),
+            "gpu_span_ms": _stats([s["gpu_span_ms"] for s in resolved]),
+            "host_overhead_ms": _stats([s["host_overhead_ms"] for s in resolved]),
+            "gpu_span_ms_with_long_chunk": _stats([s["gpu_span_ms"] for s in resolved if s["long_chunk"]]),
+            "gpu_span_ms_without": _stats([s["gpu_span_ms"] for s in resolved if not s["long_chunk"]]),
+            "host_share_median": statistics.median([max(0.0, s["host_overhead_ms"]) / s["duration_ms"] for s in resolved if s["duration_ms"] > 0]),
+        }
     step_summary = {
         "steps": len(steps),
         "steps_with_long_chunk": len(with_chunk),
@@ -166,7 +182,7 @@ def analyze_run(traces: List[RequestTrace], batches: List[BatchMetadata], chunk_
         "ttft_ms_unaffected": _stats([p["ttft_ms"] for p in unaffected if p["ttft_ms"] is not None]),
     }
     return {"latency": latency, "steps": step_summary, "step_time_model": model, "interference": interference,
-            "unexplained_stalls": unexplained, "batch_metadata_available": bool(steps)}
+            "unexplained_stalls": unexplained, "gpu_split": gpu_split, "batch_metadata_available": bool(steps)}
 
 
 def explain(a: Dict[str, Any]) -> str:
@@ -190,6 +206,13 @@ def explain(a: Dict[str, Any]) -> str:
     if a["step_time_model"]:
         m = a["step_time_model"]
         lines.append(f"  step time ~ {_f(m['intercept_ms'])} ms + {_f(m['us_per_token'], 3)} us/token (r2={_f(m['r2'], 3)})")
+    g = a.get("gpu_split")
+    if g:
+        lines.append(f"  GPU span (CUDA events) on {g['steps_with_gpu_span']} steps: p50 {_f(g['gpu_span_ms']['p50'])} ms "
+                     f"(long-chunk steps {_f(g['gpu_span_ms_with_long_chunk']['p50'])} ms, others {_f(g['gpu_span_ms_without']['p50'])} ms); "
+                     f"host overhead p50 {_f(g['host_overhead_ms']['p50'])} ms, median host share {g['host_share_median']:.0%}")
+    else:
+        lines.append("  GPU span per step: unavailable (needs in-process engine core and torch.cuda; see gpu_steps_*.jsonl)")
     u = a.get("unexplained_stalls")
     if u:
         lines.append(f"  {u['count']} step(s) exceed the token model by > {_f(u['threshold_ms'])} ms (unexplained stalls):")
@@ -274,7 +297,7 @@ def _pct(v: Optional[float]) -> str:
 def load_and_analyze(run_dir: str, chunk_threshold: int) -> Dict[str, Any]:
     manifest = RunManifest.read(run_dir)
     delays = {a.request_id: a.delay_ms for a in manifest.arrivals if a.delay_ms is not None} if manifest else None
-    return analyze_run(io.load_traces([run_dir]), io.load_batches([run_dir]), chunk_threshold, delays)
+    return analyze_run(io.load_traces([run_dir]), io.load_batches([run_dir]), chunk_threshold, delays, io.load_gpu_steps([run_dir]))
 
 
 def main() -> int:

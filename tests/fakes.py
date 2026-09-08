@@ -156,9 +156,23 @@ class FakeInprocClient:
         self.engine_core = _FakeEngineCore(engine)
 
 
+class FakeModelExecutor:
+    """Shape of EngineCore.model_executor.execute_model(scheduler_output) (vLLM 0.11.0 UniProcExecutor)."""
+
+    def __init__(self, engine: "FakeLLMEngine") -> None:
+        self.engine = engine
+        self.calls = 0
+
+    def execute_model(self, scheduler_output: Any) -> Any:
+        self.calls += 1
+        self.engine._execute(scheduler_output)
+        return object()  # ModelRunnerOutput stand-in
+
+
 class _FakeEngineCore:
     def __init__(self, engine: "FakeLLMEngine") -> None:
         self.scheduler = FakeScheduler(engine)
+        self.model_executor = FakeModelExecutor(engine)
 
 
 class FakeSyncMPClient:
@@ -244,9 +258,11 @@ class FakeLLMEngine:
             raise RuntimeError("engine failure injected")
         sched = self._scheduler()
         if sched is not None:
-            sched.schedule()
+            out = sched.schedule()
+            self.engine_core.engine_core.model_executor.execute_model(out)  # in-process: executor reachable, like EngineCore.step()
         else:
-            self._do_schedule()  # same bookkeeping, just not reachable from outside
+            out = self._do_schedule()  # same bookkeeping, just not reachable from outside
+            self._execute(out)
         self.clock.advance(self.step_seconds + self.step_seconds_per_token * self.last_scheduled_tokens)
         # LLMEngine.step() records stats after processing outputs; emulate the important fields.
         if self.logger_manager is not None:
@@ -283,6 +299,9 @@ class FakeLLMEngine:
         return outputs
 
     # --- helpers --------------------------------------------------------------
+
+    def _execute(self, scheduler_output: Any) -> None:
+        """The 'GPU work' of a step: nothing to do in the fake; the clock advance happens in step()."""
 
     def _do_schedule(self) -> SchedulerOutput:
         """Real vLLM 0.11.0 order: build SchedulerOutput, then _update_after_schedule()

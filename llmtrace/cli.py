@@ -203,7 +203,7 @@ def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_t
         click.echo(f"No traces in {run_dir}", err=True)
         sys.exit(EXIT_USAGE)
     result = evaluate_all(traces, io.load_batches([run_dir]), io.load_vllm_stats([run_dir]), io.load_collector_events([run_dir]),
-                          chunk_threshold, queue_threshold_ms, kv_threshold)
+                          chunk_threshold, queue_threshold_ms, kv_threshold, io.load_gpu_steps([run_dir]))
     click.echo(format_findings(result))
     if json_out:
         Path(json_out).write_text(json.dumps([f.model_dump() for f in result], indent=2), encoding="utf-8")

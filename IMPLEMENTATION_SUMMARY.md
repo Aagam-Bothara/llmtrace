@@ -41,8 +41,13 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 * NVML backend field mapping (all fields populated on an A5000; throttle bits
   observed only as `none`).
 * TTFT/TPOT through the raw engine loop; FINAL_ONLY handling under `generate()`.
-* Device energy within 6% of an independent `nvidia-smi` integral.
-* Overhead on opt-125m: +4% (`generate()`) / +9% (cumulative loop) wall time.
+* Sampling/integration consistent with a separately collected `nvidia-smi`
+  stream of the same NVML sensor (within 0.15% over identical boundaries).
+* Overhead on opt-125m only: +4% (`generate()`) / +9% (cumulative loop) wall
+  time over 256 recorded engine steps.
+* The CPU suite on the pod ran 83 tests: `tests/test_collection.py` was
+  skipped whole by a module-level pyarrow skip (fixed afterwards; not re-run
+  on hardware).
 
 ## Implemented but unverified on hardware
 

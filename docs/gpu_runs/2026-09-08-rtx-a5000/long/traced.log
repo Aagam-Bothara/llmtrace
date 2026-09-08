@@ -1,0 +1,3069 @@
+INFO 09-08 05:38:22 [__init__.py:216] Automatically detected platform cuda.
+vLLM 0.11.0 (llmtrace verified against 0.11.0)
+VLLM_ENABLE_V1_MULTIPROCESSING=0
+  PASS  vLLM version matches the verified target
+INFO 09-08 05:38:24 [utils.py:233] non-default args: {'gpu_memory_utilization': 0.5, 'disable_log_stats': True, 'model': 'facebook/opt-125m'}
+WARNING 09-08 05:38:24 [model.py:371] The global random seed is set to 0. Since VLLM_ENABLE_V1_MULTIPROCESSING is set to False, this may affect the random state of the Python process that launched vLLM.
+INFO 09-08 05:38:25 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 05:38:25 [model.py:1510] Using max model len 2048
+INFO 09-08 05:38:25 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 05:38:25 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":512,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 05:38:28 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 05:38:28 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 05:38:28 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 05:38:28 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 05:38:28 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 05:38:29 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.85it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.84it/s]
+
+INFO 09-08 05:38:29 [default_loader.py:267] Loading weights took 0.21 seconds
+INFO 09-08 05:38:29 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.494093 seconds
+INFO 09-08 05:38:31 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 05:38:31 [backends.py:559] Dynamo bytecode transform time: 1.35 s
+INFO 09-08 05:38:31 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.221 s
+INFO 09-08 05:38:32 [monitor.py:34] torch.compile takes 1.35 s in total
+INFO 09-08 05:38:32 [gpu_worker.py:298] Available KV cache memory: 11.02 GiB
+INFO 09-08 05:38:33 [kv_cache_utils.py:1087] GPU KV cache size: 321,008 tokens
+INFO 09-08 05:38:33 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 156.74x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   6%|▌         | 4/67 [00:00<00:01, 35.65it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  22%|██▏       | 15/67 [00:00<00:00, 74.72it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  37%|███▋      | 25/67 [00:00<00:00, 82.44it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  54%|█████▎    | 36/67 [00:00<00:00, 89.98it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  70%|███████   | 47/67 [00:00<00:00, 96.03it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  85%|████████▌ | 57/67 [00:00<00:00, 86.47it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  99%|█████████▊| 66/67 [00:00<00:00, 83.07it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 67/67 [00:00<00:00, 80.13it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  29%|██▊       | 10/35 [00:00<00:00, 93.28it/s]Capturing CUDA graphs (decode, FULL):  60%|██████    | 21/35 [00:00<00:00, 102.59it/s]Capturing CUDA graphs (decode, FULL):  94%|█████████▍| 33/35 [00:00<00:00, 107.09it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 35/35 [00:00<00:00, 105.62it/s]
+INFO 09-08 05:38:34 [gpu_model_runner.py:3480] Graph capturing finished in 2 secs, took 0.21 GiB
+INFO 09-08 05:38:34 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.80 seconds
+INFO 09-08 05:38:34 [llm.py:306] Supported_tasks: ('generate',)
+engine: vllm.v1.engine.llm_engine.LLMEngine; engine_core client: InprocClient
+Adding requests:   0%|          | 0/1 [00:00<?, ?it/s]Adding requests: 100%|██████████| 1/1 [00:00<00:00, 508.34it/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00, 16.77it/s, est. speed input: 234.93 toks/s, output: 738.21 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00, 16.74it/s, est. speed input: 234.93 toks/s, output: 738.21 toks/s]
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 6145.92it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 35.88it/s, est. speed input: 502.45 toks/s, output: 950.98 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  9.30it/s, est. speed input: 146.44 toks/s, output: 622.36 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  9.30it/s, est. speed input: 1170.54 toks/s, output: 19350.45 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 83.60it/s, est. speed input: 1170.54 toks/s, output: 19350.45 toks/s]
+
+=== Phase A (run 0): LLM.generate(), FINAL_ONLY outputs; timing expected unavailable
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 5717.84it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 36.56it/s, est. speed input: 511.91 toks/s, output: 968.90 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.97it/s, est. speed input: 141.56 toks/s, output: 601.60 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.97it/s, est. speed input: 1131.57 toks/s, output: 18706.19 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 80.82it/s, est. speed input: 1131.57 toks/s, output: 18706.19 toks/s]
+[traced generate] run 0: 0.803s wall
+  PASS  generated text identical to untraced run
+{
+  "state": "stopped",
+  "session_id": "e70551635285",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 17,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 17
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.80s                │
+│ Throughput │ 79.81 req/s          │
+└────────────┴──────────────────────┘
+   Latency (step-granular, measured at   
+         engine step boundaries)         
+┏━━━━━━━━━━━┳━━━┳━━━━━┳━━━━━┳━━━━━┳━━━━━┓
+┃ Metric    ┃ N ┃ Avg ┃ P50 ┃ P95 ┃ P99 ┃
+┡━━━━━━━━━━━╇━━━╇━━━━━╇━━━━━╇━━━━━╇━━━━━┩
+│ TTFT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+│ TPOT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+└───────────┴───┴─────┴─────┴─────┴─────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 149.29 J       │
+│ Attributed to requests            │ 131.83 J       │
+│ Unallocated (idle/unattributable) │ 17.47 J        │
+│ Requests with allocation          │ 64/64          │
+│ Avg attributed per request        │ 2.06 J         │
+│ Avg per output token              │ 0.0088 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 98%            │
+│ GPU samples                       │ 988            │
+│ Avg GPU utilization               │ 55.0%          │
+│ Avg power draw                    │ 189.2 W        │
+│ Throttle incidents                │ 988            │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues      
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue          ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ gpu_throttling │ 61          │
+└────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  65: output tokens 44 == engine 44
+  PASS  65: prompt tokens match engine (14)
+  PASS  66: output tokens 256 == engine 256
+  PASS  66: prompt tokens match engine (14)
+  PASS  67: output tokens 36 == engine 36
+  PASS  67: prompt tokens match engine (14)
+  PASS  68: output tokens 256 == engine 256
+  PASS  68: prompt tokens match engine (14)
+  PASS  69: output tokens 256 == engine 256
+  PASS  69: prompt tokens match engine (14)
+  PASS  70: output tokens 256 == engine 256
+  PASS  70: prompt tokens match engine (14)
+  PASS  71: output tokens 256 == engine 256
+  PASS  71: prompt tokens match engine (14)
+  PASS  72: output tokens 256 == engine 256
+  PASS  72: prompt tokens match engine (14)
+  PASS  73: output tokens 34 == engine 34
+  PASS  73: prompt tokens match engine (14)
+  PASS  74: output tokens 256 == engine 256
+  PASS  74: prompt tokens match engine (14)
+  PASS  75: output tokens 24 == engine 24
+  PASS  75: prompt tokens match engine (14)
+  PASS  76: output tokens 256 == engine 256
+  PASS  76: prompt tokens match engine (14)
+  PASS  77: output tokens 256 == engine 256
+  PASS  77: prompt tokens match engine (14)
+  PASS  78: output tokens 256 == engine 256
+  PASS  78: prompt tokens match engine (14)
+  PASS  79: output tokens 256 == engine 256
+  PASS  79: prompt tokens match engine (14)
+  PASS  80: output tokens 256 == engine 256
+  PASS  80: prompt tokens match engine (14)
+  PASS  81: output tokens 256 == engine 256
+  PASS  81: prompt tokens match engine (14)
+  PASS  82: output tokens 256 == engine 256
+  PASS  82: prompt tokens match engine (14)
+  PASS  83: output tokens 24 == engine 24
+  PASS  83: prompt tokens match engine (14)
+  PASS  84: output tokens 256 == engine 256
+  PASS  84: prompt tokens match engine (14)
+  PASS  85: output tokens 256 == engine 256
+  PASS  85: prompt tokens match engine (14)
+  PASS  86: output tokens 256 == engine 256
+  PASS  86: prompt tokens match engine (14)
+  PASS  87: output tokens 256 == engine 256
+  PASS  87: prompt tokens match engine (14)
+  PASS  88: output tokens 256 == engine 256
+  PASS  88: prompt tokens match engine (14)
+  PASS  89: output tokens 256 == engine 256
+  PASS  89: prompt tokens match engine (14)
+  PASS  90: output tokens 34 == engine 34
+  PASS  90: prompt tokens match engine (14)
+  PASS  91: output tokens 256 == engine 256
+  PASS  91: prompt tokens match engine (14)
+  PASS  92: output tokens 256 == engine 256
+  PASS  92: prompt tokens match engine (14)
+  PASS  93: output tokens 256 == engine 256
+  PASS  93: prompt tokens match engine (14)
+  PASS  94: output tokens 256 == engine 256
+  PASS  94: prompt tokens match engine (14)
+  PASS  95: output tokens 256 == engine 256
+  PASS  95: prompt tokens match engine (14)
+  PASS  96: output tokens 256 == engine 256
+  PASS  96: prompt tokens match engine (14)
+  PASS  97: output tokens 256 == engine 256
+  PASS  97: prompt tokens match engine (14)
+  PASS  98: output tokens 256 == engine 256
+  PASS  98: prompt tokens match engine (14)
+  PASS  99: output tokens 256 == engine 256
+  PASS  99: prompt tokens match engine (14)
+  PASS  100: output tokens 256 == engine 256
+  PASS  100: prompt tokens match engine (14)
+  PASS  101: output tokens 256 == engine 256
+  PASS  101: prompt tokens match engine (14)
+  PASS  102: output tokens 256 == engine 256
+  PASS  102: prompt tokens match engine (14)
+  PASS  103: output tokens 256 == engine 256
+  PASS  103: prompt tokens match engine (14)
+  PASS  104: output tokens 256 == engine 256
+  PASS  104: prompt tokens match engine (14)
+  PASS  105: output tokens 256 == engine 256
+  PASS  105: prompt tokens match engine (14)
+  PASS  106: output tokens 256 == engine 256
+  PASS  106: prompt tokens match engine (14)
+  PASS  107: output tokens 256 == engine 256
+  PASS  107: prompt tokens match engine (14)
+  PASS  108: output tokens 256 == engine 256
+  PASS  108: prompt tokens match engine (14)
+  PASS  109: output tokens 256 == engine 256
+  PASS  109: prompt tokens match engine (14)
+  PASS  110: output tokens 256 == engine 256
+  PASS  110: prompt tokens match engine (14)
+  PASS  111: output tokens 256 == engine 256
+  PASS  111: prompt tokens match engine (14)
+  PASS  112: output tokens 256 == engine 256
+  PASS  112: prompt tokens match engine (14)
+  PASS  113: output tokens 256 == engine 256
+  PASS  113: prompt tokens match engine (14)
+  PASS  114: output tokens 256 == engine 256
+  PASS  114: prompt tokens match engine (14)
+  PASS  115: output tokens 24 == engine 24
+  PASS  115: prompt tokens match engine (14)
+  PASS  116: output tokens 256 == engine 256
+  PASS  116: prompt tokens match engine (14)
+  PASS  117: output tokens 256 == engine 256
+  PASS  117: prompt tokens match engine (14)
+  PASS  118: output tokens 256 == engine 256
+  PASS  118: prompt tokens match engine (14)
+  PASS  119: output tokens 256 == engine 256
+  PASS  119: prompt tokens match engine (14)
+  PASS  120: output tokens 256 == engine 256
+  PASS  120: prompt tokens match engine (14)
+  PASS  121: output tokens 256 == engine 256
+  PASS  121: prompt tokens match engine (14)
+  PASS  122: output tokens 256 == engine 256
+  PASS  122: prompt tokens match engine (14)
+  PASS  123: output tokens 256 == engine 256
+  PASS  123: prompt tokens match engine (14)
+  PASS  124: output tokens 256 == engine 256
+  PASS  124: prompt tokens match engine (14)
+  PASS  125: output tokens 256 == engine 256
+  PASS  125: prompt tokens match engine (14)
+  PASS  126: output tokens 256 == engine 256
+  PASS  126: prompt tokens match engine (14)
+  PASS  127: output tokens 256 == engine 256
+  PASS  127: prompt tokens match engine (14)
+  PASS  128: output tokens 256 == engine 256
+  PASS  128: prompt tokens match engine (14)
+  PASS  75: output_kind recorded as final_only (final_only)
+  PASS  75: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  75: TPOT unavailable under FINAL_ONLY
+  PASS  83: output_kind recorded as final_only (final_only)
+  PASS  83: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  83: TPOT unavailable under FINAL_ONLY
+  PASS  115: output_kind recorded as final_only (final_only)
+  PASS  115: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  115: TPOT unavailable under FINAL_ONLY
+  PASS  73: output_kind recorded as final_only (final_only)
+  PASS  73: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  73: TPOT unavailable under FINAL_ONLY
+  PASS  90: output_kind recorded as final_only (final_only)
+  PASS  90: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  90: TPOT unavailable under FINAL_ONLY
+  PASS  67: output_kind recorded as final_only (final_only)
+  PASS  67: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  67: TPOT unavailable under FINAL_ONLY
+  PASS  65: output_kind recorded as final_only (final_only)
+  PASS  65: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  65: TPOT unavailable under FINAL_ONLY
+  PASS  66: output_kind recorded as final_only (final_only)
+  PASS  66: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  66: TPOT unavailable under FINAL_ONLY
+  PASS  68: output_kind recorded as final_only (final_only)
+  PASS  68: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  68: TPOT unavailable under FINAL_ONLY
+  PASS  69: output_kind recorded as final_only (final_only)
+  PASS  69: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  69: TPOT unavailable under FINAL_ONLY
+  PASS  70: output_kind recorded as final_only (final_only)
+  PASS  70: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  70: TPOT unavailable under FINAL_ONLY
+  PASS  71: output_kind recorded as final_only (final_only)
+  PASS  71: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  71: TPOT unavailable under FINAL_ONLY
+  PASS  72: output_kind recorded as final_only (final_only)
+  PASS  72: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  72: TPOT unavailable under FINAL_ONLY
+  PASS  74: output_kind recorded as final_only (final_only)
+  PASS  74: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  74: TPOT unavailable under FINAL_ONLY
+  PASS  76: output_kind recorded as final_only (final_only)
+  PASS  76: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  76: TPOT unavailable under FINAL_ONLY
+  PASS  77: output_kind recorded as final_only (final_only)
+  PASS  77: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  77: TPOT unavailable under FINAL_ONLY
+  PASS  78: output_kind recorded as final_only (final_only)
+  PASS  78: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  78: TPOT unavailable under FINAL_ONLY
+  PASS  79: output_kind recorded as final_only (final_only)
+  PASS  79: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  79: TPOT unavailable under FINAL_ONLY
+  PASS  80: output_kind recorded as final_only (final_only)
+  PASS  80: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  80: TPOT unavailable under FINAL_ONLY
+  PASS  81: output_kind recorded as final_only (final_only)
+  PASS  81: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  81: TPOT unavailable under FINAL_ONLY
+  PASS  82: output_kind recorded as final_only (final_only)
+  PASS  82: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  82: TPOT unavailable under FINAL_ONLY
+  PASS  84: output_kind recorded as final_only (final_only)
+  PASS  84: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  84: TPOT unavailable under FINAL_ONLY
+  PASS  85: output_kind recorded as final_only (final_only)
+  PASS  85: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  85: TPOT unavailable under FINAL_ONLY
+  PASS  86: output_kind recorded as final_only (final_only)
+  PASS  86: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  86: TPOT unavailable under FINAL_ONLY
+  PASS  87: output_kind recorded as final_only (final_only)
+  PASS  87: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  87: TPOT unavailable under FINAL_ONLY
+  PASS  88: output_kind recorded as final_only (final_only)
+  PASS  88: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  88: TPOT unavailable under FINAL_ONLY
+  PASS  89: output_kind recorded as final_only (final_only)
+  PASS  89: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  89: TPOT unavailable under FINAL_ONLY
+  PASS  91: output_kind recorded as final_only (final_only)
+  PASS  91: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  91: TPOT unavailable under FINAL_ONLY
+  PASS  92: output_kind recorded as final_only (final_only)
+  PASS  92: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  92: TPOT unavailable under FINAL_ONLY
+  PASS  93: output_kind recorded as final_only (final_only)
+  PASS  93: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  93: TPOT unavailable under FINAL_ONLY
+  PASS  94: output_kind recorded as final_only (final_only)
+  PASS  94: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  94: TPOT unavailable under FINAL_ONLY
+  PASS  95: output_kind recorded as final_only (final_only)
+  PASS  95: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  95: TPOT unavailable under FINAL_ONLY
+  PASS  96: output_kind recorded as final_only (final_only)
+  PASS  96: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  96: TPOT unavailable under FINAL_ONLY
+  PASS  97: output_kind recorded as final_only (final_only)
+  PASS  97: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  97: TPOT unavailable under FINAL_ONLY
+  PASS  98: output_kind recorded as final_only (final_only)
+  PASS  98: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  98: TPOT unavailable under FINAL_ONLY
+  PASS  99: output_kind recorded as final_only (final_only)
+  PASS  99: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  99: TPOT unavailable under FINAL_ONLY
+  PASS  100: output_kind recorded as final_only (final_only)
+  PASS  100: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  100: TPOT unavailable under FINAL_ONLY
+  PASS  101: output_kind recorded as final_only (final_only)
+  PASS  101: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  101: TPOT unavailable under FINAL_ONLY
+  PASS  102: output_kind recorded as final_only (final_only)
+  PASS  102: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  102: TPOT unavailable under FINAL_ONLY
+  PASS  103: output_kind recorded as final_only (final_only)
+  PASS  103: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  103: TPOT unavailable under FINAL_ONLY
+  PASS  104: output_kind recorded as final_only (final_only)
+  PASS  104: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  104: TPOT unavailable under FINAL_ONLY
+  PASS  105: output_kind recorded as final_only (final_only)
+  PASS  105: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  105: TPOT unavailable under FINAL_ONLY
+  PASS  106: output_kind recorded as final_only (final_only)
+  PASS  106: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  106: TPOT unavailable under FINAL_ONLY
+  PASS  107: output_kind recorded as final_only (final_only)
+  PASS  107: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  107: TPOT unavailable under FINAL_ONLY
+  PASS  108: output_kind recorded as final_only (final_only)
+  PASS  108: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  108: TPOT unavailable under FINAL_ONLY
+  PASS  109: output_kind recorded as final_only (final_only)
+  PASS  109: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  109: TPOT unavailable under FINAL_ONLY
+  PASS  110: output_kind recorded as final_only (final_only)
+  PASS  110: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  110: TPOT unavailable under FINAL_ONLY
+  PASS  111: output_kind recorded as final_only (final_only)
+  PASS  111: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  111: TPOT unavailable under FINAL_ONLY
+  PASS  112: output_kind recorded as final_only (final_only)
+  PASS  112: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  112: TPOT unavailable under FINAL_ONLY
+  PASS  113: output_kind recorded as final_only (final_only)
+  PASS  113: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  113: TPOT unavailable under FINAL_ONLY
+  PASS  114: output_kind recorded as final_only (final_only)
+  PASS  114: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  114: TPOT unavailable under FINAL_ONLY
+  PASS  116: output_kind recorded as final_only (final_only)
+  PASS  116: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  116: TPOT unavailable under FINAL_ONLY
+  PASS  117: output_kind recorded as final_only (final_only)
+  PASS  117: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  117: TPOT unavailable under FINAL_ONLY
+  PASS  118: output_kind recorded as final_only (final_only)
+  PASS  118: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  118: TPOT unavailable under FINAL_ONLY
+  PASS  119: output_kind recorded as final_only (final_only)
+  PASS  119: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  119: TPOT unavailable under FINAL_ONLY
+  PASS  120: output_kind recorded as final_only (final_only)
+  PASS  120: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  120: TPOT unavailable under FINAL_ONLY
+  PASS  121: output_kind recorded as final_only (final_only)
+  PASS  121: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  121: TPOT unavailable under FINAL_ONLY
+  PASS  122: output_kind recorded as final_only (final_only)
+  PASS  122: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  122: TPOT unavailable under FINAL_ONLY
+  PASS  123: output_kind recorded as final_only (final_only)
+  PASS  123: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  123: TPOT unavailable under FINAL_ONLY
+  PASS  124: output_kind recorded as final_only (final_only)
+  PASS  124: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  124: TPOT unavailable under FINAL_ONLY
+  PASS  125: output_kind recorded as final_only (final_only)
+  PASS  125: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  125: TPOT unavailable under FINAL_ONLY
+  PASS  126: output_kind recorded as final_only (final_only)
+  PASS  126: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  126: TPOT unavailable under FINAL_ONLY
+  PASS  127: output_kind recorded as final_only (final_only)
+  PASS  127: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  127: TPOT unavailable under FINAL_ONLY
+  PASS  128: output_kind recorded as final_only (final_only)
+  PASS  128: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  128: TPOT unavailable under FINAL_ONLY
+
+=== Phase B (run 0): raw LLMEngine loop with CUMULATIVE outputs; timing expected
+[traced engine loop] run 0: 0.878s wall
+  PASS  64 finished outputs
+  PASS  engine-loop outputs returned in input order
+  PASS  engine-loop text identical to generate() text (matched by request id)
+{
+  "state": "stopped",
+  "session_id": "44831f6f3bf1",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 18,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 18
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.88s                │
+│ Throughput │ 72.98 req/s          │
+└────────────┴──────────────────────┘
+ Latency (step-granular, measured at engine step  
+                   boundaries)                    
+┏━━━━━━━━━━━┳━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃ Metric    ┃ N  ┃ Avg   ┃ P50   ┃ P95   ┃ P99   ┃
+┡━━━━━━━━━━━╇━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ TTFT (ms) │ 64 │ 13.52 │ 13.38 │ 18.07 │ 18.77 │
+│ TPOT (ms) │ 64 │ 3.37  │ 3.37  │ 3.37  │ 3.38  │
+└───────────┴────┴───────┴───────┴───────┴───────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 177.79 J       │
+│ Attributed to requests            │ 147.55 J       │
+│ Unallocated (idle/unattributable) │ 30.24 J        │
+│ Requests with allocation          │ 61/64          │
+│ Avg attributed per request        │ 2.42 J         │
+│ Avg per output token              │ 0.0100 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 97%            │
+│ GPU samples                       │ 987            │
+│ Avg GPU utilization               │ 39.2%          │
+│ Avg power draw                    │ 208.9 W        │
+│ Throttle incidents                │ 70             │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues       
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue           ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ host_bottleneck │ 61          │
+└─────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  smoke-0-0: output tokens 44 == engine 44
+  PASS  smoke-0-0: prompt tokens match engine (14)
+  PASS  smoke-0-1: output tokens 256 == engine 256
+  PASS  smoke-0-1: prompt tokens match engine (14)
+  PASS  smoke-0-2: output tokens 36 == engine 36
+  PASS  smoke-0-2: prompt tokens match engine (14)
+  PASS  smoke-0-3: output tokens 256 == engine 256
+  PASS  smoke-0-3: prompt tokens match engine (14)
+  PASS  smoke-0-4: output tokens 256 == engine 256
+  PASS  smoke-0-4: prompt tokens match engine (14)
+  PASS  smoke-0-5: output tokens 256 == engine 256
+  PASS  smoke-0-5: prompt tokens match engine (14)
+  PASS  smoke-0-6: output tokens 256 == engine 256
+  PASS  smoke-0-6: prompt tokens match engine (14)
+  PASS  smoke-0-7: output tokens 256 == engine 256
+  PASS  smoke-0-7: prompt tokens match engine (14)
+  PASS  smoke-0-8: output tokens 34 == engine 34
+  PASS  smoke-0-8: prompt tokens match engine (14)
+  PASS  smoke-0-9: output tokens 256 == engine 256
+  PASS  smoke-0-9: prompt tokens match engine (14)
+  PASS  smoke-0-10: output tokens 24 == engine 24
+  PASS  smoke-0-10: prompt tokens match engine (14)
+  PASS  smoke-0-11: output tokens 256 == engine 256
+  PASS  smoke-0-11: prompt tokens match engine (14)
+  PASS  smoke-0-12: output tokens 256 == engine 256
+  PASS  smoke-0-12: prompt tokens match engine (14)
+  PASS  smoke-0-13: output tokens 256 == engine 256
+  PASS  smoke-0-13: prompt tokens match engine (14)
+  PASS  smoke-0-14: output tokens 256 == engine 256
+  PASS  smoke-0-14: prompt tokens match engine (14)
+  PASS  smoke-0-15: output tokens 256 == engine 256
+  PASS  smoke-0-15: prompt tokens match engine (14)
+  PASS  smoke-0-16: output tokens 256 == engine 256
+  PASS  smoke-0-16: prompt tokens match engine (14)
+  PASS  smoke-0-17: output tokens 256 == engine 256
+  PASS  smoke-0-17: prompt tokens match engine (14)
+  PASS  smoke-0-18: output tokens 24 == engine 24
+  PASS  smoke-0-18: prompt tokens match engine (14)
+  PASS  smoke-0-19: output tokens 256 == engine 256
+  PASS  smoke-0-19: prompt tokens match engine (14)
+  PASS  smoke-0-20: output tokens 256 == engine 256
+  PASS  smoke-0-20: prompt tokens match engine (14)
+  PASS  smoke-0-21: output tokens 256 == engine 256
+  PASS  smoke-0-21: prompt tokens match engine (14)
+  PASS  smoke-0-22: output tokens 256 == engine 256
+  PASS  smoke-0-22: prompt tokens match engine (14)
+  PASS  smoke-0-23: output tokens 256 == engine 256
+  PASS  smoke-0-23: prompt tokens match engine (14)
+  PASS  smoke-0-24: output tokens 256 == engine 256
+  PASS  smoke-0-24: prompt tokens match engine (14)
+  PASS  smoke-0-25: output tokens 34 == engine 34
+  PASS  smoke-0-25: prompt tokens match engine (14)
+  PASS  smoke-0-26: output tokens 256 == engine 256
+  PASS  smoke-0-26: prompt tokens match engine (14)
+  PASS  smoke-0-27: output tokens 256 == engine 256
+  PASS  smoke-0-27: prompt tokens match engine (14)
+  PASS  smoke-0-28: output tokens 256 == engine 256
+  PASS  smoke-0-28: prompt tokens match engine (14)
+  PASS  smoke-0-29: output tokens 256 == engine 256
+  PASS  smoke-0-29: prompt tokens match engine (14)
+  PASS  smoke-0-30: output tokens 256 == engine 256
+  PASS  smoke-0-30: prompt tokens match engine (14)
+  PASS  smoke-0-31: output tokens 256 == engine 256
+  PASS  smoke-0-31: prompt tokens match engine (14)
+  PASS  smoke-0-32: output tokens 256 == engine 256
+  PASS  smoke-0-32: prompt tokens match engine (14)
+  PASS  smoke-0-33: output tokens 256 == engine 256
+  PASS  smoke-0-33: prompt tokens match engine (14)
+  PASS  smoke-0-34: output tokens 256 == engine 256
+  PASS  smoke-0-34: prompt tokens match engine (14)
+  PASS  smoke-0-35: output tokens 256 == engine 256
+  PASS  smoke-0-35: prompt tokens match engine (14)
+  PASS  smoke-0-36: output tokens 256 == engine 256
+  PASS  smoke-0-36: prompt tokens match engine (14)
+  PASS  smoke-0-37: output tokens 256 == engine 256
+  PASS  smoke-0-37: prompt tokens match engine (14)
+  PASS  smoke-0-38: output tokens 256 == engine 256
+  PASS  smoke-0-38: prompt tokens match engine (14)
+  PASS  smoke-0-39: output tokens 256 == engine 256
+  PASS  smoke-0-39: prompt tokens match engine (14)
+  PASS  smoke-0-40: output tokens 256 == engine 256
+  PASS  smoke-0-40: prompt tokens match engine (14)
+  PASS  smoke-0-41: output tokens 256 == engine 256
+  PASS  smoke-0-41: prompt tokens match engine (14)
+  PASS  smoke-0-42: output tokens 256 == engine 256
+  PASS  smoke-0-42: prompt tokens match engine (14)
+  PASS  smoke-0-43: output tokens 256 == engine 256
+  PASS  smoke-0-43: prompt tokens match engine (14)
+  PASS  smoke-0-44: output tokens 256 == engine 256
+  PASS  smoke-0-44: prompt tokens match engine (14)
+  PASS  smoke-0-45: output tokens 256 == engine 256
+  PASS  smoke-0-45: prompt tokens match engine (14)
+  PASS  smoke-0-46: output tokens 256 == engine 256
+  PASS  smoke-0-46: prompt tokens match engine (14)
+  PASS  smoke-0-47: output tokens 256 == engine 256
+  PASS  smoke-0-47: prompt tokens match engine (14)
+  PASS  smoke-0-48: output tokens 256 == engine 256
+  PASS  smoke-0-48: prompt tokens match engine (14)
+  PASS  smoke-0-49: output tokens 256 == engine 256
+  PASS  smoke-0-49: prompt tokens match engine (14)
+  PASS  smoke-0-50: output tokens 24 == engine 24
+  PASS  smoke-0-50: prompt tokens match engine (14)
+  PASS  smoke-0-51: output tokens 256 == engine 256
+  PASS  smoke-0-51: prompt tokens match engine (14)
+  PASS  smoke-0-52: output tokens 256 == engine 256
+  PASS  smoke-0-52: prompt tokens match engine (14)
+  PASS  smoke-0-53: output tokens 256 == engine 256
+  PASS  smoke-0-53: prompt tokens match engine (14)
+  PASS  smoke-0-54: output tokens 256 == engine 256
+  PASS  smoke-0-54: prompt tokens match engine (14)
+  PASS  smoke-0-55: output tokens 256 == engine 256
+  PASS  smoke-0-55: prompt tokens match engine (14)
+  PASS  smoke-0-56: output tokens 256 == engine 256
+  PASS  smoke-0-56: prompt tokens match engine (14)
+  PASS  smoke-0-57: output tokens 256 == engine 256
+  PASS  smoke-0-57: prompt tokens match engine (14)
+  PASS  smoke-0-58: output tokens 256 == engine 256
+  PASS  smoke-0-58: prompt tokens match engine (14)
+  PASS  smoke-0-59: output tokens 256 == engine 256
+  PASS  smoke-0-59: prompt tokens match engine (14)
+  PASS  smoke-0-60: output tokens 256 == engine 256
+  PASS  smoke-0-60: prompt tokens match engine (14)
+  PASS  smoke-0-61: output tokens 256 == engine 256
+  PASS  smoke-0-61: prompt tokens match engine (14)
+  PASS  smoke-0-62: output tokens 256 == engine 256
+  PASS  smoke-0-62: prompt tokens match engine (14)
+  PASS  smoke-0-63: output tokens 256 == engine 256
+  PASS  smoke-0-63: prompt tokens match engine (14)
+  PASS  smoke-0-10: output_kind cumulative (cumulative)
+  PASS  smoke-0-10: TTFT measured (16.78150286898017)
+  PASS  smoke-0-10: TPOT measured (3.382265608271827)
+  PASS  smoke-0-10: one token at first observation (no spec decode)
+  PASS  smoke-0-10: queue + prefill == TTFT
+  PASS  smoke-0-18: output_kind cumulative (cumulative)
+  PASS  smoke-0-18: TTFT measured (15.573366079479456)
+  PASS  smoke-0-18: TPOT measured (3.382265608271827)
+  PASS  smoke-0-18: one token at first observation (no spec decode)
+  PASS  smoke-0-18: queue + prefill == TTFT
+  PASS  smoke-0-50: output_kind cumulative (cumulative)
+  PASS  smoke-0-50: TTFT measured (10.68817893974483)
+  PASS  smoke-0-50: TPOT measured (3.382265608271827)
+  PASS  smoke-0-50: one token at first observation (no spec decode)
+  PASS  smoke-0-50: queue + prefill == TTFT
+  PASS  smoke-0-8: output_kind cumulative (cumulative)
+  PASS  smoke-0-8: TTFT measured (17.081073950976133)
+  PASS  smoke-0-8: TPOT measured (3.3612673057977)
+  PASS  smoke-0-8: one token at first observation (no spec decode)
+  PASS  smoke-0-8: queue + prefill == TTFT
+  PASS  smoke-0-25: output_kind cumulative (cumulative)
+  PASS  smoke-0-25: TTFT measured (14.420938910916448)
+  PASS  smoke-0-25: TPOT measured (3.3612673057977)
+  PASS  smoke-0-25: one token at first observation (no spec decode)
+  PASS  smoke-0-25: queue + prefill == TTFT
+  PASS  smoke-0-2: output_kind cumulative (cumulative)
+  PASS  smoke-0-2: TTFT measured (18.251519883051515)
+  PASS  smoke-0-2: TPOT measured (3.36451596979584)
+  PASS  smoke-0-2: one token at first observation (no spec decode)
+  PASS  smoke-0-2: queue + prefill == TTFT
+  PASS  smoke-0-0: output_kind cumulative (cumulative)
+  PASS  smoke-0-0: TTFT measured (18.77140300348401)
+  PASS  smoke-0-0: TPOT measured (3.3379795603714015)
+  PASS  smoke-0-0: one token at first observation (no spec decode)
+  PASS  smoke-0-0: queue + prefill == TTFT
+  PASS  smoke-0-1: output_kind cumulative (cumulative)
+  PASS  smoke-0-1: TTFT measured (18.44672206789255)
+  PASS  smoke-0-1: TPOT measured (3.365420235101791)
+  PASS  smoke-0-1: one token at first observation (no spec decode)
+  PASS  smoke-0-1: queue + prefill == TTFT
+  PASS  smoke-0-3: output_kind cumulative (cumulative)
+  PASS  smoke-0-3: TTFT measured (18.07345892302692)
+  PASS  smoke-0-3: TPOT measured (3.365420235101791)
+  PASS  smoke-0-3: one token at first observation (no spec decode)
+  PASS  smoke-0-3: queue + prefill == TTFT
+  PASS  smoke-0-4: output_kind cumulative (cumulative)
+  PASS  smoke-0-4: TTFT measured (17.879768973216414)
+  PASS  smoke-0-4: TPOT measured (3.365420235101791)
+  PASS  smoke-0-4: one token at first observation (no spec decode)
+  PASS  smoke-0-4: queue + prefill == TTFT
+  PASS  smoke-0-5: output_kind cumulative (cumulative)
+  PASS  smoke-0-5: TTFT measured (17.648797016590834)
+  PASS  smoke-0-5: TPOT measured (3.365420235101791)
+  PASS  smoke-0-5: one token at first observation (no spec decode)
+  PASS  smoke-0-5: queue + prefill == TTFT
+  PASS  smoke-0-6: output_kind cumulative (cumulative)
+  PASS  smoke-0-6: TTFT measured (17.410615924745798)
+  PASS  smoke-0-6: TPOT measured (3.365420235101791)
+  PASS  smoke-0-6: one token at first observation (no spec decode)
+  PASS  smoke-0-6: queue + prefill == TTFT
+  PASS  smoke-0-7: output_kind cumulative (cumulative)
+  PASS  smoke-0-7: TTFT measured (17.239674925804138)
+  PASS  smoke-0-7: TPOT measured (3.365420235101791)
+  PASS  smoke-0-7: one token at first observation (no spec decode)
+  PASS  smoke-0-7: queue + prefill == TTFT
+  PASS  smoke-0-9: output_kind cumulative (cumulative)
+  PASS  smoke-0-9: TTFT measured (16.9307729229331)
+  PASS  smoke-0-9: TPOT measured (3.365420235101791)
+  PASS  smoke-0-9: one token at first observation (no spec decode)
+  PASS  smoke-0-9: queue + prefill == TTFT
+  PASS  smoke-0-11: output_kind cumulative (cumulative)
+  PASS  smoke-0-11: TTFT measured (16.620121896266937)
+  PASS  smoke-0-11: TPOT measured (3.365420235101791)
+  PASS  smoke-0-11: one token at first observation (no spec decode)
+  PASS  smoke-0-11: queue + prefill == TTFT
+  PASS  smoke-0-12: output_kind cumulative (cumulative)
+  PASS  smoke-0-12: TTFT measured (16.468561021611094)
+  PASS  smoke-0-12: TPOT measured (3.365420235101791)
+  PASS  smoke-0-12: one token at first observation (no spec decode)
+  PASS  smoke-0-12: queue + prefill == TTFT
+  PASS  smoke-0-13: output_kind cumulative (cumulative)
+  PASS  smoke-0-13: TTFT measured (16.321450006216764)
+  PASS  smoke-0-13: TPOT measured (3.365420235101791)
+  PASS  smoke-0-13: one token at first observation (no spec decode)
+  PASS  smoke-0-13: queue + prefill == TTFT
+  PASS  smoke-0-14: output_kind cumulative (cumulative)
+  PASS  smoke-0-14: TTFT measured (16.176088945940137)
+  PASS  smoke-0-14: TPOT measured (3.365420235101791)
+  PASS  smoke-0-14: one token at first observation (no spec decode)
+  PASS  smoke-0-14: queue + prefill == TTFT
+  PASS  smoke-0-15: output_kind cumulative (cumulative)
+  PASS  smoke-0-15: TTFT measured (16.028787940740585)
+  PASS  smoke-0-15: TPOT measured (3.365420235101791)
+  PASS  smoke-0-15: one token at first observation (no spec decode)
+  PASS  smoke-0-15: queue + prefill == TTFT
+  PASS  smoke-0-16: output_kind cumulative (cumulative)
+  PASS  smoke-0-16: TTFT measured (15.88069787248969)
+  PASS  smoke-0-16: TPOT measured (3.365420235101791)
+  PASS  smoke-0-16: one token at first observation (no spec decode)
+  PASS  smoke-0-16: queue + prefill == TTFT
+  PASS  smoke-0-17: output_kind cumulative (cumulative)
+  PASS  smoke-0-17: TTFT measured (15.733696985989809)
+  PASS  smoke-0-17: TPOT measured (3.365420235101791)
+  PASS  smoke-0-17: one token at first observation (no spec decode)
+  PASS  smoke-0-17: queue + prefill == TTFT
+  PASS  smoke-0-19: output_kind cumulative (cumulative)
+  PASS  smoke-0-19: TTFT measured (15.419164905324578)
+  PASS  smoke-0-19: TPOT measured (3.365420235101791)
+  PASS  smoke-0-19: one token at first observation (no spec decode)
+  PASS  smoke-0-19: queue + prefill == TTFT
+  PASS  smoke-0-20: output_kind cumulative (cumulative)
+  PASS  smoke-0-20: TTFT measured (15.275213867425919)
+  PASS  smoke-0-20: TPOT measured (3.365420235101791)
+  PASS  smoke-0-20: one token at first observation (no spec decode)
+  PASS  smoke-0-20: queue + prefill == TTFT
+  PASS  smoke-0-21: output_kind cumulative (cumulative)
+  PASS  smoke-0-21: TTFT measured (15.024092979729176)
+  PASS  smoke-0-21: TPOT measured (3.365420235101791)
+  PASS  smoke-0-21: one token at first observation (no spec decode)
+  PASS  smoke-0-21: queue + prefill == TTFT
+  PASS  smoke-0-22: output_kind cumulative (cumulative)
+  PASS  smoke-0-22: TTFT measured (14.874201966449618)
+  PASS  smoke-0-22: TPOT measured (3.365420235101791)
+  PASS  smoke-0-22: one token at first observation (no spec decode)
+  PASS  smoke-0-22: queue + prefill == TTFT
+  PASS  smoke-0-23: output_kind cumulative (cumulative)
+  PASS  smoke-0-23: TTFT measured (14.727640897035599)
+  PASS  smoke-0-23: TPOT measured (3.365420235101791)
+  PASS  smoke-0-23: one token at first observation (no spec decode)
+  PASS  smoke-0-23: queue + prefill == TTFT
+  PASS  smoke-0-24: output_kind cumulative (cumulative)
+  PASS  smoke-0-24: TTFT measured (14.57100990228355)
+  PASS  smoke-0-24: TPOT measured (3.365420235101791)
+  PASS  smoke-0-24: one token at first observation (no spec decode)
+  PASS  smoke-0-24: queue + prefill == TTFT
+  PASS  smoke-0-26: output_kind cumulative (cumulative)
+  PASS  smoke-0-26: TTFT measured (14.277828857302666)
+  PASS  smoke-0-26: TPOT measured (3.365420235101791)
+  PASS  smoke-0-26: one token at first observation (no spec decode)
+  PASS  smoke-0-26: queue + prefill == TTFT
+  PASS  smoke-0-27: output_kind cumulative (cumulative)
+  PASS  smoke-0-27: TTFT measured (14.131957897916436)
+  PASS  smoke-0-27: TPOT measured (3.365420235101791)
+  PASS  smoke-0-27: one token at first observation (no spec decode)
+  PASS  smoke-0-27: queue + prefill == TTFT
+  PASS  smoke-0-28: output_kind cumulative (cumulative)
+  PASS  smoke-0-28: TTFT measured (13.980817049741745)
+  PASS  smoke-0-28: TPOT measured (3.365420235101791)
+  PASS  smoke-0-28: one token at first observation (no spec decode)
+  PASS  smoke-0-28: queue + prefill == TTFT
+  PASS  smoke-0-29: output_kind cumulative (cumulative)
+  PASS  smoke-0-29: TTFT measured (13.837345875799656)
+  PASS  smoke-0-29: TPOT measured (3.365420235101791)
+  PASS  smoke-0-29: one token at first observation (no spec decode)
+  PASS  smoke-0-29: queue + prefill == TTFT
+  PASS  smoke-0-30: output_kind cumulative (cumulative)
+  PASS  smoke-0-30: TTFT measured (13.68109486065805)
+  PASS  smoke-0-30: TPOT measured (3.365420235101791)
+  PASS  smoke-0-30: one token at first observation (no spec decode)
+  PASS  smoke-0-30: queue + prefill == TTFT
+  PASS  smoke-0-31: output_kind cumulative (cumulative)
+  PASS  smoke-0-31: TTFT measured (13.532253913581371)
+  PASS  smoke-0-31: TPOT measured (3.365420235101791)
+  PASS  smoke-0-31: one token at first observation (no spec decode)
+  PASS  smoke-0-31: queue + prefill == TTFT
+  PASS  smoke-0-32: output_kind cumulative (cumulative)
+  PASS  smoke-0-32: TTFT measured (13.382873963564634)
+  PASS  smoke-0-32: TPOT measured (3.365420235101791)
+  PASS  smoke-0-32: one token at first observation (no spec decode)
+  PASS  smoke-0-32: queue + prefill == TTFT
+  PASS  smoke-0-33: output_kind cumulative (cumulative)
+  PASS  smoke-0-33: TTFT measured (13.237582985311747)
+  PASS  smoke-0-33: TPOT measured (3.365420235101791)
+  PASS  smoke-0-33: one token at first observation (no spec decode)
+  PASS  smoke-0-33: queue + prefill == TTFT
+  PASS  smoke-0-34: output_kind cumulative (cumulative)
+  PASS  smoke-0-34: TTFT measured (13.095201924443245)
+  PASS  smoke-0-34: TPOT measured (3.365420235101791)
+  PASS  smoke-0-34: one token at first observation (no spec decode)
+  PASS  smoke-0-34: queue + prefill == TTFT
+  PASS  smoke-0-35: output_kind cumulative (cumulative)
+  PASS  smoke-0-35: TTFT measured (12.951771030202508)
+  PASS  smoke-0-35: TPOT measured (3.365420235101791)
+  PASS  smoke-0-35: one token at first observation (no spec decode)
+  PASS  smoke-0-35: queue + prefill == TTFT
+  PASS  smoke-0-36: output_kind cumulative (cumulative)
+  PASS  smoke-0-36: TTFT measured (12.806080980226398)
+  PASS  smoke-0-36: TPOT measured (3.365420235101791)
+  PASS  smoke-0-36: one token at first observation (no spec decode)
+  PASS  smoke-0-36: queue + prefill == TTFT
+  PASS  smoke-0-37: output_kind cumulative (cumulative)
+  PASS  smoke-0-37: TTFT measured (12.650999939069152)
+  PASS  smoke-0-37: TPOT measured (3.365420235101791)
+  PASS  smoke-0-37: one token at first observation (no spec decode)
+  PASS  smoke-0-37: queue + prefill == TTFT
+  PASS  smoke-0-38: output_kind cumulative (cumulative)
+  PASS  smoke-0-38: TTFT measured (12.50360906124115)
+  PASS  smoke-0-38: TPOT measured (3.365420235101791)
+  PASS  smoke-0-38: one token at first observation (no spec decode)
+  PASS  smoke-0-38: queue + prefill == TTFT
+  PASS  smoke-0-39: output_kind cumulative (cumulative)
+  PASS  smoke-0-39: TTFT measured (12.35802797600627)
+  PASS  smoke-0-39: TPOT measured (3.365420235101791)
+  PASS  smoke-0-39: one token at first observation (no spec decode)
+  PASS  smoke-0-39: queue + prefill == TTFT
+  PASS  smoke-0-40: output_kind cumulative (cumulative)
+  PASS  smoke-0-40: TTFT measured (12.214846909046173)
+  PASS  smoke-0-40: TPOT measured (3.365420235101791)
+  PASS  smoke-0-40: one token at first observation (no spec decode)
+  PASS  smoke-0-40: queue + prefill == TTFT
+  PASS  smoke-0-41: output_kind cumulative (cumulative)
+  PASS  smoke-0-41: TTFT measured (12.069826014339924)
+  PASS  smoke-0-41: TPOT measured (3.365420235101791)
+  PASS  smoke-0-41: one token at first observation (no spec decode)
+  PASS  smoke-0-41: queue + prefill == TTFT
+  PASS  smoke-0-42: output_kind cumulative (cumulative)
+  PASS  smoke-0-42: TTFT measured (11.876055970788002)
+  PASS  smoke-0-42: TPOT measured (3.365420235101791)
+  PASS  smoke-0-42: one token at first observation (no spec decode)
+  PASS  smoke-0-42: queue + prefill == TTFT
+  PASS  smoke-0-43: output_kind cumulative (cumulative)
+  PASS  smoke-0-43: TTFT measured (11.72767486423254)
+  PASS  smoke-0-43: TPOT measured (3.365420235101791)
+  PASS  smoke-0-43: one token at first observation (no spec decode)
+  PASS  smoke-0-43: queue + prefill == TTFT
+  PASS  smoke-0-44: output_kind cumulative (cumulative)
+  PASS  smoke-0-44: TTFT measured (11.568103916943073)
+  PASS  smoke-0-44: TPOT measured (3.365420235101791)
+  PASS  smoke-0-44: one token at first observation (no spec decode)
+  PASS  smoke-0-44: queue + prefill == TTFT
+  PASS  smoke-0-45: output_kind cumulative (cumulative)
+  PASS  smoke-0-45: TTFT measured (11.42583298496902)
+  PASS  smoke-0-45: TPOT measured (3.365420235101791)
+  PASS  smoke-0-45: one token at first observation (no spec decode)
+  PASS  smoke-0-45: queue + prefill == TTFT
+  PASS  smoke-0-46: output_kind cumulative (cumulative)
+  PASS  smoke-0-46: TTFT measured (11.28227193839848)
+  PASS  smoke-0-46: TPOT measured (3.365420235101791)
+  PASS  smoke-0-46: one token at first observation (no spec decode)
+  PASS  smoke-0-46: queue + prefill == TTFT
+  PASS  smoke-0-47: output_kind cumulative (cumulative)
+  PASS  smoke-0-47: TTFT measured (11.137441033497453)
+  PASS  smoke-0-47: TPOT measured (3.365420235101791)
+  PASS  smoke-0-47: one token at first observation (no spec decode)
+  PASS  smoke-0-47: queue + prefill == TTFT
+  PASS  smoke-0-48: output_kind cumulative (cumulative)
+  PASS  smoke-0-48: TTFT measured (10.993591044098139)
+  PASS  smoke-0-48: TPOT measured (3.365420235101791)
+  PASS  smoke-0-48: one token at first observation (no spec decode)
+  PASS  smoke-0-48: queue + prefill == TTFT
+  PASS  smoke-0-49: output_kind cumulative (cumulative)
+  PASS  smoke-0-49: TTFT measured (10.851260041818023)
+  PASS  smoke-0-49: TPOT measured (3.365420235101791)
+  PASS  smoke-0-49: one token at first observation (no spec decode)
+  PASS  smoke-0-49: queue + prefill == TTFT
+  PASS  smoke-0-51: output_kind cumulative (cumulative)
+  PASS  smoke-0-51: TTFT measured (10.538657894358039)
+  PASS  smoke-0-51: TPOT measured (3.365420235101791)
+  PASS  smoke-0-51: one token at first observation (no spec decode)
+  PASS  smoke-0-51: queue + prefill == TTFT
+  PASS  smoke-0-52: output_kind cumulative (cumulative)
+  PASS  smoke-0-52: TTFT measured (10.393516859039664)
+  PASS  smoke-0-52: TPOT measured (3.365420235101791)
+  PASS  smoke-0-52: one token at first observation (no spec decode)
+  PASS  smoke-0-52: queue + prefill == TTFT
+  PASS  smoke-0-53: output_kind cumulative (cumulative)
+  PASS  smoke-0-53: TTFT measured (10.249007027596235)
+  PASS  smoke-0-53: TPOT measured (3.365420235101791)
+  PASS  smoke-0-53: one token at first observation (no spec decode)
+  PASS  smoke-0-53: queue + prefill == TTFT
+  PASS  smoke-0-54: output_kind cumulative (cumulative)
+  PASS  smoke-0-54: TTFT measured (10.104896035045385)
+  PASS  smoke-0-54: TPOT measured (3.365420235101791)
+  PASS  smoke-0-54: one token at first observation (no spec decode)
+  PASS  smoke-0-54: queue + prefill == TTFT
+  PASS  smoke-0-55: output_kind cumulative (cumulative)
+  PASS  smoke-0-55: TTFT measured (9.954104898497462)
+  PASS  smoke-0-55: TPOT measured (3.365420235101791)
+  PASS  smoke-0-55: one token at first observation (no spec decode)
+  PASS  smoke-0-55: queue + prefill == TTFT
+  PASS  smoke-0-56: output_kind cumulative (cumulative)
+  PASS  smoke-0-56: TTFT measured (9.80980391614139)
+  PASS  smoke-0-56: TPOT measured (3.365420235101791)
+  PASS  smoke-0-56: one token at first observation (no spec decode)
+  PASS  smoke-0-56: queue + prefill == TTFT
+  PASS  smoke-0-57: output_kind cumulative (cumulative)
+  PASS  smoke-0-57: TTFT measured (9.656162932515144)
+  PASS  smoke-0-57: TPOT measured (3.365420235101791)
+  PASS  smoke-0-57: one token at first observation (no spec decode)
+  PASS  smoke-0-57: queue + prefill == TTFT
+  PASS  smoke-0-58: output_kind cumulative (cumulative)
+  PASS  smoke-0-58: TTFT measured (9.490062016993761)
+  PASS  smoke-0-58: TPOT measured (3.365420235101791)
+  PASS  smoke-0-58: one token at first observation (no spec decode)
+  PASS  smoke-0-58: queue + prefill == TTFT
+  PASS  smoke-0-59: output_kind cumulative (cumulative)
+  PASS  smoke-0-59: TTFT measured (9.340650867670774)
+  PASS  smoke-0-59: TPOT measured (3.365420235101791)
+  PASS  smoke-0-59: one token at first observation (no spec decode)
+  PASS  smoke-0-59: queue + prefill == TTFT
+  PASS  smoke-0-60: output_kind cumulative (cumulative)
+  PASS  smoke-0-60: TTFT measured (9.195840917527676)
+  PASS  smoke-0-60: TPOT measured (3.365420235101791)
+  PASS  smoke-0-60: one token at first observation (no spec decode)
+  PASS  smoke-0-60: queue + prefill == TTFT
+  PASS  smoke-0-61: output_kind cumulative (cumulative)
+  PASS  smoke-0-61: TTFT measured (9.0478400234133)
+  PASS  smoke-0-61: TPOT measured (3.365420235101791)
+  PASS  smoke-0-61: one token at first observation (no spec decode)
+  PASS  smoke-0-61: queue + prefill == TTFT
+  PASS  smoke-0-62: output_kind cumulative (cumulative)
+  PASS  smoke-0-62: TTFT measured (8.904309011995792)
+  PASS  smoke-0-62: TPOT measured (3.365420235101791)
+  PASS  smoke-0-62: one token at first observation (no spec decode)
+  PASS  smoke-0-62: queue + prefill == TTFT
+  PASS  smoke-0-63: output_kind cumulative (cumulative)
+  PASS  smoke-0-63: TTFT measured (8.720357902348042)
+  PASS  smoke-0-63: TPOT measured (3.365420235101791)
+  PASS  smoke-0-63: one token at first observation (no spec decode)
+  PASS  smoke-0-63: queue + prefill == TTFT
+
+=== Phase A (run 1): LLM.generate(), FINAL_ONLY outputs; timing expected unavailable
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 6042.17it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 35.69it/s, est. speed input: 499.72 toks/s, output: 945.79 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.93it/s, est. speed input: 140.92 toks/s, output: 598.90 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.93it/s, est. speed input: 1126.47 toks/s, output: 18621.86 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 80.45it/s, est. speed input: 1126.47 toks/s, output: 18621.86 toks/s]
+[traced generate] run 1: 0.807s wall
+  PASS  generated text identical to untraced run
+{
+  "state": "stopped",
+  "session_id": "23de715488ed",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 17,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 17
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.80s                │
+│ Throughput │ 79.52 req/s          │
+└────────────┴──────────────────────┘
+   Latency (step-granular, measured at   
+         engine step boundaries)         
+┏━━━━━━━━━━━┳━━━┳━━━━━┳━━━━━┳━━━━━┳━━━━━┓
+┃ Metric    ┃ N ┃ Avg ┃ P50 ┃ P95 ┃ P99 ┃
+┡━━━━━━━━━━━╇━━━╇━━━━━╇━━━━━╇━━━━━╇━━━━━┩
+│ TTFT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+│ TPOT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+└───────────┴───┴─────┴─────┴─────┴─────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 162.67 J       │
+│ Attributed to requests            │ 140.84 J       │
+│ Unallocated (idle/unattributable) │ 21.82 J        │
+│ Requests with allocation          │ 61/64          │
+│ Avg attributed per request        │ 2.31 J         │
+│ Avg per output token              │ 0.0095 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 99%            │
+│ GPU samples                       │ 925            │
+│ Avg GPU utilization               │ 49.2%          │
+│ Avg power draw                    │ 203.5 W        │
+│ Throttle incidents                │ 228            │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues       
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue           ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ gpu_throttling  │ 57          │
+│ host_bottleneck │ 4           │
+└─────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  129: output tokens 44 == engine 44
+  PASS  129: prompt tokens match engine (14)
+  PASS  130: output tokens 256 == engine 256
+  PASS  130: prompt tokens match engine (14)
+  PASS  131: output tokens 36 == engine 36
+  PASS  131: prompt tokens match engine (14)
+  PASS  132: output tokens 256 == engine 256
+  PASS  132: prompt tokens match engine (14)
+  PASS  133: output tokens 256 == engine 256
+  PASS  133: prompt tokens match engine (14)
+  PASS  134: output tokens 256 == engine 256
+  PASS  134: prompt tokens match engine (14)
+  PASS  135: output tokens 256 == engine 256
+  PASS  135: prompt tokens match engine (14)
+  PASS  136: output tokens 256 == engine 256
+  PASS  136: prompt tokens match engine (14)
+  PASS  137: output tokens 34 == engine 34
+  PASS  137: prompt tokens match engine (14)
+  PASS  138: output tokens 256 == engine 256
+  PASS  138: prompt tokens match engine (14)
+  PASS  139: output tokens 24 == engine 24
+  PASS  139: prompt tokens match engine (14)
+  PASS  140: output tokens 256 == engine 256
+  PASS  140: prompt tokens match engine (14)
+  PASS  141: output tokens 256 == engine 256
+  PASS  141: prompt tokens match engine (14)
+  PASS  142: output tokens 256 == engine 256
+  PASS  142: prompt tokens match engine (14)
+  PASS  143: output tokens 256 == engine 256
+  PASS  143: prompt tokens match engine (14)
+  PASS  144: output tokens 256 == engine 256
+  PASS  144: prompt tokens match engine (14)
+  PASS  145: output tokens 256 == engine 256
+  PASS  145: prompt tokens match engine (14)
+  PASS  146: output tokens 256 == engine 256
+  PASS  146: prompt tokens match engine (14)
+  PASS  147: output tokens 24 == engine 24
+  PASS  147: prompt tokens match engine (14)
+  PASS  148: output tokens 256 == engine 256
+  PASS  148: prompt tokens match engine (14)
+  PASS  149: output tokens 256 == engine 256
+  PASS  149: prompt tokens match engine (14)
+  PASS  150: output tokens 256 == engine 256
+  PASS  150: prompt tokens match engine (14)
+  PASS  151: output tokens 256 == engine 256
+  PASS  151: prompt tokens match engine (14)
+  PASS  152: output tokens 256 == engine 256
+  PASS  152: prompt tokens match engine (14)
+  PASS  153: output tokens 256 == engine 256
+  PASS  153: prompt tokens match engine (14)
+  PASS  154: output tokens 34 == engine 34
+  PASS  154: prompt tokens match engine (14)
+  PASS  155: output tokens 256 == engine 256
+  PASS  155: prompt tokens match engine (14)
+  PASS  156: output tokens 256 == engine 256
+  PASS  156: prompt tokens match engine (14)
+  PASS  157: output tokens 256 == engine 256
+  PASS  157: prompt tokens match engine (14)
+  PASS  158: output tokens 256 == engine 256
+  PASS  158: prompt tokens match engine (14)
+  PASS  159: output tokens 256 == engine 256
+  PASS  159: prompt tokens match engine (14)
+  PASS  160: output tokens 256 == engine 256
+  PASS  160: prompt tokens match engine (14)
+  PASS  161: output tokens 256 == engine 256
+  PASS  161: prompt tokens match engine (14)
+  PASS  162: output tokens 256 == engine 256
+  PASS  162: prompt tokens match engine (14)
+  PASS  163: output tokens 256 == engine 256
+  PASS  163: prompt tokens match engine (14)
+  PASS  164: output tokens 256 == engine 256
+  PASS  164: prompt tokens match engine (14)
+  PASS  165: output tokens 256 == engine 256
+  PASS  165: prompt tokens match engine (14)
+  PASS  166: output tokens 256 == engine 256
+  PASS  166: prompt tokens match engine (14)
+  PASS  167: output tokens 256 == engine 256
+  PASS  167: prompt tokens match engine (14)
+  PASS  168: output tokens 256 == engine 256
+  PASS  168: prompt tokens match engine (14)
+  PASS  169: output tokens 256 == engine 256
+  PASS  169: prompt tokens match engine (14)
+  PASS  170: output tokens 256 == engine 256
+  PASS  170: prompt tokens match engine (14)
+  PASS  171: output tokens 256 == engine 256
+  PASS  171: prompt tokens match engine (14)
+  PASS  172: output tokens 256 == engine 256
+  PASS  172: prompt tokens match engine (14)
+  PASS  173: output tokens 256 == engine 256
+  PASS  173: prompt tokens match engine (14)
+  PASS  174: output tokens 256 == engine 256
+  PASS  174: prompt tokens match engine (14)
+  PASS  175: output tokens 256 == engine 256
+  PASS  175: prompt tokens match engine (14)
+  PASS  176: output tokens 256 == engine 256
+  PASS  176: prompt tokens match engine (14)
+  PASS  177: output tokens 256 == engine 256
+  PASS  177: prompt tokens match engine (14)
+  PASS  178: output tokens 256 == engine 256
+  PASS  178: prompt tokens match engine (14)
+  PASS  179: output tokens 24 == engine 24
+  PASS  179: prompt tokens match engine (14)
+  PASS  180: output tokens 256 == engine 256
+  PASS  180: prompt tokens match engine (14)
+  PASS  181: output tokens 256 == engine 256
+  PASS  181: prompt tokens match engine (14)
+  PASS  182: output tokens 256 == engine 256
+  PASS  182: prompt tokens match engine (14)
+  PASS  183: output tokens 256 == engine 256
+  PASS  183: prompt tokens match engine (14)
+  PASS  184: output tokens 256 == engine 256
+  PASS  184: prompt tokens match engine (14)
+  PASS  185: output tokens 256 == engine 256
+  PASS  185: prompt tokens match engine (14)
+  PASS  186: output tokens 256 == engine 256
+  PASS  186: prompt tokens match engine (14)
+  PASS  187: output tokens 256 == engine 256
+  PASS  187: prompt tokens match engine (14)
+  PASS  188: output tokens 256 == engine 256
+  PASS  188: prompt tokens match engine (14)
+  PASS  189: output tokens 256 == engine 256
+  PASS  189: prompt tokens match engine (14)
+  PASS  190: output tokens 256 == engine 256
+  PASS  190: prompt tokens match engine (14)
+  PASS  191: output tokens 256 == engine 256
+  PASS  191: prompt tokens match engine (14)
+  PASS  192: output tokens 256 == engine 256
+  PASS  192: prompt tokens match engine (14)
+  PASS  139: output_kind recorded as final_only (final_only)
+  PASS  139: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  139: TPOT unavailable under FINAL_ONLY
+  PASS  147: output_kind recorded as final_only (final_only)
+  PASS  147: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  147: TPOT unavailable under FINAL_ONLY
+  PASS  179: output_kind recorded as final_only (final_only)
+  PASS  179: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  179: TPOT unavailable under FINAL_ONLY
+  PASS  137: output_kind recorded as final_only (final_only)
+  PASS  137: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  137: TPOT unavailable under FINAL_ONLY
+  PASS  154: output_kind recorded as final_only (final_only)
+  PASS  154: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  154: TPOT unavailable under FINAL_ONLY
+  PASS  131: output_kind recorded as final_only (final_only)
+  PASS  131: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  131: TPOT unavailable under FINAL_ONLY
+  PASS  129: output_kind recorded as final_only (final_only)
+  PASS  129: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  129: TPOT unavailable under FINAL_ONLY
+  PASS  130: output_kind recorded as final_only (final_only)
+  PASS  130: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  130: TPOT unavailable under FINAL_ONLY
+  PASS  132: output_kind recorded as final_only (final_only)
+  PASS  132: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  132: TPOT unavailable under FINAL_ONLY
+  PASS  133: output_kind recorded as final_only (final_only)
+  PASS  133: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  133: TPOT unavailable under FINAL_ONLY
+  PASS  134: output_kind recorded as final_only (final_only)
+  PASS  134: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  134: TPOT unavailable under FINAL_ONLY
+  PASS  135: output_kind recorded as final_only (final_only)
+  PASS  135: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  135: TPOT unavailable under FINAL_ONLY
+  PASS  136: output_kind recorded as final_only (final_only)
+  PASS  136: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  136: TPOT unavailable under FINAL_ONLY
+  PASS  138: output_kind recorded as final_only (final_only)
+  PASS  138: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  138: TPOT unavailable under FINAL_ONLY
+  PASS  140: output_kind recorded as final_only (final_only)
+  PASS  140: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  140: TPOT unavailable under FINAL_ONLY
+  PASS  141: output_kind recorded as final_only (final_only)
+  PASS  141: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  141: TPOT unavailable under FINAL_ONLY
+  PASS  142: output_kind recorded as final_only (final_only)
+  PASS  142: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  142: TPOT unavailable under FINAL_ONLY
+  PASS  143: output_kind recorded as final_only (final_only)
+  PASS  143: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  143: TPOT unavailable under FINAL_ONLY
+  PASS  144: output_kind recorded as final_only (final_only)
+  PASS  144: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  144: TPOT unavailable under FINAL_ONLY
+  PASS  145: output_kind recorded as final_only (final_only)
+  PASS  145: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  145: TPOT unavailable under FINAL_ONLY
+  PASS  146: output_kind recorded as final_only (final_only)
+  PASS  146: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  146: TPOT unavailable under FINAL_ONLY
+  PASS  148: output_kind recorded as final_only (final_only)
+  PASS  148: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  148: TPOT unavailable under FINAL_ONLY
+  PASS  149: output_kind recorded as final_only (final_only)
+  PASS  149: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  149: TPOT unavailable under FINAL_ONLY
+  PASS  150: output_kind recorded as final_only (final_only)
+  PASS  150: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  150: TPOT unavailable under FINAL_ONLY
+  PASS  151: output_kind recorded as final_only (final_only)
+  PASS  151: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  151: TPOT unavailable under FINAL_ONLY
+  PASS  152: output_kind recorded as final_only (final_only)
+  PASS  152: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  152: TPOT unavailable under FINAL_ONLY
+  PASS  153: output_kind recorded as final_only (final_only)
+  PASS  153: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  153: TPOT unavailable under FINAL_ONLY
+  PASS  155: output_kind recorded as final_only (final_only)
+  PASS  155: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  155: TPOT unavailable under FINAL_ONLY
+  PASS  156: output_kind recorded as final_only (final_only)
+  PASS  156: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  156: TPOT unavailable under FINAL_ONLY
+  PASS  157: output_kind recorded as final_only (final_only)
+  PASS  157: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  157: TPOT unavailable under FINAL_ONLY
+  PASS  158: output_kind recorded as final_only (final_only)
+  PASS  158: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  158: TPOT unavailable under FINAL_ONLY
+  PASS  159: output_kind recorded as final_only (final_only)
+  PASS  159: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  159: TPOT unavailable under FINAL_ONLY
+  PASS  160: output_kind recorded as final_only (final_only)
+  PASS  160: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  160: TPOT unavailable under FINAL_ONLY
+  PASS  161: output_kind recorded as final_only (final_only)
+  PASS  161: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  161: TPOT unavailable under FINAL_ONLY
+  PASS  162: output_kind recorded as final_only (final_only)
+  PASS  162: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  162: TPOT unavailable under FINAL_ONLY
+  PASS  163: output_kind recorded as final_only (final_only)
+  PASS  163: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  163: TPOT unavailable under FINAL_ONLY
+  PASS  164: output_kind recorded as final_only (final_only)
+  PASS  164: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  164: TPOT unavailable under FINAL_ONLY
+  PASS  165: output_kind recorded as final_only (final_only)
+  PASS  165: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  165: TPOT unavailable under FINAL_ONLY
+  PASS  166: output_kind recorded as final_only (final_only)
+  PASS  166: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  166: TPOT unavailable under FINAL_ONLY
+  PASS  167: output_kind recorded as final_only (final_only)
+  PASS  167: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  167: TPOT unavailable under FINAL_ONLY
+  PASS  168: output_kind recorded as final_only (final_only)
+  PASS  168: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  168: TPOT unavailable under FINAL_ONLY
+  PASS  169: output_kind recorded as final_only (final_only)
+  PASS  169: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  169: TPOT unavailable under FINAL_ONLY
+  PASS  170: output_kind recorded as final_only (final_only)
+  PASS  170: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  170: TPOT unavailable under FINAL_ONLY
+  PASS  171: output_kind recorded as final_only (final_only)
+  PASS  171: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  171: TPOT unavailable under FINAL_ONLY
+  PASS  172: output_kind recorded as final_only (final_only)
+  PASS  172: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  172: TPOT unavailable under FINAL_ONLY
+  PASS  173: output_kind recorded as final_only (final_only)
+  PASS  173: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  173: TPOT unavailable under FINAL_ONLY
+  PASS  174: output_kind recorded as final_only (final_only)
+  PASS  174: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  174: TPOT unavailable under FINAL_ONLY
+  PASS  175: output_kind recorded as final_only (final_only)
+  PASS  175: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  175: TPOT unavailable under FINAL_ONLY
+  PASS  176: output_kind recorded as final_only (final_only)
+  PASS  176: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  176: TPOT unavailable under FINAL_ONLY
+  PASS  177: output_kind recorded as final_only (final_only)
+  PASS  177: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  177: TPOT unavailable under FINAL_ONLY
+  PASS  178: output_kind recorded as final_only (final_only)
+  PASS  178: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  178: TPOT unavailable under FINAL_ONLY
+  PASS  180: output_kind recorded as final_only (final_only)
+  PASS  180: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  180: TPOT unavailable under FINAL_ONLY
+  PASS  181: output_kind recorded as final_only (final_only)
+  PASS  181: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  181: TPOT unavailable under FINAL_ONLY
+  PASS  182: output_kind recorded as final_only (final_only)
+  PASS  182: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  182: TPOT unavailable under FINAL_ONLY
+  PASS  183: output_kind recorded as final_only (final_only)
+  PASS  183: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  183: TPOT unavailable under FINAL_ONLY
+  PASS  184: output_kind recorded as final_only (final_only)
+  PASS  184: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  184: TPOT unavailable under FINAL_ONLY
+  PASS  185: output_kind recorded as final_only (final_only)
+  PASS  185: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  185: TPOT unavailable under FINAL_ONLY
+  PASS  186: output_kind recorded as final_only (final_only)
+  PASS  186: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  186: TPOT unavailable under FINAL_ONLY
+  PASS  187: output_kind recorded as final_only (final_only)
+  PASS  187: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  187: TPOT unavailable under FINAL_ONLY
+  PASS  188: output_kind recorded as final_only (final_only)
+  PASS  188: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  188: TPOT unavailable under FINAL_ONLY
+  PASS  189: output_kind recorded as final_only (final_only)
+  PASS  189: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  189: TPOT unavailable under FINAL_ONLY
+  PASS  190: output_kind recorded as final_only (final_only)
+  PASS  190: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  190: TPOT unavailable under FINAL_ONLY
+  PASS  191: output_kind recorded as final_only (final_only)
+  PASS  191: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  191: TPOT unavailable under FINAL_ONLY
+  PASS  192: output_kind recorded as final_only (final_only)
+  PASS  192: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  192: TPOT unavailable under FINAL_ONLY
+
+=== Phase B (run 1): raw LLMEngine loop with CUMULATIVE outputs; timing expected
+[traced engine loop] run 1: 0.877s wall
+  PASS  64 finished outputs
+  PASS  engine-loop outputs returned in input order
+  PASS  engine-loop text identical to generate() text (matched by request id)
+{
+  "state": "stopped",
+  "session_id": "070fa086b3ff",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 18,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 18
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.88s                │
+│ Throughput │ 73.10 req/s          │
+└────────────┴──────────────────────┘
+ Latency (step-granular, measured at engine step  
+                   boundaries)                    
+┏━━━━━━━━━━━┳━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃ Metric    ┃ N  ┃ Avg   ┃ P50   ┃ P95   ┃ P99   ┃
+┡━━━━━━━━━━━╇━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ TTFT (ms) │ 64 │ 13.18 │ 13.07 │ 17.56 │ 18.47 │
+│ TPOT (ms) │ 64 │ 3.36  │ 3.36  │ 3.36  │ 3.36  │
+└───────────┴────┴───────┴───────┴───────┴───────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 177.15 J       │
+│ Attributed to requests            │ 147.35 J       │
+│ Unallocated (idle/unattributable) │ 29.80 J        │
+│ Requests with allocation          │ 61/64          │
+│ Avg attributed per request        │ 2.42 J         │
+│ Avg per output token              │ 0.0100 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 97%            │
+│ GPU samples                       │ 984            │
+│ Avg GPU utilization               │ 48.9%          │
+│ Avg power draw                    │ 208.1 W        │
+│ Throttle incidents                │ 414            │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues      
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue          ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ gpu_throttling │ 59          │
+└────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  smoke-1-0: output tokens 44 == engine 44
+  PASS  smoke-1-0: prompt tokens match engine (14)
+  PASS  smoke-1-1: output tokens 256 == engine 256
+  PASS  smoke-1-1: prompt tokens match engine (14)
+  PASS  smoke-1-2: output tokens 36 == engine 36
+  PASS  smoke-1-2: prompt tokens match engine (14)
+  PASS  smoke-1-3: output tokens 256 == engine 256
+  PASS  smoke-1-3: prompt tokens match engine (14)
+  PASS  smoke-1-4: output tokens 256 == engine 256
+  PASS  smoke-1-4: prompt tokens match engine (14)
+  PASS  smoke-1-5: output tokens 256 == engine 256
+  PASS  smoke-1-5: prompt tokens match engine (14)
+  PASS  smoke-1-6: output tokens 256 == engine 256
+  PASS  smoke-1-6: prompt tokens match engine (14)
+  PASS  smoke-1-7: output tokens 256 == engine 256
+  PASS  smoke-1-7: prompt tokens match engine (14)
+  PASS  smoke-1-8: output tokens 34 == engine 34
+  PASS  smoke-1-8: prompt tokens match engine (14)
+  PASS  smoke-1-9: output tokens 256 == engine 256
+  PASS  smoke-1-9: prompt tokens match engine (14)
+  PASS  smoke-1-10: output tokens 24 == engine 24
+  PASS  smoke-1-10: prompt tokens match engine (14)
+  PASS  smoke-1-11: output tokens 256 == engine 256
+  PASS  smoke-1-11: prompt tokens match engine (14)
+  PASS  smoke-1-12: output tokens 256 == engine 256
+  PASS  smoke-1-12: prompt tokens match engine (14)
+  PASS  smoke-1-13: output tokens 256 == engine 256
+  PASS  smoke-1-13: prompt tokens match engine (14)
+  PASS  smoke-1-14: output tokens 256 == engine 256
+  PASS  smoke-1-14: prompt tokens match engine (14)
+  PASS  smoke-1-15: output tokens 256 == engine 256
+  PASS  smoke-1-15: prompt tokens match engine (14)
+  PASS  smoke-1-16: output tokens 256 == engine 256
+  PASS  smoke-1-16: prompt tokens match engine (14)
+  PASS  smoke-1-17: output tokens 256 == engine 256
+  PASS  smoke-1-17: prompt tokens match engine (14)
+  PASS  smoke-1-18: output tokens 24 == engine 24
+  PASS  smoke-1-18: prompt tokens match engine (14)
+  PASS  smoke-1-19: output tokens 256 == engine 256
+  PASS  smoke-1-19: prompt tokens match engine (14)
+  PASS  smoke-1-20: output tokens 256 == engine 256
+  PASS  smoke-1-20: prompt tokens match engine (14)
+  PASS  smoke-1-21: output tokens 256 == engine 256
+  PASS  smoke-1-21: prompt tokens match engine (14)
+  PASS  smoke-1-22: output tokens 256 == engine 256
+  PASS  smoke-1-22: prompt tokens match engine (14)
+  PASS  smoke-1-23: output tokens 256 == engine 256
+  PASS  smoke-1-23: prompt tokens match engine (14)
+  PASS  smoke-1-24: output tokens 256 == engine 256
+  PASS  smoke-1-24: prompt tokens match engine (14)
+  PASS  smoke-1-25: output tokens 34 == engine 34
+  PASS  smoke-1-25: prompt tokens match engine (14)
+  PASS  smoke-1-26: output tokens 256 == engine 256
+  PASS  smoke-1-26: prompt tokens match engine (14)
+  PASS  smoke-1-27: output tokens 256 == engine 256
+  PASS  smoke-1-27: prompt tokens match engine (14)
+  PASS  smoke-1-28: output tokens 256 == engine 256
+  PASS  smoke-1-28: prompt tokens match engine (14)
+  PASS  smoke-1-29: output tokens 256 == engine 256
+  PASS  smoke-1-29: prompt tokens match engine (14)
+  PASS  smoke-1-30: output tokens 256 == engine 256
+  PASS  smoke-1-30: prompt tokens match engine (14)
+  PASS  smoke-1-31: output tokens 256 == engine 256
+  PASS  smoke-1-31: prompt tokens match engine (14)
+  PASS  smoke-1-32: output tokens 256 == engine 256
+  PASS  smoke-1-32: prompt tokens match engine (14)
+  PASS  smoke-1-33: output tokens 256 == engine 256
+  PASS  smoke-1-33: prompt tokens match engine (14)
+  PASS  smoke-1-34: output tokens 256 == engine 256
+  PASS  smoke-1-34: prompt tokens match engine (14)
+  PASS  smoke-1-35: output tokens 256 == engine 256
+  PASS  smoke-1-35: prompt tokens match engine (14)
+  PASS  smoke-1-36: output tokens 256 == engine 256
+  PASS  smoke-1-36: prompt tokens match engine (14)
+  PASS  smoke-1-37: output tokens 256 == engine 256
+  PASS  smoke-1-37: prompt tokens match engine (14)
+  PASS  smoke-1-38: output tokens 256 == engine 256
+  PASS  smoke-1-38: prompt tokens match engine (14)
+  PASS  smoke-1-39: output tokens 256 == engine 256
+  PASS  smoke-1-39: prompt tokens match engine (14)
+  PASS  smoke-1-40: output tokens 256 == engine 256
+  PASS  smoke-1-40: prompt tokens match engine (14)
+  PASS  smoke-1-41: output tokens 256 == engine 256
+  PASS  smoke-1-41: prompt tokens match engine (14)
+  PASS  smoke-1-42: output tokens 256 == engine 256
+  PASS  smoke-1-42: prompt tokens match engine (14)
+  PASS  smoke-1-43: output tokens 256 == engine 256
+  PASS  smoke-1-43: prompt tokens match engine (14)
+  PASS  smoke-1-44: output tokens 256 == engine 256
+  PASS  smoke-1-44: prompt tokens match engine (14)
+  PASS  smoke-1-45: output tokens 256 == engine 256
+  PASS  smoke-1-45: prompt tokens match engine (14)
+  PASS  smoke-1-46: output tokens 256 == engine 256
+  PASS  smoke-1-46: prompt tokens match engine (14)
+  PASS  smoke-1-47: output tokens 256 == engine 256
+  PASS  smoke-1-47: prompt tokens match engine (14)
+  PASS  smoke-1-48: output tokens 256 == engine 256
+  PASS  smoke-1-48: prompt tokens match engine (14)
+  PASS  smoke-1-49: output tokens 256 == engine 256
+  PASS  smoke-1-49: prompt tokens match engine (14)
+  PASS  smoke-1-50: output tokens 24 == engine 24
+  PASS  smoke-1-50: prompt tokens match engine (14)
+  PASS  smoke-1-51: output tokens 256 == engine 256
+  PASS  smoke-1-51: prompt tokens match engine (14)
+  PASS  smoke-1-52: output tokens 256 == engine 256
+  PASS  smoke-1-52: prompt tokens match engine (14)
+  PASS  smoke-1-53: output tokens 256 == engine 256
+  PASS  smoke-1-53: prompt tokens match engine (14)
+  PASS  smoke-1-54: output tokens 256 == engine 256
+  PASS  smoke-1-54: prompt tokens match engine (14)
+  PASS  smoke-1-55: output tokens 256 == engine 256
+  PASS  smoke-1-55: prompt tokens match engine (14)
+  PASS  smoke-1-56: output tokens 256 == engine 256
+  PASS  smoke-1-56: prompt tokens match engine (14)
+  PASS  smoke-1-57: output tokens 256 == engine 256
+  PASS  smoke-1-57: prompt tokens match engine (14)
+  PASS  smoke-1-58: output tokens 256 == engine 256
+  PASS  smoke-1-58: prompt tokens match engine (14)
+  PASS  smoke-1-59: output tokens 256 == engine 256
+  PASS  smoke-1-59: prompt tokens match engine (14)
+  PASS  smoke-1-60: output tokens 256 == engine 256
+  PASS  smoke-1-60: prompt tokens match engine (14)
+  PASS  smoke-1-61: output tokens 256 == engine 256
+  PASS  smoke-1-61: prompt tokens match engine (14)
+  PASS  smoke-1-62: output tokens 256 == engine 256
+  PASS  smoke-1-62: prompt tokens match engine (14)
+  PASS  smoke-1-63: output tokens 256 == engine 256
+  PASS  smoke-1-63: prompt tokens match engine (14)
+  PASS  smoke-1-10: output_kind cumulative (cumulative)
+  PASS  smoke-1-10: TTFT measured (16.480401158332825)
+  PASS  smoke-1-10: TPOT measured (3.3275113926957482)
+  PASS  smoke-1-10: one token at first observation (no spec decode)
+  PASS  smoke-1-10: queue + prefill == TTFT
+  PASS  smoke-1-18: output_kind cumulative (cumulative)
+  PASS  smoke-1-18: TTFT measured (15.276695135980844)
+  PASS  smoke-1-18: TPOT measured (3.3275113926957482)
+  PASS  smoke-1-18: one token at first observation (no spec decode)
+  PASS  smoke-1-18: queue + prefill == TTFT
+  PASS  smoke-1-50: output_kind cumulative (cumulative)
+  PASS  smoke-1-50: TTFT measured (10.335206985473633)
+  PASS  smoke-1-50: TPOT measured (3.3275113926957482)
+  PASS  smoke-1-50: one token at first observation (no spec decode)
+  PASS  smoke-1-50: queue + prefill == TTFT
+  PASS  smoke-1-8: output_kind cumulative (cumulative)
+  PASS  smoke-1-8: TTFT measured (16.784752951934934)
+  PASS  smoke-1-8: TPOT measured (3.313174908698508)
+  PASS  smoke-1-8: one token at first observation (no spec decode)
+  PASS  smoke-1-8: queue + prefill == TTFT
+  PASS  smoke-1-25: output_kind cumulative (cumulative)
+  PASS  smoke-1-25: TTFT measured (14.112557983025908)
+  PASS  smoke-1-25: TPOT measured (3.313174908698508)
+  PASS  smoke-1-25: one token at first observation (no spec decode)
+  PASS  smoke-1-25: queue + prefill == TTFT
+  PASS  smoke-1-2: output_kind cumulative (cumulative)
+  PASS  smoke-1-2: TTFT measured (17.893199110403657)
+  PASS  smoke-1-2: TPOT measured (3.3186865704400197)
+  PASS  smoke-1-2: one token at first observation (no spec decode)
+  PASS  smoke-1-2: queue + prefill == TTFT
+  PASS  smoke-1-0: output_kind cumulative (cumulative)
+  PASS  smoke-1-0: TTFT measured (18.474952084943652)
+  PASS  smoke-1-0: TPOT measured (3.293488369604876)
+  PASS  smoke-1-0: one token at first observation (no spec decode)
+  PASS  smoke-1-0: queue + prefill == TTFT
+  PASS  smoke-1-1: output_kind cumulative (cumulative)
+  PASS  smoke-1-1: TTFT measured (18.085760064423084)
+  PASS  smoke-1-1: TPOT measured (3.361017658722167)
+  PASS  smoke-1-1: one token at first observation (no spec decode)
+  PASS  smoke-1-1: queue + prefill == TTFT
+  PASS  smoke-1-3: output_kind cumulative (cumulative)
+  PASS  smoke-1-3: TTFT measured (17.562716966494918)
+  PASS  smoke-1-3: TPOT measured (3.361017658722167)
+  PASS  smoke-1-3: one token at first observation (no spec decode)
+  PASS  smoke-1-3: queue + prefill == TTFT
+  PASS  smoke-1-4: output_kind cumulative (cumulative)
+  PASS  smoke-1-4: TTFT measured (17.399576026946306)
+  PASS  smoke-1-4: TPOT measured (3.361017658722167)
+  PASS  smoke-1-4: one token at first observation (no spec decode)
+  PASS  smoke-1-4: queue + prefill == TTFT
+  PASS  smoke-1-5: output_kind cumulative (cumulative)
+  PASS  smoke-1-5: TTFT measured (17.246006056666374)
+  PASS  smoke-1-5: TPOT measured (3.361017658722167)
+  PASS  smoke-1-5: one token at first observation (no spec decode)
+  PASS  smoke-1-5: queue + prefill == TTFT
+  PASS  smoke-1-6: output_kind cumulative (cumulative)
+  PASS  smoke-1-6: TTFT measured (17.086614156141877)
+  PASS  smoke-1-6: TPOT measured (3.361017658722167)
+  PASS  smoke-1-6: one token at first observation (no spec decode)
+  PASS  smoke-1-6: queue + prefill == TTFT
+  PASS  smoke-1-7: output_kind cumulative (cumulative)
+  PASS  smoke-1-7: TTFT measured (16.934114042669535)
+  PASS  smoke-1-7: TPOT measured (3.361017658722167)
+  PASS  smoke-1-7: one token at first observation (no spec decode)
+  PASS  smoke-1-7: queue + prefill == TTFT
+  PASS  smoke-1-9: output_kind cumulative (cumulative)
+  PASS  smoke-1-9: TTFT measured (16.629202058538795)
+  PASS  smoke-1-9: TPOT measured (3.361017658722167)
+  PASS  smoke-1-9: one token at first observation (no spec decode)
+  PASS  smoke-1-9: queue + prefill == TTFT
+  PASS  smoke-1-11: output_kind cumulative (cumulative)
+  PASS  smoke-1-11: TTFT measured (16.333501087501645)
+  PASS  smoke-1-11: TPOT measured (3.361017658722167)
+  PASS  smoke-1-11: one token at first observation (no spec decode)
+  PASS  smoke-1-11: queue + prefill == TTFT
+  PASS  smoke-1-12: output_kind cumulative (cumulative)
+  PASS  smoke-1-12: TTFT measured (16.18928904645145)
+  PASS  smoke-1-12: TPOT measured (3.361017658722167)
+  PASS  smoke-1-12: one token at first observation (no spec decode)
+  PASS  smoke-1-12: queue + prefill == TTFT
+  PASS  smoke-1-13: output_kind cumulative (cumulative)
+  PASS  smoke-1-13: TTFT measured (16.03143895044923)
+  PASS  smoke-1-13: TPOT measured (3.361017658722167)
+  PASS  smoke-1-13: one token at first observation (no spec decode)
+  PASS  smoke-1-13: queue + prefill == TTFT
+  PASS  smoke-1-14: output_kind cumulative (cumulative)
+  PASS  smoke-1-14: TTFT measured (15.87314810603857)
+  PASS  smoke-1-14: TPOT measured (3.361017658722167)
+  PASS  smoke-1-14: one token at first observation (no spec decode)
+  PASS  smoke-1-14: queue + prefill == TTFT
+  PASS  smoke-1-15: output_kind cumulative (cumulative)
+  PASS  smoke-1-15: TTFT measured (15.725007047876716)
+  PASS  smoke-1-15: TPOT measured (3.361017658722167)
+  PASS  smoke-1-15: one token at first observation (no spec decode)
+  PASS  smoke-1-15: queue + prefill == TTFT
+  PASS  smoke-1-16: output_kind cumulative (cumulative)
+  PASS  smoke-1-16: TTFT measured (15.57947602123022)
+  PASS  smoke-1-16: TPOT measured (3.361017658722167)
+  PASS  smoke-1-16: one token at first observation (no spec decode)
+  PASS  smoke-1-16: queue + prefill == TTFT
+  PASS  smoke-1-17: output_kind cumulative (cumulative)
+  PASS  smoke-1-17: TTFT measured (15.42231603525579)
+  PASS  smoke-1-17: TPOT measured (3.361017658722167)
+  PASS  smoke-1-17: one token at first observation (no spec decode)
+  PASS  smoke-1-17: queue + prefill == TTFT
+  PASS  smoke-1-19: output_kind cumulative (cumulative)
+  PASS  smoke-1-19: TTFT measured (15.113994013518095)
+  PASS  smoke-1-19: TPOT measured (3.361017658722167)
+  PASS  smoke-1-19: one token at first observation (no spec decode)
+  PASS  smoke-1-19: queue + prefill == TTFT
+  PASS  smoke-1-20: output_kind cumulative (cumulative)
+  PASS  smoke-1-20: TTFT measured (14.964472968131304)
+  PASS  smoke-1-20: TPOT measured (3.361017658722167)
+  PASS  smoke-1-20: one token at first observation (no spec decode)
+  PASS  smoke-1-20: queue + prefill == TTFT
+  PASS  smoke-1-21: output_kind cumulative (cumulative)
+  PASS  smoke-1-21: TTFT measured (14.726991998031735)
+  PASS  smoke-1-21: TPOT measured (3.361017658722167)
+  PASS  smoke-1-21: one token at first observation (no spec decode)
+  PASS  smoke-1-21: queue + prefill == TTFT
+  PASS  smoke-1-22: output_kind cumulative (cumulative)
+  PASS  smoke-1-22: TTFT measured (14.562451047822833)
+  PASS  smoke-1-22: TPOT measured (3.361017658722167)
+  PASS  smoke-1-22: one token at first observation (no spec decode)
+  PASS  smoke-1-22: queue + prefill == TTFT
+  PASS  smoke-1-23: output_kind cumulative (cumulative)
+  PASS  smoke-1-23: TTFT measured (14.415450161322951)
+  PASS  smoke-1-23: TPOT measured (3.361017658722167)
+  PASS  smoke-1-23: one token at first observation (no spec decode)
+  PASS  smoke-1-23: queue + prefill == TTFT
+  PASS  smoke-1-24: output_kind cumulative (cumulative)
+  PASS  smoke-1-24: TTFT measured (14.26898897625506)
+  PASS  smoke-1-24: TPOT measured (3.361017658722167)
+  PASS  smoke-1-24: one token at first observation (no spec decode)
+  PASS  smoke-1-24: queue + prefill == TTFT
+  PASS  smoke-1-26: output_kind cumulative (cumulative)
+  PASS  smoke-1-26: TTFT measured (13.962466968223453)
+  PASS  smoke-1-26: TPOT measured (3.361017658722167)
+  PASS  smoke-1-26: one token at first observation (no spec decode)
+  PASS  smoke-1-26: queue + prefill == TTFT
+  PASS  smoke-1-27: output_kind cumulative (cumulative)
+  PASS  smoke-1-27: TTFT measured (13.811127049848437)
+  PASS  smoke-1-27: TPOT measured (3.361017658722167)
+  PASS  smoke-1-27: one token at first observation (no spec decode)
+  PASS  smoke-1-27: queue + prefill == TTFT
+  PASS  smoke-1-28: output_kind cumulative (cumulative)
+  PASS  smoke-1-28: TTFT measured (13.66755599156022)
+  PASS  smoke-1-28: TPOT measured (3.361017658722167)
+  PASS  smoke-1-28: one token at first observation (no spec decode)
+  PASS  smoke-1-28: queue + prefill == TTFT
+  PASS  smoke-1-29: output_kind cumulative (cumulative)
+  PASS  smoke-1-29: TTFT measured (13.523775152862072)
+  PASS  smoke-1-29: TPOT measured (3.361017658722167)
+  PASS  smoke-1-29: one token at first observation (no spec decode)
+  PASS  smoke-1-29: queue + prefill == TTFT
+  PASS  smoke-1-30: output_kind cumulative (cumulative)
+  PASS  smoke-1-30: TTFT measured (13.372084125876427)
+  PASS  smoke-1-30: TPOT measured (3.361017658722167)
+  PASS  smoke-1-30: one token at first observation (no spec decode)
+  PASS  smoke-1-30: queue + prefill == TTFT
+  PASS  smoke-1-31: output_kind cumulative (cumulative)
+  PASS  smoke-1-31: TTFT measured (13.227553106844425)
+  PASS  smoke-1-31: TPOT measured (3.361017658722167)
+  PASS  smoke-1-31: one token at first observation (no spec decode)
+  PASS  smoke-1-31: queue + prefill == TTFT
+  PASS  smoke-1-32: output_kind cumulative (cumulative)
+  PASS  smoke-1-32: TTFT measured (13.071801979094744)
+  PASS  smoke-1-32: TPOT measured (3.361017658722167)
+  PASS  smoke-1-32: one token at first observation (no spec decode)
+  PASS  smoke-1-32: queue + prefill == TTFT
+  PASS  smoke-1-33: output_kind cumulative (cumulative)
+  PASS  smoke-1-33: TTFT measured (12.924331007525325)
+  PASS  smoke-1-33: TPOT measured (3.361017658722167)
+  PASS  smoke-1-33: one token at first observation (no spec decode)
+  PASS  smoke-1-33: queue + prefill == TTFT
+  PASS  smoke-1-34: output_kind cumulative (cumulative)
+  PASS  smoke-1-34: TTFT measured (12.779260985553265)
+  PASS  smoke-1-34: TPOT measured (3.361017658722167)
+  PASS  smoke-1-34: one token at first observation (no spec decode)
+  PASS  smoke-1-34: queue + prefill == TTFT
+  PASS  smoke-1-35: output_kind cumulative (cumulative)
+  PASS  smoke-1-35: TTFT measured (12.626280076801777)
+  PASS  smoke-1-35: TPOT measured (3.361017658722167)
+  PASS  smoke-1-35: one token at first observation (no spec decode)
+  PASS  smoke-1-35: queue + prefill == TTFT
+  PASS  smoke-1-36: output_kind cumulative (cumulative)
+  PASS  smoke-1-36: TTFT measured (12.481749057769775)
+  PASS  smoke-1-36: TPOT measured (3.361017658722167)
+  PASS  smoke-1-36: one token at first observation (no spec decode)
+  PASS  smoke-1-36: queue + prefill == TTFT
+  PASS  smoke-1-37: output_kind cumulative (cumulative)
+  PASS  smoke-1-37: TTFT measured (12.335068080574274)
+  PASS  smoke-1-37: TPOT measured (3.361017658722167)
+  PASS  smoke-1-37: one token at first observation (no spec decode)
+  PASS  smoke-1-37: queue + prefill == TTFT
+  PASS  smoke-1-38: output_kind cumulative (cumulative)
+  PASS  smoke-1-38: TTFT measured (12.171887094154954)
+  PASS  smoke-1-38: TPOT measured (3.361017658722167)
+  PASS  smoke-1-38: one token at first observation (no spec decode)
+  PASS  smoke-1-38: queue + prefill == TTFT
+  PASS  smoke-1-39: output_kind cumulative (cumulative)
+  PASS  smoke-1-39: TTFT measured (12.015967164188623)
+  PASS  smoke-1-39: TPOT measured (3.361017658722167)
+  PASS  smoke-1-39: one token at first observation (no spec decode)
+  PASS  smoke-1-39: queue + prefill == TTFT
+  PASS  smoke-1-40: output_kind cumulative (cumulative)
+  PASS  smoke-1-40: TTFT measured (11.869295965880156)
+  PASS  smoke-1-40: TPOT measured (3.361017658722167)
+  PASS  smoke-1-40: one token at first observation (no spec decode)
+  PASS  smoke-1-40: queue + prefill == TTFT
+  PASS  smoke-1-41: output_kind cumulative (cumulative)
+  PASS  smoke-1-41: TTFT measured (11.724014999344945)
+  PASS  smoke-1-41: TPOT measured (3.361017658722167)
+  PASS  smoke-1-41: one token at first observation (no spec decode)
+  PASS  smoke-1-41: queue + prefill == TTFT
+  PASS  smoke-1-42: output_kind cumulative (cumulative)
+  PASS  smoke-1-42: TTFT measured (11.527564143761992)
+  PASS  smoke-1-42: TPOT measured (3.361017658722167)
+  PASS  smoke-1-42: one token at first observation (no spec decode)
+  PASS  smoke-1-42: queue + prefill == TTFT
+  PASS  smoke-1-43: output_kind cumulative (cumulative)
+  PASS  smoke-1-43: TTFT measured (11.381023097783327)
+  PASS  smoke-1-43: TPOT measured (3.361017658722167)
+  PASS  smoke-1-43: one token at first observation (no spec decode)
+  PASS  smoke-1-43: queue + prefill == TTFT
+  PASS  smoke-1-44: output_kind cumulative (cumulative)
+  PASS  smoke-1-44: TTFT measured (11.225772090256214)
+  PASS  smoke-1-44: TPOT measured (3.361017658722167)
+  PASS  smoke-1-44: one token at first observation (no spec decode)
+  PASS  smoke-1-44: queue + prefill == TTFT
+  PASS  smoke-1-45: output_kind cumulative (cumulative)
+  PASS  smoke-1-45: TTFT measured (11.071151122450829)
+  PASS  smoke-1-45: TPOT measured (3.361017658722167)
+  PASS  smoke-1-45: one token at first observation (no spec decode)
+  PASS  smoke-1-45: queue + prefill == TTFT
+  PASS  smoke-1-46: output_kind cumulative (cumulative)
+  PASS  smoke-1-46: TTFT measured (10.919830994680524)
+  PASS  smoke-1-46: TPOT measured (3.361017658722167)
+  PASS  smoke-1-46: one token at first observation (no spec decode)
+  PASS  smoke-1-46: queue + prefill == TTFT
+  PASS  smoke-1-47: output_kind cumulative (cumulative)
+  PASS  smoke-1-47: TTFT measured (10.773689951747656)
+  PASS  smoke-1-47: TPOT measured (3.361017658722167)
+  PASS  smoke-1-47: one token at first observation (no spec decode)
+  PASS  smoke-1-47: queue + prefill == TTFT
+  PASS  smoke-1-48: output_kind cumulative (cumulative)
+  PASS  smoke-1-48: TTFT measured (10.626859031617641)
+  PASS  smoke-1-48: TPOT measured (3.361017658722167)
+  PASS  smoke-1-48: one token at first observation (no spec decode)
+  PASS  smoke-1-48: queue + prefill == TTFT
+  PASS  smoke-1-49: output_kind cumulative (cumulative)
+  PASS  smoke-1-49: TTFT measured (10.479107964783907)
+  PASS  smoke-1-49: TPOT measured (3.361017658722167)
+  PASS  smoke-1-49: one token at first observation (no spec decode)
+  PASS  smoke-1-49: queue + prefill == TTFT
+  PASS  smoke-1-51: output_kind cumulative (cumulative)
+  PASS  smoke-1-51: TTFT measured (10.188475949689746)
+  PASS  smoke-1-51: TPOT measured (3.361017658722167)
+  PASS  smoke-1-51: one token at first observation (no spec decode)
+  PASS  smoke-1-51: queue + prefill == TTFT
+  PASS  smoke-1-52: output_kind cumulative (cumulative)
+  PASS  smoke-1-52: TTFT measured (10.031636105850339)
+  PASS  smoke-1-52: TPOT measured (3.361017658722167)
+  PASS  smoke-1-52: one token at first observation (no spec decode)
+  PASS  smoke-1-52: queue + prefill == TTFT
+  PASS  smoke-1-53: output_kind cumulative (cumulative)
+  PASS  smoke-1-53: TTFT measured (9.88670508377254)
+  PASS  smoke-1-53: TPOT measured (3.361017658722167)
+  PASS  smoke-1-53: one token at first observation (no spec decode)
+  PASS  smoke-1-53: queue + prefill == TTFT
+  PASS  smoke-1-54: output_kind cumulative (cumulative)
+  PASS  smoke-1-54: TTFT measured (9.740554029121995)
+  PASS  smoke-1-54: TPOT measured (3.361017658722167)
+  PASS  smoke-1-54: one token at first observation (no spec decode)
+  PASS  smoke-1-54: queue + prefill == TTFT
+  PASS  smoke-1-55: output_kind cumulative (cumulative)
+  PASS  smoke-1-55: TTFT measured (9.597533149644732)
+  PASS  smoke-1-55: TPOT measured (3.361017658722167)
+  PASS  smoke-1-55: one token at first observation (no spec decode)
+  PASS  smoke-1-55: queue + prefill == TTFT
+  PASS  smoke-1-56: output_kind cumulative (cumulative)
+  PASS  smoke-1-56: TTFT measured (9.452732047066092)
+  PASS  smoke-1-56: TPOT measured (3.361017658722167)
+  PASS  smoke-1-56: one token at first observation (no spec decode)
+  PASS  smoke-1-56: queue + prefill == TTFT
+  PASS  smoke-1-57: output_kind cumulative (cumulative)
+  PASS  smoke-1-57: TTFT measured (9.29849105887115)
+  PASS  smoke-1-57: TPOT measured (3.361017658722167)
+  PASS  smoke-1-57: one token at first observation (no spec decode)
+  PASS  smoke-1-57: queue + prefill == TTFT
+  PASS  smoke-1-58: output_kind cumulative (cumulative)
+  PASS  smoke-1-58: TTFT measured (9.15251113474369)
+  PASS  smoke-1-58: TPOT measured (3.361017658722167)
+  PASS  smoke-1-58: one token at first observation (no spec decode)
+  PASS  smoke-1-58: queue + prefill == TTFT
+  PASS  smoke-1-59: output_kind cumulative (cumulative)
+  PASS  smoke-1-59: TTFT measured (8.961520157754421)
+  PASS  smoke-1-59: TPOT measured (3.361017658722167)
+  PASS  smoke-1-59: one token at first observation (no spec decode)
+  PASS  smoke-1-59: queue + prefill == TTFT
+  PASS  smoke-1-60: output_kind cumulative (cumulative)
+  PASS  smoke-1-60: TTFT measured (8.81554908119142)
+  PASS  smoke-1-60: TPOT measured (3.361017658722167)
+  PASS  smoke-1-60: one token at first observation (no spec decode)
+  PASS  smoke-1-60: queue + prefill == TTFT
+  PASS  smoke-1-61: output_kind cumulative (cumulative)
+  PASS  smoke-1-61: TTFT measured (8.668068097904325)
+  PASS  smoke-1-61: TPOT measured (3.361017658722167)
+  PASS  smoke-1-61: one token at first observation (no spec decode)
+  PASS  smoke-1-61: queue + prefill == TTFT
+  PASS  smoke-1-62: output_kind cumulative (cumulative)
+  PASS  smoke-1-62: TTFT measured (8.52324697189033)
+  PASS  smoke-1-62: TPOT measured (3.361017658722167)
+  PASS  smoke-1-62: one token at first observation (no spec decode)
+  PASS  smoke-1-62: queue + prefill == TTFT
+  PASS  smoke-1-63: output_kind cumulative (cumulative)
+  PASS  smoke-1-63: TTFT measured (8.326665963977575)
+  PASS  smoke-1-63: TPOT measured (3.361017658722167)
+  PASS  smoke-1-63: one token at first observation (no spec decode)
+  PASS  smoke-1-63: queue + prefill == TTFT
+
+=== Phase A (run 2): LLM.generate(), FINAL_ONLY outputs; timing expected unavailable
+Adding requests:   0%|          | 0/64 [00:00<?, ?it/s]Adding requests: 100%|██████████| 64/64 [00:00<00:00, 6175.90it/s]
+Processed prompts:   0%|          | 0/64 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts:   6%|▋         | 4/64 [00:00<00:01, 35.86it/s, est. speed input: 502.07 toks/s, output: 950.27 toks/s]Processed prompts:  12%|█▎        | 8/64 [00:00<00:06,  8.71it/s, est. speed input: 137.53 toks/s, output: 584.50 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00,  8.71it/s, est. speed input: 1099.40 toks/s, output: 18174.35 toks/s]Processed prompts: 100%|██████████| 64/64 [00:00<00:00, 78.52it/s, est. speed input: 1099.40 toks/s, output: 18174.35 toks/s]
+[traced generate] run 2: 0.826s wall
+  PASS  generated text identical to untraced run
+{
+  "state": "stopped",
+  "session_id": "f369c3141295",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 17,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 17
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.82s                │
+│ Throughput │ 77.65 req/s          │
+└────────────┴──────────────────────┘
+   Latency (step-granular, measured at   
+         engine step boundaries)         
+┏━━━━━━━━━━━┳━━━┳━━━━━┳━━━━━┳━━━━━┳━━━━━┓
+┃ Metric    ┃ N ┃ Avg ┃ P50 ┃ P95 ┃ P99 ┃
+┡━━━━━━━━━━━╇━━━╇━━━━━╇━━━━━╇━━━━━╇━━━━━┩
+│ TTFT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+│ TPOT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+└───────────┴───┴─────┴─────┴─────┴─────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 164.97 J       │
+│ Attributed to requests            │ 142.35 J       │
+│ Unallocated (idle/unattributable) │ 22.62 J        │
+│ Requests with allocation          │ 61/64          │
+│ Avg attributed per request        │ 2.33 J         │
+│ Avg per output token              │ 0.0096 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 97%            │
+│ GPU samples                       │ 925            │
+│ Avg GPU utilization               │ 49.8%          │
+│ Avg power draw                    │ 206.2 W        │
+│ Throttle incidents                │ 355            │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues       
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue           ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ gpu_throttling  │ 58          │
+│ host_bottleneck │ 3           │
+└─────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  193: output tokens 44 == engine 44
+  PASS  193: prompt tokens match engine (14)
+  PASS  194: output tokens 256 == engine 256
+  PASS  194: prompt tokens match engine (14)
+  PASS  195: output tokens 36 == engine 36
+  PASS  195: prompt tokens match engine (14)
+  PASS  196: output tokens 256 == engine 256
+  PASS  196: prompt tokens match engine (14)
+  PASS  197: output tokens 256 == engine 256
+  PASS  197: prompt tokens match engine (14)
+  PASS  198: output tokens 256 == engine 256
+  PASS  198: prompt tokens match engine (14)
+  PASS  199: output tokens 256 == engine 256
+  PASS  199: prompt tokens match engine (14)
+  PASS  200: output tokens 256 == engine 256
+  PASS  200: prompt tokens match engine (14)
+  PASS  201: output tokens 34 == engine 34
+  PASS  201: prompt tokens match engine (14)
+  PASS  202: output tokens 256 == engine 256
+  PASS  202: prompt tokens match engine (14)
+  PASS  203: output tokens 24 == engine 24
+  PASS  203: prompt tokens match engine (14)
+  PASS  204: output tokens 256 == engine 256
+  PASS  204: prompt tokens match engine (14)
+  PASS  205: output tokens 256 == engine 256
+  PASS  205: prompt tokens match engine (14)
+  PASS  206: output tokens 256 == engine 256
+  PASS  206: prompt tokens match engine (14)
+  PASS  207: output tokens 256 == engine 256
+  PASS  207: prompt tokens match engine (14)
+  PASS  208: output tokens 256 == engine 256
+  PASS  208: prompt tokens match engine (14)
+  PASS  209: output tokens 256 == engine 256
+  PASS  209: prompt tokens match engine (14)
+  PASS  210: output tokens 256 == engine 256
+  PASS  210: prompt tokens match engine (14)
+  PASS  211: output tokens 24 == engine 24
+  PASS  211: prompt tokens match engine (14)
+  PASS  212: output tokens 256 == engine 256
+  PASS  212: prompt tokens match engine (14)
+  PASS  213: output tokens 256 == engine 256
+  PASS  213: prompt tokens match engine (14)
+  PASS  214: output tokens 256 == engine 256
+  PASS  214: prompt tokens match engine (14)
+  PASS  215: output tokens 256 == engine 256
+  PASS  215: prompt tokens match engine (14)
+  PASS  216: output tokens 256 == engine 256
+  PASS  216: prompt tokens match engine (14)
+  PASS  217: output tokens 256 == engine 256
+  PASS  217: prompt tokens match engine (14)
+  PASS  218: output tokens 34 == engine 34
+  PASS  218: prompt tokens match engine (14)
+  PASS  219: output tokens 256 == engine 256
+  PASS  219: prompt tokens match engine (14)
+  PASS  220: output tokens 256 == engine 256
+  PASS  220: prompt tokens match engine (14)
+  PASS  221: output tokens 256 == engine 256
+  PASS  221: prompt tokens match engine (14)
+  PASS  222: output tokens 256 == engine 256
+  PASS  222: prompt tokens match engine (14)
+  PASS  223: output tokens 256 == engine 256
+  PASS  223: prompt tokens match engine (14)
+  PASS  224: output tokens 256 == engine 256
+  PASS  224: prompt tokens match engine (14)
+  PASS  225: output tokens 256 == engine 256
+  PASS  225: prompt tokens match engine (14)
+  PASS  226: output tokens 256 == engine 256
+  PASS  226: prompt tokens match engine (14)
+  PASS  227: output tokens 256 == engine 256
+  PASS  227: prompt tokens match engine (14)
+  PASS  228: output tokens 256 == engine 256
+  PASS  228: prompt tokens match engine (14)
+  PASS  229: output tokens 256 == engine 256
+  PASS  229: prompt tokens match engine (14)
+  PASS  230: output tokens 256 == engine 256
+  PASS  230: prompt tokens match engine (14)
+  PASS  231: output tokens 256 == engine 256
+  PASS  231: prompt tokens match engine (14)
+  PASS  232: output tokens 256 == engine 256
+  PASS  232: prompt tokens match engine (14)
+  PASS  233: output tokens 256 == engine 256
+  PASS  233: prompt tokens match engine (14)
+  PASS  234: output tokens 256 == engine 256
+  PASS  234: prompt tokens match engine (14)
+  PASS  235: output tokens 256 == engine 256
+  PASS  235: prompt tokens match engine (14)
+  PASS  236: output tokens 256 == engine 256
+  PASS  236: prompt tokens match engine (14)
+  PASS  237: output tokens 256 == engine 256
+  PASS  237: prompt tokens match engine (14)
+  PASS  238: output tokens 256 == engine 256
+  PASS  238: prompt tokens match engine (14)
+  PASS  239: output tokens 256 == engine 256
+  PASS  239: prompt tokens match engine (14)
+  PASS  240: output tokens 256 == engine 256
+  PASS  240: prompt tokens match engine (14)
+  PASS  241: output tokens 256 == engine 256
+  PASS  241: prompt tokens match engine (14)
+  PASS  242: output tokens 256 == engine 256
+  PASS  242: prompt tokens match engine (14)
+  PASS  243: output tokens 24 == engine 24
+  PASS  243: prompt tokens match engine (14)
+  PASS  244: output tokens 256 == engine 256
+  PASS  244: prompt tokens match engine (14)
+  PASS  245: output tokens 256 == engine 256
+  PASS  245: prompt tokens match engine (14)
+  PASS  246: output tokens 256 == engine 256
+  PASS  246: prompt tokens match engine (14)
+  PASS  247: output tokens 256 == engine 256
+  PASS  247: prompt tokens match engine (14)
+  PASS  248: output tokens 256 == engine 256
+  PASS  248: prompt tokens match engine (14)
+  PASS  249: output tokens 256 == engine 256
+  PASS  249: prompt tokens match engine (14)
+  PASS  250: output tokens 256 == engine 256
+  PASS  250: prompt tokens match engine (14)
+  PASS  251: output tokens 256 == engine 256
+  PASS  251: prompt tokens match engine (14)
+  PASS  252: output tokens 256 == engine 256
+  PASS  252: prompt tokens match engine (14)
+  PASS  253: output tokens 256 == engine 256
+  PASS  253: prompt tokens match engine (14)
+  PASS  254: output tokens 256 == engine 256
+  PASS  254: prompt tokens match engine (14)
+  PASS  255: output tokens 256 == engine 256
+  PASS  255: prompt tokens match engine (14)
+  PASS  256: output tokens 256 == engine 256
+  PASS  256: prompt tokens match engine (14)
+  PASS  203: output_kind recorded as final_only (final_only)
+  PASS  203: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  203: TPOT unavailable under FINAL_ONLY
+  PASS  211: output_kind recorded as final_only (final_only)
+  PASS  211: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  211: TPOT unavailable under FINAL_ONLY
+  PASS  243: output_kind recorded as final_only (final_only)
+  PASS  243: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  243: TPOT unavailable under FINAL_ONLY
+  PASS  201: output_kind recorded as final_only (final_only)
+  PASS  201: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  201: TPOT unavailable under FINAL_ONLY
+  PASS  218: output_kind recorded as final_only (final_only)
+  PASS  218: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  218: TPOT unavailable under FINAL_ONLY
+  PASS  195: output_kind recorded as final_only (final_only)
+  PASS  195: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  195: TPOT unavailable under FINAL_ONLY
+  PASS  193: output_kind recorded as final_only (final_only)
+  PASS  193: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  193: TPOT unavailable under FINAL_ONLY
+  PASS  194: output_kind recorded as final_only (final_only)
+  PASS  194: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  194: TPOT unavailable under FINAL_ONLY
+  PASS  196: output_kind recorded as final_only (final_only)
+  PASS  196: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  196: TPOT unavailable under FINAL_ONLY
+  PASS  197: output_kind recorded as final_only (final_only)
+  PASS  197: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  197: TPOT unavailable under FINAL_ONLY
+  PASS  198: output_kind recorded as final_only (final_only)
+  PASS  198: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  198: TPOT unavailable under FINAL_ONLY
+  PASS  199: output_kind recorded as final_only (final_only)
+  PASS  199: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  199: TPOT unavailable under FINAL_ONLY
+  PASS  200: output_kind recorded as final_only (final_only)
+  PASS  200: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  200: TPOT unavailable under FINAL_ONLY
+  PASS  202: output_kind recorded as final_only (final_only)
+  PASS  202: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  202: TPOT unavailable under FINAL_ONLY
+  PASS  204: output_kind recorded as final_only (final_only)
+  PASS  204: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  204: TPOT unavailable under FINAL_ONLY
+  PASS  205: output_kind recorded as final_only (final_only)
+  PASS  205: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  205: TPOT unavailable under FINAL_ONLY
+  PASS  206: output_kind recorded as final_only (final_only)
+  PASS  206: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  206: TPOT unavailable under FINAL_ONLY
+  PASS  207: output_kind recorded as final_only (final_only)
+  PASS  207: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  207: TPOT unavailable under FINAL_ONLY
+  PASS  208: output_kind recorded as final_only (final_only)
+  PASS  208: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  208: TPOT unavailable under FINAL_ONLY
+  PASS  209: output_kind recorded as final_only (final_only)
+  PASS  209: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  209: TPOT unavailable under FINAL_ONLY
+  PASS  210: output_kind recorded as final_only (final_only)
+  PASS  210: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  210: TPOT unavailable under FINAL_ONLY
+  PASS  212: output_kind recorded as final_only (final_only)
+  PASS  212: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  212: TPOT unavailable under FINAL_ONLY
+  PASS  213: output_kind recorded as final_only (final_only)
+  PASS  213: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  213: TPOT unavailable under FINAL_ONLY
+  PASS  214: output_kind recorded as final_only (final_only)
+  PASS  214: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  214: TPOT unavailable under FINAL_ONLY
+  PASS  215: output_kind recorded as final_only (final_only)
+  PASS  215: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  215: TPOT unavailable under FINAL_ONLY
+  PASS  216: output_kind recorded as final_only (final_only)
+  PASS  216: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  216: TPOT unavailable under FINAL_ONLY
+  PASS  217: output_kind recorded as final_only (final_only)
+  PASS  217: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  217: TPOT unavailable under FINAL_ONLY
+  PASS  219: output_kind recorded as final_only (final_only)
+  PASS  219: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  219: TPOT unavailable under FINAL_ONLY
+  PASS  220: output_kind recorded as final_only (final_only)
+  PASS  220: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  220: TPOT unavailable under FINAL_ONLY
+  PASS  221: output_kind recorded as final_only (final_only)
+  PASS  221: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  221: TPOT unavailable under FINAL_ONLY
+  PASS  222: output_kind recorded as final_only (final_only)
+  PASS  222: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  222: TPOT unavailable under FINAL_ONLY
+  PASS  223: output_kind recorded as final_only (final_only)
+  PASS  223: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  223: TPOT unavailable under FINAL_ONLY
+  PASS  224: output_kind recorded as final_only (final_only)
+  PASS  224: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  224: TPOT unavailable under FINAL_ONLY
+  PASS  225: output_kind recorded as final_only (final_only)
+  PASS  225: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  225: TPOT unavailable under FINAL_ONLY
+  PASS  226: output_kind recorded as final_only (final_only)
+  PASS  226: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  226: TPOT unavailable under FINAL_ONLY
+  PASS  227: output_kind recorded as final_only (final_only)
+  PASS  227: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  227: TPOT unavailable under FINAL_ONLY
+  PASS  228: output_kind recorded as final_only (final_only)
+  PASS  228: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  228: TPOT unavailable under FINAL_ONLY
+  PASS  229: output_kind recorded as final_only (final_only)
+  PASS  229: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  229: TPOT unavailable under FINAL_ONLY
+  PASS  230: output_kind recorded as final_only (final_only)
+  PASS  230: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  230: TPOT unavailable under FINAL_ONLY
+  PASS  231: output_kind recorded as final_only (final_only)
+  PASS  231: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  231: TPOT unavailable under FINAL_ONLY
+  PASS  232: output_kind recorded as final_only (final_only)
+  PASS  232: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  232: TPOT unavailable under FINAL_ONLY
+  PASS  233: output_kind recorded as final_only (final_only)
+  PASS  233: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  233: TPOT unavailable under FINAL_ONLY
+  PASS  234: output_kind recorded as final_only (final_only)
+  PASS  234: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  234: TPOT unavailable under FINAL_ONLY
+  PASS  235: output_kind recorded as final_only (final_only)
+  PASS  235: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  235: TPOT unavailable under FINAL_ONLY
+  PASS  236: output_kind recorded as final_only (final_only)
+  PASS  236: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  236: TPOT unavailable under FINAL_ONLY
+  PASS  237: output_kind recorded as final_only (final_only)
+  PASS  237: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  237: TPOT unavailable under FINAL_ONLY
+  PASS  238: output_kind recorded as final_only (final_only)
+  PASS  238: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  238: TPOT unavailable under FINAL_ONLY
+  PASS  239: output_kind recorded as final_only (final_only)
+  PASS  239: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  239: TPOT unavailable under FINAL_ONLY
+  PASS  240: output_kind recorded as final_only (final_only)
+  PASS  240: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  240: TPOT unavailable under FINAL_ONLY
+  PASS  241: output_kind recorded as final_only (final_only)
+  PASS  241: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  241: TPOT unavailable under FINAL_ONLY
+  PASS  242: output_kind recorded as final_only (final_only)
+  PASS  242: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  242: TPOT unavailable under FINAL_ONLY
+  PASS  244: output_kind recorded as final_only (final_only)
+  PASS  244: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  244: TPOT unavailable under FINAL_ONLY
+  PASS  245: output_kind recorded as final_only (final_only)
+  PASS  245: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  245: TPOT unavailable under FINAL_ONLY
+  PASS  246: output_kind recorded as final_only (final_only)
+  PASS  246: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  246: TPOT unavailable under FINAL_ONLY
+  PASS  247: output_kind recorded as final_only (final_only)
+  PASS  247: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  247: TPOT unavailable under FINAL_ONLY
+  PASS  248: output_kind recorded as final_only (final_only)
+  PASS  248: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  248: TPOT unavailable under FINAL_ONLY
+  PASS  249: output_kind recorded as final_only (final_only)
+  PASS  249: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  249: TPOT unavailable under FINAL_ONLY
+  PASS  250: output_kind recorded as final_only (final_only)
+  PASS  250: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  250: TPOT unavailable under FINAL_ONLY
+  PASS  251: output_kind recorded as final_only (final_only)
+  PASS  251: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  251: TPOT unavailable under FINAL_ONLY
+  PASS  252: output_kind recorded as final_only (final_only)
+  PASS  252: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  252: TPOT unavailable under FINAL_ONLY
+  PASS  253: output_kind recorded as final_only (final_only)
+  PASS  253: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  253: TPOT unavailable under FINAL_ONLY
+  PASS  254: output_kind recorded as final_only (final_only)
+  PASS  254: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  254: TPOT unavailable under FINAL_ONLY
+  PASS  255: output_kind recorded as final_only (final_only)
+  PASS  255: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  255: TPOT unavailable under FINAL_ONLY
+  PASS  256: output_kind recorded as final_only (final_only)
+  PASS  256: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  256: TPOT unavailable under FINAL_ONLY
+
+=== Phase B (run 2): raw LLMEngine loop with CUMULATIVE outputs; timing expected
+[traced engine loop] run 2: 0.882s wall
+  PASS  64 finished outputs
+  PASS  engine-loop outputs returned in input order
+  PASS  engine-loop text identical to generate() text (matched by request id)
+{
+  "state": "stopped",
+  "session_id": "9cc7188e5798",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 256
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX A5000"
+      }
+    ],
+    "samples_taken": 18,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "writer": {
+    "written": {
+      "traces": 64,
+      "batches": 256,
+      "gpu": 18
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  64 traces for 64 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=256
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+              Overview               
+┌────────────┬──────────────────────┐
+│ Requests   │ 64 {'completed': 64} │
+│ Duration   │ 0.88s                │
+│ Throughput │ 72.63 req/s          │
+└────────────┴──────────────────────┘
+ Latency (step-granular, measured at engine step  
+                   boundaries)                    
+┏━━━━━━━━━━━┳━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃ Metric    ┃ N  ┃ Avg   ┃ P50   ┃ P95   ┃ P99   ┃
+┡━━━━━━━━━━━╇━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ TTFT (ms) │ 64 │ 14.88 │ 14.69 │ 20.15 │ 21.05 │
+│ TPOT (ms) │ 64 │ 3.37  │ 3.37  │ 3.37  │ 3.37  │
+└───────────┴────┴───────┴───────┴───────┴───────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 176.55 J       │
+│ Attributed to requests            │ 146.72 J       │
+│ Unallocated (idle/unattributable) │ 29.83 J        │
+│ Requests with allocation          │ 61/64          │
+│ Avg attributed per request        │ 2.41 J         │
+│ Avg per output token              │ 0.0099 J       │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 96%            │
+│ GPU samples                       │ 984            │
+│ Avg GPU utilization               │ 48.9%          │
+│ Avg power draw                    │ 207.8 W        │
+│ Throttle incidents                │ 471            │
+└───────────────────────────────────┴────────────────┘
+      Top Diagnosed Issues      
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Issue          ┃ Occurrences ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ gpu_throttling │ 59          │
+└────────────────┴─────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  smoke-2-0: output tokens 44 == engine 44
+  PASS  smoke-2-0: prompt tokens match engine (14)
+  PASS  smoke-2-1: output tokens 256 == engine 256
+  PASS  smoke-2-1: prompt tokens match engine (14)
+  PASS  smoke-2-2: output tokens 36 == engine 36
+  PASS  smoke-2-2: prompt tokens match engine (14)
+  PASS  smoke-2-3: output tokens 256 == engine 256
+  PASS  smoke-2-3: prompt tokens match engine (14)
+  PASS  smoke-2-4: output tokens 256 == engine 256
+  PASS  smoke-2-4: prompt tokens match engine (14)
+  PASS  smoke-2-5: output tokens 256 == engine 256
+  PASS  smoke-2-5: prompt tokens match engine (14)
+  PASS  smoke-2-6: output tokens 256 == engine 256
+  PASS  smoke-2-6: prompt tokens match engine (14)
+  PASS  smoke-2-7: output tokens 256 == engine 256
+  PASS  smoke-2-7: prompt tokens match engine (14)
+  PASS  smoke-2-8: output tokens 34 == engine 34
+  PASS  smoke-2-8: prompt tokens match engine (14)
+  PASS  smoke-2-9: output tokens 256 == engine 256
+  PASS  smoke-2-9: prompt tokens match engine (14)
+  PASS  smoke-2-10: output tokens 24 == engine 24
+  PASS  smoke-2-10: prompt tokens match engine (14)
+  PASS  smoke-2-11: output tokens 256 == engine 256
+  PASS  smoke-2-11: prompt tokens match engine (14)
+  PASS  smoke-2-12: output tokens 256 == engine 256
+  PASS  smoke-2-12: prompt tokens match engine (14)
+  PASS  smoke-2-13: output tokens 256 == engine 256
+  PASS  smoke-2-13: prompt tokens match engine (14)
+  PASS  smoke-2-14: output tokens 256 == engine 256
+  PASS  smoke-2-14: prompt tokens match engine (14)
+  PASS  smoke-2-15: output tokens 256 == engine 256
+  PASS  smoke-2-15: prompt tokens match engine (14)
+  PASS  smoke-2-16: output tokens 256 == engine 256
+  PASS  smoke-2-16: prompt tokens match engine (14)
+  PASS  smoke-2-17: output tokens 256 == engine 256
+  PASS  smoke-2-17: prompt tokens match engine (14)
+  PASS  smoke-2-18: output tokens 24 == engine 24
+  PASS  smoke-2-18: prompt tokens match engine (14)
+  PASS  smoke-2-19: output tokens 256 == engine 256
+  PASS  smoke-2-19: prompt tokens match engine (14)
+  PASS  smoke-2-20: output tokens 256 == engine 256
+  PASS  smoke-2-20: prompt tokens match engine (14)
+  PASS  smoke-2-21: output tokens 256 == engine 256
+  PASS  smoke-2-21: prompt tokens match engine (14)
+  PASS  smoke-2-22: output tokens 256 == engine 256
+  PASS  smoke-2-22: prompt tokens match engine (14)
+  PASS  smoke-2-23: output tokens 256 == engine 256
+  PASS  smoke-2-23: prompt tokens match engine (14)
+  PASS  smoke-2-24: output tokens 256 == engine 256
+  PASS  smoke-2-24: prompt tokens match engine (14)
+  PASS  smoke-2-25: output tokens 34 == engine 34
+  PASS  smoke-2-25: prompt tokens match engine (14)
+  PASS  smoke-2-26: output tokens 256 == engine 256
+  PASS  smoke-2-26: prompt tokens match engine (14)
+  PASS  smoke-2-27: output tokens 256 == engine 256
+  PASS  smoke-2-27: prompt tokens match engine (14)
+  PASS  smoke-2-28: output tokens 256 == engine 256
+  PASS  smoke-2-28: prompt tokens match engine (14)
+  PASS  smoke-2-29: output tokens 256 == engine 256
+  PASS  smoke-2-29: prompt tokens match engine (14)
+  PASS  smoke-2-30: output tokens 256 == engine 256
+  PASS  smoke-2-30: prompt tokens match engine (14)
+  PASS  smoke-2-31: output tokens 256 == engine 256
+  PASS  smoke-2-31: prompt tokens match engine (14)
+  PASS  smoke-2-32: output tokens 256 == engine 256
+  PASS  smoke-2-32: prompt tokens match engine (14)
+  PASS  smoke-2-33: output tokens 256 == engine 256
+  PASS  smoke-2-33: prompt tokens match engine (14)
+  PASS  smoke-2-34: output tokens 256 == engine 256
+  PASS  smoke-2-34: prompt tokens match engine (14)
+  PASS  smoke-2-35: output tokens 256 == engine 256
+  PASS  smoke-2-35: prompt tokens match engine (14)
+  PASS  smoke-2-36: output tokens 256 == engine 256
+  PASS  smoke-2-36: prompt tokens match engine (14)
+  PASS  smoke-2-37: output tokens 256 == engine 256
+  PASS  smoke-2-37: prompt tokens match engine (14)
+  PASS  smoke-2-38: output tokens 256 == engine 256
+  PASS  smoke-2-38: prompt tokens match engine (14)
+  PASS  smoke-2-39: output tokens 256 == engine 256
+  PASS  smoke-2-39: prompt tokens match engine (14)
+  PASS  smoke-2-40: output tokens 256 == engine 256
+  PASS  smoke-2-40: prompt tokens match engine (14)
+  PASS  smoke-2-41: output tokens 256 == engine 256
+  PASS  smoke-2-41: prompt tokens match engine (14)
+  PASS  smoke-2-42: output tokens 256 == engine 256
+  PASS  smoke-2-42: prompt tokens match engine (14)
+  PASS  smoke-2-43: output tokens 256 == engine 256
+  PASS  smoke-2-43: prompt tokens match engine (14)
+  PASS  smoke-2-44: output tokens 256 == engine 256
+  PASS  smoke-2-44: prompt tokens match engine (14)
+  PASS  smoke-2-45: output tokens 256 == engine 256
+  PASS  smoke-2-45: prompt tokens match engine (14)
+  PASS  smoke-2-46: output tokens 256 == engine 256
+  PASS  smoke-2-46: prompt tokens match engine (14)
+  PASS  smoke-2-47: output tokens 256 == engine 256
+  PASS  smoke-2-47: prompt tokens match engine (14)
+  PASS  smoke-2-48: output tokens 256 == engine 256
+  PASS  smoke-2-48: prompt tokens match engine (14)
+  PASS  smoke-2-49: output tokens 256 == engine 256
+  PASS  smoke-2-49: prompt tokens match engine (14)
+  PASS  smoke-2-50: output tokens 24 == engine 24
+  PASS  smoke-2-50: prompt tokens match engine (14)
+  PASS  smoke-2-51: output tokens 256 == engine 256
+  PASS  smoke-2-51: prompt tokens match engine (14)
+  PASS  smoke-2-52: output tokens 256 == engine 256
+  PASS  smoke-2-52: prompt tokens match engine (14)
+  PASS  smoke-2-53: output tokens 256 == engine 256
+  PASS  smoke-2-53: prompt tokens match engine (14)
+  PASS  smoke-2-54: output tokens 256 == engine 256
+  PASS  smoke-2-54: prompt tokens match engine (14)
+  PASS  smoke-2-55: output tokens 256 == engine 256
+  PASS  smoke-2-55: prompt tokens match engine (14)
+  PASS  smoke-2-56: output tokens 256 == engine 256
+  PASS  smoke-2-56: prompt tokens match engine (14)
+  PASS  smoke-2-57: output tokens 256 == engine 256
+  PASS  smoke-2-57: prompt tokens match engine (14)
+  PASS  smoke-2-58: output tokens 256 == engine 256
+  PASS  smoke-2-58: prompt tokens match engine (14)
+  PASS  smoke-2-59: output tokens 256 == engine 256
+  PASS  smoke-2-59: prompt tokens match engine (14)
+  PASS  smoke-2-60: output tokens 256 == engine 256
+  PASS  smoke-2-60: prompt tokens match engine (14)
+  PASS  smoke-2-61: output tokens 256 == engine 256
+  PASS  smoke-2-61: prompt tokens match engine (14)
+  PASS  smoke-2-62: output tokens 256 == engine 256
+  PASS  smoke-2-62: prompt tokens match engine (14)
+  PASS  smoke-2-63: output tokens 256 == engine 256
+  PASS  smoke-2-63: prompt tokens match engine (14)
+  PASS  smoke-2-10: output_kind cumulative (cumulative)
+  PASS  smoke-2-10: TTFT measured (18.909725127741694)
+  PASS  smoke-2-10: TPOT measured (3.338812303769848)
+  PASS  smoke-2-10: one token at first observation (no spec decode)
+  PASS  smoke-2-10: queue + prefill == TTFT
+  PASS  smoke-2-18: output_kind cumulative (cumulative)
+  PASS  smoke-2-18: TTFT measured (17.577697057276964)
+  PASS  smoke-2-18: TPOT measured (3.338812303769848)
+  PASS  smoke-2-18: one token at first observation (no spec decode)
+  PASS  smoke-2-18: queue + prefill == TTFT
+  PASS  smoke-2-50: output_kind cumulative (cumulative)
+  PASS  smoke-2-50: TTFT measured (11.349462904036045)
+  PASS  smoke-2-50: TPOT measured (3.338812303769848)
+  PASS  smoke-2-50: one token at first observation (no spec decode)
+  PASS  smoke-2-50: queue + prefill == TTFT
+  PASS  smoke-2-8: output_kind cumulative (cumulative)
+  PASS  smoke-2-8: TTFT measured (19.258606946095824)
+  PASS  smoke-2-8: TPOT measured (3.3195146331281373)
+  PASS  smoke-2-8: one token at first observation (no spec decode)
+  PASS  smoke-2-8: queue + prefill == TTFT
+  PASS  smoke-2-25: output_kind cumulative (cumulative)
+  PASS  smoke-2-25: TTFT measured (16.067739110440016)
+  PASS  smoke-2-25: TPOT measured (3.3195146331281373)
+  PASS  smoke-2-25: one token at first observation (no spec decode)
+  PASS  smoke-2-25: queue + prefill == TTFT
+  PASS  smoke-2-2: output_kind cumulative (cumulative)
+  PASS  smoke-2-2: TTFT measured (20.428813062608242)
+  PASS  smoke-2-2: TPOT measured (3.324259744424905)
+  PASS  smoke-2-2: one token at first observation (no spec decode)
+  PASS  smoke-2-2: queue + prefill == TTFT
+  PASS  smoke-2-0: output_kind cumulative (cumulative)
+  PASS  smoke-2-0: TTFT measured (21.049427101388574)
+  PASS  smoke-2-0: TPOT measured (3.312946161861683)
+  PASS  smoke-2-0: one token at first observation (no spec decode)
+  PASS  smoke-2-0: queue + prefill == TTFT
+  PASS  smoke-2-1: output_kind cumulative (cumulative)
+  PASS  smoke-2-1: TTFT measured (20.65938408486545)
+  PASS  smoke-2-1: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-1: one token at first observation (no spec decode)
+  PASS  smoke-2-1: queue + prefill == TTFT
+  PASS  smoke-2-3: output_kind cumulative (cumulative)
+  PASS  smoke-2-3: TTFT measured (20.154590951278806)
+  PASS  smoke-2-3: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-3: one token at first observation (no spec decode)
+  PASS  smoke-2-3: queue + prefill == TTFT
+  PASS  smoke-2-4: output_kind cumulative (cumulative)
+  PASS  smoke-2-4: TTFT measured (19.949021050706506)
+  PASS  smoke-2-4: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-4: one token at first observation (no spec decode)
+  PASS  smoke-2-4: queue + prefill == TTFT
+  PASS  smoke-2-5: output_kind cumulative (cumulative)
+  PASS  smoke-2-5: TTFT measured (19.771760096773505)
+  PASS  smoke-2-5: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-5: one token at first observation (no spec decode)
+  PASS  smoke-2-5: queue + prefill == TTFT
+  PASS  smoke-2-6: output_kind cumulative (cumulative)
+  PASS  smoke-2-6: TTFT measured (19.598439102992415)
+  PASS  smoke-2-6: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-6: one token at first observation (no spec decode)
+  PASS  smoke-2-6: queue + prefill == TTFT
+  PASS  smoke-2-7: output_kind cumulative (cumulative)
+  PASS  smoke-2-7: TTFT measured (19.427387043833733)
+  PASS  smoke-2-7: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-7: one token at first observation (no spec decode)
+  PASS  smoke-2-7: queue + prefill == TTFT
+  PASS  smoke-2-9: output_kind cumulative (cumulative)
+  PASS  smoke-2-9: TTFT measured (19.08272597938776)
+  PASS  smoke-2-9: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-9: one token at first observation (no spec decode)
+  PASS  smoke-2-9: queue + prefill == TTFT
+  PASS  smoke-2-11: output_kind cumulative (cumulative)
+  PASS  smoke-2-11: TTFT measured (18.741544103249907)
+  PASS  smoke-2-11: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-11: one token at first observation (no spec decode)
+  PASS  smoke-2-11: queue + prefill == TTFT
+  PASS  smoke-2-12: output_kind cumulative (cumulative)
+  PASS  smoke-2-12: TTFT measured (18.574973102658987)
+  PASS  smoke-2-12: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-12: one token at first observation (no spec decode)
+  PASS  smoke-2-12: queue + prefill == TTFT
+  PASS  smoke-2-13: output_kind cumulative (cumulative)
+  PASS  smoke-2-13: TTFT measured (18.4096519369632)
+  PASS  smoke-2-13: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-13: one token at first observation (no spec decode)
+  PASS  smoke-2-13: queue + prefill == TTFT
+  PASS  smoke-2-14: output_kind cumulative (cumulative)
+  PASS  smoke-2-14: TTFT measured (18.245621118694544)
+  PASS  smoke-2-14: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-14: one token at first observation (no spec decode)
+  PASS  smoke-2-14: queue + prefill == TTFT
+  PASS  smoke-2-15: output_kind cumulative (cumulative)
+  PASS  smoke-2-15: TTFT measured (18.07310013100505)
+  PASS  smoke-2-15: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-15: one token at first observation (no spec decode)
+  PASS  smoke-2-15: queue + prefill == TTFT
+  PASS  smoke-2-16: output_kind cumulative (cumulative)
+  PASS  smoke-2-16: TTFT measured (17.905168933793902)
+  PASS  smoke-2-16: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-16: one token at first observation (no spec decode)
+  PASS  smoke-2-16: queue + prefill == TTFT
+  PASS  smoke-2-17: output_kind cumulative (cumulative)
+  PASS  smoke-2-17: TTFT measured (17.741338117048144)
+  PASS  smoke-2-17: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-17: one token at first observation (no spec decode)
+  PASS  smoke-2-17: queue + prefill == TTFT
+  PASS  smoke-2-19: output_kind cumulative (cumulative)
+  PASS  smoke-2-19: TTFT measured (17.416486982256174)
+  PASS  smoke-2-19: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-19: one token at first observation (no spec decode)
+  PASS  smoke-2-19: queue + prefill == TTFT
+  PASS  smoke-2-20: output_kind cumulative (cumulative)
+  PASS  smoke-2-20: TTFT measured (17.2543260268867)
+  PASS  smoke-2-20: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-20: one token at first observation (no spec decode)
+  PASS  smoke-2-20: queue + prefill == TTFT
+  PASS  smoke-2-21: output_kind cumulative (cumulative)
+  PASS  smoke-2-21: TTFT measured (16.95055398158729)
+  PASS  smoke-2-21: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-21: one token at first observation (no spec decode)
+  PASS  smoke-2-21: queue + prefill == TTFT
+  PASS  smoke-2-22: output_kind cumulative (cumulative)
+  PASS  smoke-2-22: TTFT measured (16.779202967882156)
+  PASS  smoke-2-22: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-22: one token at first observation (no spec decode)
+  PASS  smoke-2-22: queue + prefill == TTFT
+  PASS  smoke-2-23: output_kind cumulative (cumulative)
+  PASS  smoke-2-23: TTFT measured (16.479971120133996)
+  PASS  smoke-2-23: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-23: one token at first observation (no spec decode)
+  PASS  smoke-2-23: queue + prefill == TTFT
+  PASS  smoke-2-24: output_kind cumulative (cumulative)
+  PASS  smoke-2-24: TTFT measured (16.299260081723332)
+  PASS  smoke-2-24: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-24: one token at first observation (no spec decode)
+  PASS  smoke-2-24: queue + prefill == TTFT
+  PASS  smoke-2-26: output_kind cumulative (cumulative)
+  PASS  smoke-2-26: TTFT measured (15.813017962500453)
+  PASS  smoke-2-26: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-26: one token at first observation (no spec decode)
+  PASS  smoke-2-26: queue + prefill == TTFT
+  PASS  smoke-2-27: output_kind cumulative (cumulative)
+  PASS  smoke-2-27: TTFT measured (15.627657063305378)
+  PASS  smoke-2-27: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-27: one token at first observation (no spec decode)
+  PASS  smoke-2-27: queue + prefill == TTFT
+  PASS  smoke-2-28: output_kind cumulative (cumulative)
+  PASS  smoke-2-28: TTFT measured (15.458496054634452)
+  PASS  smoke-2-28: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-28: one token at first observation (no spec decode)
+  PASS  smoke-2-28: queue + prefill == TTFT
+  PASS  smoke-2-29: output_kind cumulative (cumulative)
+  PASS  smoke-2-29: TTFT measured (15.219494933262467)
+  PASS  smoke-2-29: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-29: one token at first observation (no spec decode)
+  PASS  smoke-2-29: queue + prefill == TTFT
+  PASS  smoke-2-30: output_kind cumulative (cumulative)
+  PASS  smoke-2-30: TTFT measured (15.02933306619525)
+  PASS  smoke-2-30: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-30: one token at first observation (no spec decode)
+  PASS  smoke-2-30: queue + prefill == TTFT
+  PASS  smoke-2-31: output_kind cumulative (cumulative)
+  PASS  smoke-2-31: TTFT measured (14.860121998935938)
+  PASS  smoke-2-31: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-31: one token at first observation (no spec decode)
+  PASS  smoke-2-31: queue + prefill == TTFT
+  PASS  smoke-2-32: output_kind cumulative (cumulative)
+  PASS  smoke-2-32: TTFT measured (14.691960997879505)
+  PASS  smoke-2-32: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-32: one token at first observation (no spec decode)
+  PASS  smoke-2-32: queue + prefill == TTFT
+  PASS  smoke-2-33: output_kind cumulative (cumulative)
+  PASS  smoke-2-33: TTFT measured (14.52720002271235)
+  PASS  smoke-2-33: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-33: one token at first observation (no spec decode)
+  PASS  smoke-2-33: queue + prefill == TTFT
+  PASS  smoke-2-34: output_kind cumulative (cumulative)
+  PASS  smoke-2-34: TTFT measured (14.364940114319324)
+  PASS  smoke-2-34: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-34: one token at first observation (no spec decode)
+  PASS  smoke-2-34: queue + prefill == TTFT
+  PASS  smoke-2-35: output_kind cumulative (cumulative)
+  PASS  smoke-2-35: TTFT measured (14.19152901507914)
+  PASS  smoke-2-35: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-35: one token at first observation (no spec decode)
+  PASS  smoke-2-35: queue + prefill == TTFT
+  PASS  smoke-2-36: output_kind cumulative (cumulative)
+  PASS  smoke-2-36: TTFT measured (13.944596983492374)
+  PASS  smoke-2-36: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-36: one token at first observation (no spec decode)
+  PASS  smoke-2-36: queue + prefill == TTFT
+  PASS  smoke-2-37: output_kind cumulative (cumulative)
+  PASS  smoke-2-37: TTFT measured (13.763046124950051)
+  PASS  smoke-2-37: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-37: one token at first observation (no spec decode)
+  PASS  smoke-2-37: queue + prefill == TTFT
+  PASS  smoke-2-38: output_kind cumulative (cumulative)
+  PASS  smoke-2-38: TTFT measured (13.595215044915676)
+  PASS  smoke-2-38: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-38: one token at first observation (no spec decode)
+  PASS  smoke-2-38: queue + prefill == TTFT
+  PASS  smoke-2-39: output_kind cumulative (cumulative)
+  PASS  smoke-2-39: TTFT measured (13.430474093183875)
+  PASS  smoke-2-39: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-39: one token at first observation (no spec decode)
+  PASS  smoke-2-39: queue + prefill == TTFT
+  PASS  smoke-2-40: output_kind cumulative (cumulative)
+  PASS  smoke-2-40: TTFT measured (13.17762304097414)
+  PASS  smoke-2-40: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-40: one token at first observation (no spec decode)
+  PASS  smoke-2-40: queue + prefill == TTFT
+  PASS  smoke-2-41: output_kind cumulative (cumulative)
+  PASS  smoke-2-41: TTFT measured (12.988812057301402)
+  PASS  smoke-2-41: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-41: one token at first observation (no spec decode)
+  PASS  smoke-2-41: queue + prefill == TTFT
+  PASS  smoke-2-42: output_kind cumulative (cumulative)
+  PASS  smoke-2-42: TTFT measured (12.760821031406522)
+  PASS  smoke-2-42: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-42: one token at first observation (no spec decode)
+  PASS  smoke-2-42: queue + prefill == TTFT
+  PASS  smoke-2-43: output_kind cumulative (cumulative)
+  PASS  smoke-2-43: TTFT measured (12.587370118126273)
+  PASS  smoke-2-43: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-43: one token at first observation (no spec decode)
+  PASS  smoke-2-43: queue + prefill == TTFT
+  PASS  smoke-2-44: output_kind cumulative (cumulative)
+  PASS  smoke-2-44: TTFT measured (12.365008937194943)
+  PASS  smoke-2-44: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-44: one token at first observation (no spec decode)
+  PASS  smoke-2-44: queue + prefill == TTFT
+  PASS  smoke-2-45: output_kind cumulative (cumulative)
+  PASS  smoke-2-45: TTFT measured (12.191887944936752)
+  PASS  smoke-2-45: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-45: one token at first observation (no spec decode)
+  PASS  smoke-2-45: queue + prefill == TTFT
+  PASS  smoke-2-46: output_kind cumulative (cumulative)
+  PASS  smoke-2-46: TTFT measured (12.013097060844302)
+  PASS  smoke-2-46: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-46: one token at first observation (no spec decode)
+  PASS  smoke-2-46: queue + prefill == TTFT
+  PASS  smoke-2-47: output_kind cumulative (cumulative)
+  PASS  smoke-2-47: TTFT measured (11.84603595174849)
+  PASS  smoke-2-47: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-47: one token at first observation (no spec decode)
+  PASS  smoke-2-47: queue + prefill == TTFT
+  PASS  smoke-2-48: output_kind cumulative (cumulative)
+  PASS  smoke-2-48: TTFT measured (11.680565075948834)
+  PASS  smoke-2-48: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-48: one token at first observation (no spec decode)
+  PASS  smoke-2-48: queue + prefill == TTFT
+  PASS  smoke-2-49: output_kind cumulative (cumulative)
+  PASS  smoke-2-49: TTFT measured (11.516083963215351)
+  PASS  smoke-2-49: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-49: one token at first observation (no spec decode)
+  PASS  smoke-2-49: queue + prefill == TTFT
+  PASS  smoke-2-51: output_kind cumulative (cumulative)
+  PASS  smoke-2-51: TTFT measured (11.179052060469985)
+  PASS  smoke-2-51: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-51: one token at first observation (no spec decode)
+  PASS  smoke-2-51: queue + prefill == TTFT
+  PASS  smoke-2-52: output_kind cumulative (cumulative)
+  PASS  smoke-2-52: TTFT measured (11.003810912370682)
+  PASS  smoke-2-52: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-52: one token at first observation (no spec decode)
+  PASS  smoke-2-52: queue + prefill == TTFT
+  PASS  smoke-2-53: output_kind cumulative (cumulative)
+  PASS  smoke-2-53: TTFT measured (10.838829912245274)
+  PASS  smoke-2-53: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-53: one token at first observation (no spec decode)
+  PASS  smoke-2-53: queue + prefill == TTFT
+  PASS  smoke-2-54: output_kind cumulative (cumulative)
+  PASS  smoke-2-54: TTFT measured (10.67638909444213)
+  PASS  smoke-2-54: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-54: one token at first observation (no spec decode)
+  PASS  smoke-2-54: queue + prefill == TTFT
+  PASS  smoke-2-55: output_kind cumulative (cumulative)
+  PASS  smoke-2-55: TTFT measured (10.51344908773899)
+  PASS  smoke-2-55: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-55: one token at first observation (no spec decode)
+  PASS  smoke-2-55: queue + prefill == TTFT
+  PASS  smoke-2-56: output_kind cumulative (cumulative)
+  PASS  smoke-2-56: TTFT measured (10.35041711293161)
+  PASS  smoke-2-56: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-56: one token at first observation (no spec decode)
+  PASS  smoke-2-56: queue + prefill == TTFT
+  PASS  smoke-2-57: output_kind cumulative (cumulative)
+  PASS  smoke-2-57: TTFT measured (10.18747710622847)
+  PASS  smoke-2-57: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-57: one token at first observation (no spec decode)
+  PASS  smoke-2-57: queue + prefill == TTFT
+  PASS  smoke-2-58: output_kind cumulative (cumulative)
+  PASS  smoke-2-58: TTFT measured (10.013496037572622)
+  PASS  smoke-2-58: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-58: one token at first observation (no spec decode)
+  PASS  smoke-2-58: queue + prefill == TTFT
+  PASS  smoke-2-59: output_kind cumulative (cumulative)
+  PASS  smoke-2-59: TTFT measured (9.847145061939955)
+  PASS  smoke-2-59: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-59: one token at first observation (no spec decode)
+  PASS  smoke-2-59: queue + prefill == TTFT
+  PASS  smoke-2-60: output_kind cumulative (cumulative)
+  PASS  smoke-2-60: TTFT measured (9.682974079623818)
+  PASS  smoke-2-60: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-60: one token at first observation (no spec decode)
+  PASS  smoke-2-60: queue + prefill == TTFT
+  PASS  smoke-2-61: output_kind cumulative (cumulative)
+  PASS  smoke-2-61: TTFT measured (9.51838307082653)
+  PASS  smoke-2-61: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-61: one token at first observation (no spec decode)
+  PASS  smoke-2-61: queue + prefill == TTFT
+  PASS  smoke-2-62: output_kind cumulative (cumulative)
+  PASS  smoke-2-62: TTFT measured (9.356641909107566)
+  PASS  smoke-2-62: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-62: one token at first observation (no spec decode)
+  PASS  smoke-2-62: queue + prefill == TTFT
+  PASS  smoke-2-63: output_kind cumulative (cumulative)
+  PASS  smoke-2-63: TTFT measured (9.137201122939587)
+  PASS  smoke-2-63: TPOT measured (3.3730015295612463)
+  PASS  smoke-2-63: one token at first observation (no spec decode)
+  PASS  smoke-2-63: queue + prefill == TTFT
+
+RESULT: ALL CHECKS PASSED
+[rank0]:[W908 05:38:41.375484256 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

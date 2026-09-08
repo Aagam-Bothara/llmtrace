@@ -84,10 +84,20 @@ Failure surfacing
 
 Environment: RunPod Secure Cloud, 1x NVIDIA RTX A5000 (24 GB), driver
 580.159.04, CUDA 13.0 runtime, Python 3.11.11, vLLM 0.11.0, transformers 4.57.6
-(after the pin below), llmtrace working tree at this commit. Model
-`facebook/opt-125m`, temperature 0. Raw logs and trace files are in the run
-artifacts (`gpu_smoke_results/`, `long_results/`); numbers below are copied
-from them.
+(after the pin below). Model `facebook/opt-125m`, temperature 0.
+
+Tested code: the working tree was uploaded to the pod uncommitted. Its
+`llmtrace/`, `examples/` and `scripts/gpu_smoke_run.sh` are byte-identical to
+commit `98c0cd7`; `tests/` differs from `98c0cd7` only by the pyarrow skip fix
+described under "CPU suite" below, made after the run. `pyproject.toml` gained
+the transformers pin after the run started. The overhead script was run as
+`/root/overhead.py`, a copy of which is in the evidence directory.
+
+All raw artifacts (logs, request/batch/GPU trace files, the nvidia-smi log,
+overhead JSON, cross-check scripts) are committed under
+`docs/gpu_runs/2026-09-08-rtx-a5000/`. Every number below is computed from
+those files; the cross-check table can be recomputed with
+`python docs/gpu_runs/2026-09-08-rtx-a5000/long/crosscheck_bracketed.py docs/gpu_runs/2026-09-08-rtx-a5000/long`.
 
 Executed via `scripts/gpu_smoke_run.sh`, then a longer workload
 (64 prompts x 256 tokens) with `scripts/gpu_overhead.py` and an independent
@@ -95,7 +105,7 @@ Executed via `scripts/gpu_smoke_run.sh`, then a longer workload
 
 | Step | Result |
 |------|--------|
-| CPU suite on the GPU box | 106 passed |
+| CPU suite on the GPU box | 83 passed, `tests/test_collection.py` skipped as a whole (`smoke/cpu_tests.log`). Cause: a class-level `pytest.importorskip("pyarrow")` skipped the entire module on machines without pyarrow, so the sampler/writer/tracer tests did not run on the pod. Fixed after the run (per-test `find_spec` skip); the full suite is 106 tests, of which 105 run without pyarrow. The GPU box has not been re-run since. |
 | Smoke, multiprocess engine core (default) | ALL CHECKS PASSED: `SyncMPClient`, scheduler reported unreachable with the documented reason, no batches, membership `request_window` |
 | Smoke, in-process engine core (`VLLM_ENABLE_V1_MULTIPROCESSING=0`) | ALL CHECKS PASSED: `InprocClient`, scheduler found at `engine.engine_core.engine_core.scheduler`, 32 batches for 8 x 32-token requests, every trace linked to batches, membership `batch_metadata`, queue + prefill == TTFT |
 | Phase A (`LLM.generate()`) | `output_kind=final_only`, TTFT/TPOT unavailable with the FINAL_ONLY reason, token counts equal to the engine's, text identical to untraced |
@@ -105,29 +115,45 @@ Executed via `scripts/gpu_smoke_run.sh`, then a longer workload
 | Real batch classification | first step `num_prefill=8, num_decode=0`; all later steps decode-only; `kv_cache_usage_fraction` populated |
 | Energy ledger | conservation error <= 2e-13 J on every run |
 
-Energy cross-check (64 x 256 tokens, in-process; llmtrace 50 ms sampler vs
-independent `nvidia-smi` 50 ms log, both integrated over the same wall-clock
-request window):
+Energy consistency check (64 x 256 tokens, in-process). This compares
+llmtrace's NVML sampling (50 ms) against a *separately collected* telemetry
+stream, `nvidia-smi --query-gpu=power.draw -lms 50`, which reads the same NVML
+power sensor. It checks llmtrace's sampling and integration, not the accuracy
+of the sensor; it is not an independent energy measurement. Both streams are
+integrated with the same trapezoid (`CumulativePower`, edge interpolation)
+over identical bracketed boundaries: from the latest of (request window start,
+first sample of either stream) to the earliest of (request window end, last
+sample of either stream). Script: `long/crosscheck_bracketed.py`.
 
-| Run | window | llmtrace device J | nvidia-smi J |
-|-----|--------|-------------------|--------------|
-| generate 0 | 0.802 s | 149.29 | 143.49 |
-| generate 1 | 0.805 s | 162.67 | 152.68 |
-| generate 2 | 0.824 s | 164.97 | 165.38 |
-| engine loop 0 | 0.877 s | 177.79 | 167.96 |
-| engine loop 1 | 0.876 s | 177.15 | 177.30 |
-| engine loop 2 | 0.881 s | 176.55 | 177.05 |
+| Run | shared window | llmtrace J | nvidia-smi J | diff |
+|-----|---------------|------------|--------------|------|
+| generate 0 | 0.788 s | 149.29 | 149.51 | -0.15% |
+| generate 1 | 0.800 s | 162.67 | 162.62 | +0.03% |
+| generate 2 | 0.800 s | 164.97 | 165.00 | -0.02% |
+| engine loop 0 | 0.850 s | 177.79 | 178.00 | -0.12% |
+| engine loop 1 | 0.851 s | 177.15 | 177.17 | -0.01% |
+| engine loop 2 | 0.850 s | 176.55 | 176.60 | -0.03% |
 
-Agreement is within 6% with 16 to 18 samples per window on each side, i.e.
-within one sample interval of edge effect. Three of 64 requests per run had
-too little coverage for a per-request figure and are reported as such.
+An earlier version of this table (`long/crosscheck.py`, kept for the record)
+integrated the nvidia-smi stream only between samples strictly inside the
+request window while llmtrace interpolated to the window edges, and reported
+up to 6% differences; that gap was the unequal boundaries, not sampling.
+Three of 64 requests per run fell below the per-request coverage threshold and
+are reported as unavailable rather than given a figure.
 
-Overhead (`scripts/gpu_overhead.py`, 5 interleaved repeats, medians of
-`generate()`-equivalent wall time; opt-125m steps are ~3 ms, so this is a
-worst-case relative figure for a tiny model, not a general one):
+Overhead, small-model benchmark (`scripts/gpu_overhead.py` as run, 5
+interleaved repeats, medians). The model is `facebook/opt-125m`, whose engine
+steps take about 3 ms here; how the ratio changes with larger models was not
+measured. Engine steps were not recorded by the overhead script as run; the
+count comes from the batch records of the identical workload in
+`long/traces/run*_engine` (256 scheduled steps in every run, because 57 of 64
+requests reached `max_tokens=256`; 7 stopped earlier at EOS, minimum 24
+tokens). The untraced runs are assumed to take the same 256 steps (same
+prompts, temperature 0, identical outputs verified by the smoke test). The
+script now records `steps_observed` directly.
 
-| Configuration | untraced | traced | ratio | per engine step |
-|---------------|----------|--------|-------|-----------------|
+| Configuration | untraced | traced | ratio | per step (256 steps) |
+|---------------|----------|--------|-------|----------------------|
 | `LLM.generate()` (FINAL_ONLY) | 0.7686 s | 0.8012 s | 1.042 | +0.13 ms |
 | engine loop (CUMULATIVE) | 0.7966 s | 0.8708 s | 1.093 | +0.29 ms |
 

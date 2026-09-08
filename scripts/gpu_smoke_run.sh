@@ -33,7 +33,7 @@ run() {  # run <name> <command...>
 } > "$OUT/environment.txt" 2>&1
 cat "$OUT/environment.txt"
 
-run cpu_tests python -m pytest -q
+run cpu_tests python -m pytest -rs -p no:cacheprovider  # pyproject addopts already has -q; -rs lists skips
 
 # Phase A/B with the default multiprocess engine core (scheduler NOT visible).
 unset VLLM_ENABLE_V1_MULTIPROCESSING

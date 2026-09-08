@@ -10,6 +10,8 @@ and thermal state:
 
 Compare traced vs untraced *within the same output kind*: cumulative outputs
 make vLLM's own output processor do more work per step, independent of tracing.
+The per-step figure divides by the engine steps the tracer actually observed
+(``health()["instrumentation"]["steps_observed"]``), not by ``max_tokens``.
 
     VLLM_ENABLE_V1_MULTIPROCESSING=0 python scripts/gpu_overhead.py --model facebook/opt-125m
 
@@ -49,6 +51,9 @@ def main() -> int:
 
     res: dict = {k: [] for k in ("untraced_generate", "untraced_engine_loop", "traced_generate", "traced_engine_loop")}
 
+    steps: dict = {"traced_generate": [], "traced_engine_loop": []}
+    finish: dict = {}
+
     def traced(fn, name: str, i: int) -> float:
         tr = LLMTracer(TracerConfig(output_dir=f"{args.out}/{name}_{i}",
                                     gpu_sampler={"sample_interval_ms": args.sample_interval_ms}))
@@ -59,6 +64,11 @@ def main() -> int:
         tr.stop()
         h = tr.health()["instrumentation"]
         assert h["instrumentation_errors"] == 0 and h["active_requests"] == 0, h
+        key = "traced_generate" if name == "gen" else "traced_engine_loop"
+        steps[key].append(h["steps_observed"])  # actual engine steps, not max_tokens
+        from llmtrace import io
+        from collections import Counter
+        finish[f"{key}_{i}"] = dict(Counter(t.finish_reason for t in io.load_traces(tr.get_output_files()["traces"])))
         return wall
 
     for i in range(args.repeat):
@@ -67,14 +77,20 @@ def main() -> int:
         res["traced_generate"].append(traced(lambda: llm.generate(prompts, sp), "gen", i))
         res["traced_engine_loop"].append(traced(lambda: run_engine_with_timing(eng, prompts, sp), "loop", i))
 
-    steps = args.max_tokens  # one engine step per generated token without speculative decoding
     for k, v in res.items():
         print(f"{k:22} median {statistics.median(v):.4f}s  all {[round(x, 4) for x in v]}")
+    print("engine steps observed per traced run:", steps)
+    print("finish reasons per traced run:", finish)
     for kind in ("generate", "engine_loop"):
         u, t = statistics.median(res[f"untraced_{kind}"]), statistics.median(res[f"traced_{kind}"])
-        print(f"{kind:12} traced/untraced = {t / u:.3f}  (+{(t - u) * 1000:.1f} ms per run, ~{(t - u) * 1e3 / steps:.3f} ms per engine step)")
+        n_steps = statistics.median(steps[f"traced_{kind}"])
+        # Per-step figure uses the traced runs' recorded step counts; the untraced runs are assumed to
+        # take the same number of steps (same prompts, temperature 0), which holds only if outputs match.
+        print(f"{kind:12} traced/untraced = {t / u:.3f}  (+{(t - u) * 1000:.1f} ms per run over "
+              f"{n_steps:.0f} recorded steps = +{(t - u) * 1e3 / n_steps:.3f} ms per step)")
     with open(args.json, "w") as f:
-        json.dump(res, f)
+        json.dump({"wall_s": res, "steps_observed": steps, "finish_reasons": finish,
+                   "config": vars(args)}, f, indent=1)
     print("OVERHEAD_DONE")
     return 0
 

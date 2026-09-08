@@ -17,9 +17,9 @@ Larger models, multi-GPU, preemption and speculative decoding are untested.
 | Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Verified on hardware: patched, traced 8/8 and 64/64 requests, restored cleanly |
 | Scheduler batch metadata | Verified in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
 | GPU telemetry (NVML, background thread) | Verified: all fields populated on an A5000, samples taken while `generate()` blocks |
-| Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; device energy within 6% of an independent `nvidia-smi` integral on the GPU run |
+| Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; on the GPU run, device energy matched a separately collected `nvidia-smi` stream of the same NVML sensor within 0.15% over identical boundaries |
 | Timing (TTFT/TPOT) | Verified through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
-| Overhead | opt-125m, 64 x 256 tokens: +4% (`generate()`) and +9% (cumulative engine loop) wall time, i.e. 0.13 to 0.29 ms per engine step; a tiny-model worst case, not a general figure |
+| Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
 | Rules-based diagnosis, CLI `analyze` / `compare`, offline analysis | Implemented and CPU-tested |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
 | AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |

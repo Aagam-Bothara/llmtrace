@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import threading
 import time
@@ -145,7 +146,7 @@ class TestTraceWriter:
         w.stop()
         w.stop()
 
-    @pytest.mark.skipif(pytest.importorskip("pyarrow", reason="pyarrow not installed") is None, reason="")
+    @pytest.mark.skipif(importlib.util.find_spec("pyarrow") is None, reason="pyarrow not installed")
     def test_parquet_roundtrip(self, tmp_path):
         w = TraceWriter(str(tmp_path), output_format="parquet", background=False)
         w.start()

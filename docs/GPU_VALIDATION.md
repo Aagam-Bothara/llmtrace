@@ -65,6 +65,12 @@ Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which force
 - [ ] Run B only: queue + prefill == TTFT for each request (to floating point)
 - [ ] `tokens_at_first_observation` is 1 without speculative decoding
 
+vLLM stats (stat_loggers hook)
+- [ ] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step
+- [ ] `kv_cache_usage`, `num_running_reqs`, `num_waiting_reqs` populated; `num_preempted_reqs` is 0 in the smoke run
+- [ ] vLLM's own TTFT samples (`time_to_first_tokens_s`) agree with llmtrace `ttft_ms` within a step for the raw-engine phase
+- [ ] the logger is gone from `engine.logger_manager.per_engine_logger_dict[0]` after `stop()`
+
 Energy checks
 - [ ] ledger `conservation_error_joules < 1e-6`
 - [ ] `device_joules` roughly equals mean power × run window from `nvidia-smi --query-gpu=power.draw --format=csv -lms 100` sampled in parallel (order of magnitude; write down both numbers)

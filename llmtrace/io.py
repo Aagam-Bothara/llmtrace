@@ -9,6 +9,7 @@ from typing import Iterable, List, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
+from llmtrace.data_plane.vllm_stats import VLLMIterationRecord
 from llmtrace.models.trace import BatchMetadata, GPUSample, RequestTrace
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,14 @@ def load_batches(paths: Sequence[PathLike]) -> List[BatchMetadata]:
     out: List[BatchMetadata] = []
     for f in _expand(paths, "batches"):
         out.extend(_load_file(f, BatchMetadata))
+    return out
+
+
+def load_vllm_stats(paths: Sequence[PathLike]) -> List[VLLMIterationRecord]:
+    """Load vLLM's own per-step stats (``vllm_stats_*.jsonl``), if the run recorded them."""
+    out: List[VLLMIterationRecord] = []
+    for f in _expand(paths, "vllm_stats"):
+        out.extend(_load_file(f, VLLMIterationRecord))
     return out
 
 

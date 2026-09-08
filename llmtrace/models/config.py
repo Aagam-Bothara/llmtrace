@@ -113,6 +113,11 @@ class TracerConfig(_StrictModel):
         default=True,
         description="Record scheduler batches when the vLLM scheduler is reachable in-process",
     )
+    collect_vllm_stats: bool = Field(
+        default=True,
+        description="Record vLLM's own per-step stats (KV usage, queue depth, preemptions, its TTFT/ITL samples) "
+        "through the engine's stat_loggers hook; needs log stats enabled (disable_log_stats=False, the default)",
+    )
 
     collection_interval_s: float = Field(
         default=0.1,

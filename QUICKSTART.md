@@ -61,6 +61,14 @@ llmtrace analyze ./traces --attribution window_only   # no per-request allocatio
 llmtrace analyze ./traces --output report.json
 ```
 
+## 3b. Visualize a run
+
+```bash
+llmtrace visualize ./traces --html-out report.html            # self-contained HTML report
+llmtrace visualize ./traces --trace-out run.perfetto.json      # open at https://ui.perfetto.dev
+llmtrace visualize ./exp/baseline_0 --compare ./exp/capped_0 --html-out compare.html
+```
+
 ## 4. Regression gate
 
 ```bash

@@ -26,6 +26,7 @@ from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.data_plane.gpu_sampler import GPUSampler, SamplerBackend
 from llmtrace.data_plane.trace_writer import TraceWriter
 from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
+from llmtrace.data_plane.vllm_stats import VLLMStatsSink, attach_to_engine, detach_from_engine, make_stat_logger_factory
 from llmtrace.models.config import TracerConfig
 from llmtrace.models.trace import TraceAnalysis
 
@@ -82,6 +83,9 @@ class LLMTracer:
             background=self.config.background_writes,
             max_queue=self.config.max_write_queue,
         )
+        self.vllm_stats = VLLMStatsSink(max_buffered=self.config.max_buffered_events, clock_domain=self.session_id)
+        self._stats_engine: Optional[Any] = None
+        self._stats_attach_reason: Optional[str] = "not attached"
         self.correlator = Correlator(self.config.energy)
         self.rules_engine = RulesEngine(self.config.autopsy)
         self.reporter = Reporter(self.config.reporter)
@@ -109,7 +113,22 @@ class LLMTracer:
         self.vllm_instrumentation.instrument_engine(engine)
         self._scheduler_visible_during_run = self.vllm_instrumentation.scheduler_visible
         self._scheduler_reason_during_run = self.vllm_instrumentation.scheduler_unavailable_reason
+        if self.config.collect_vllm_stats:
+            # vLLM's own per-step stats via its stat_loggers hook (works with the multiprocess core).
+            # If the engine was built with stat_loggers=[tracer.stat_logger_factory()] this is a no-op.
+            self._stats_attach_reason = attach_to_engine(engine, self.vllm_stats)
+            self._stats_engine = engine if self._stats_attach_reason is None else None
+            if self._stats_attach_reason and "already attached" in self._stats_attach_reason:
+                self._stats_attach_reason = None
+            if self._stats_attach_reason:
+                logger.warning("vLLM stats not collected: %s", self._stats_attach_reason)
+        else:
+            self._stats_attach_reason = "disabled by config"
         self.start()  # on failure start() restores the engine itself
+
+    def stat_logger_factory(self) -> Any:
+        """A vLLM ``StatLoggerFactory``: ``LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])``."""
+        return make_stat_logger_factory(self.vllm_stats)
 
     def start(self) -> None:
         if self._state == "running":
@@ -138,6 +157,9 @@ class LLMTracer:
             self._collector = None
         try:
             self.vllm_instrumentation.uninstrument_engine()
+            if self._stats_engine is not None:
+                detach_from_engine(self._stats_engine)
+                self._stats_engine = None
         finally:
             try:
                 self.gpu_sampler.stop()
@@ -159,6 +181,9 @@ class LLMTracer:
 
         # Restore the engine first so no new events arrive, then drain everything.
         leftovers = self.vllm_instrumentation.uninstrument_engine()
+        if self._stats_engine is not None:
+            detach_from_engine(self._stats_engine)
+            self._stats_engine = None
         self.gpu_sampler.stop()
         self._collect_once()
         if leftovers:
@@ -192,12 +217,15 @@ class LLMTracer:
             traces = self.vllm_instrumentation.drain_completed_traces()
             batches = self.vllm_instrumentation.drain_batch_metadata()
             samples = self.gpu_sampler.drain()
+            stats = self.vllm_stats.drain()
             if traces:
                 self.trace_writer.write_traces(traces)
             if batches:
                 self.trace_writer.write_batch_metadata(batches)
             if samples:
                 self.trace_writer.write_gpu_samples(samples)
+            if stats:
+                self.trace_writer.write_vllm_stats(stats)
         except Exception as exc:
             self._collection_errors += 1
             self._last_collection_error = f"{type(exc).__name__}: {exc}"
@@ -211,6 +239,7 @@ class LLMTracer:
             "scheduler_visible_during_run": self._scheduler_visible_during_run,
             "scheduler_unavailable_reason_during_run": self._scheduler_reason_during_run,
             "gpu_sampler": self.gpu_sampler.stats(),
+            "vllm_stats": {**self.vllm_stats.stats(), "unavailable_reason": self._stats_attach_reason},
             "writer": self.trace_writer.stats(),
             "collection_errors": self._collection_errors,
             "last_collection_error": self._last_collection_error,
@@ -230,6 +259,10 @@ class LLMTracer:
         samples = io.load_gpu_samples(files.get("gpu", []))
         batches = io.load_batches(files.get("batches", []))
         result = self.correlator.correlate(traces, samples, batches)
+        vllm_stats = io.load_vllm_stats(files.get("vllm_stats", []))
+        if vllm_stats:
+            from llmtrace.control_plane.reporter import summarize_vllm_stats
+            result.ledger.notes.append("vLLM engine stats: " + summarize_vllm_stats(vllm_stats)["text"])
         for t in result.traces:
             t.diagnosis = self.rules_engine.diagnose_request(t)
 

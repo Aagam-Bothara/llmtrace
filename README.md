@@ -46,6 +46,14 @@ KV-cache usage fraction.
 **GPU telemetry** (`gpu_*.jsonl`): power, utilization, memory, clocks,
 throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 
+**vLLM's own engine stats** (`vllm_stats_*.jsonl`): per step, via vLLM's
+supported `stat_loggers` hook (works with the default multiprocess engine
+core): KV-cache usage, running/waiting counts, preemptions, prefix-cache
+stats, vLLM's own TTFT and inter-token latency samples, and finished-request
+timings (queued/prefill/decode/e2e; vLLM attaches no request ids to these).
+Enable at construction with `LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])`,
+or let `instrument_engine()` attach post-hoc when log stats are on.
+
 ## Energy accounting, precisely
 
 * **Telemetry** is measured: NVML power readings.
@@ -126,7 +134,15 @@ llmtrace analyze ./traces --output report.json  # machine-readable report
 llmtrace compare --baseline ./traces/baseline --current ./traces/current \
     --ttft-threshold 5 --energy-threshold 10 --fail-on-regression
 llmtrace init-config --output llmtrace_config.json
+llmtrace visualize ./traces/run --compare ./traces/other --html-out report.html --trace-out run.perfetto.json
 ```
+
+`visualize` writes a self-contained HTML report (request timeline with
+queue/prefill/decode phases, step durations over time and versus scheduled
+tokens, GPU power, latency tables, optional side-by-side comparison) and a
+Chrome/Perfetto trace JSON: open it at https://ui.perfetto.dev to scrub any
+slow request against the scheduler steps it shared and the GPU power counter.
+Step-level views need batch metadata (in-process scheduler).
 
 `compare` sign convention: change = (current - baseline) / baseline. All
 compared metrics are higher-is-worse, so only a positive change above the

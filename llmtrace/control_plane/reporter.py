@@ -6,7 +6,7 @@ import logging
 import math
 import statistics
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from rich.console import Console
@@ -60,6 +60,31 @@ def compare_metric(
 
 def _fmt(v: Optional[float], unit: str = "", digits: int = 2) -> str:
     return "n/a" if v is None else f"{v:.{digits}f}{unit}"
+
+
+def summarize_vllm_stats(records: List[Any]) -> Dict[str, Any]:
+    """Aggregate vLLM's own per-step stats (from the stat_loggers hook) into a few numbers."""
+    kv = [r.kv_cache_usage for r in records if r.kv_cache_usage is not None]
+    waiting = [r.num_waiting_reqs for r in records if r.num_waiting_reqs is not None]
+    running = [r.num_running_reqs for r in records if r.num_running_reqs is not None]
+    preempted = sum(r.num_preempted_reqs or 0 for r in records)
+    ttft = [x * 1000.0 for r in records for x in r.time_to_first_tokens_s]
+    itl = [x * 1000.0 for r in records for x in r.inter_token_latencies_s]
+    finished = [f for r in records for f in r.finished_requests]
+    queued = [f.queued_time_s * 1000.0 for f in finished if f.queued_time_s is not None]
+    out = {
+        "steps": len(records), "preemptions": preempted,
+        "kv_cache_usage_max": max(kv) if kv else None, "kv_cache_usage_p95": percentile(kv, 95),
+        "num_waiting_max": max(waiting) if waiting else None, "num_running_max": max(running) if running else None,
+        "vllm_ttft_ms_p50": percentile(ttft, 50), "vllm_ttft_ms_p95": percentile(ttft, 95),
+        "vllm_itl_ms_p50": percentile(itl, 50), "vllm_itl_ms_p99": percentile(itl, 99),
+        "finished_requests": len(finished), "vllm_queued_ms_p95": percentile(queued, 95),
+    }
+    out["text"] = (f"{out['steps']} steps, {preempted} preemptions, KV usage max {_fmt(out['kv_cache_usage_max'], '', 3)}, "
+                   f"waiting max {out['num_waiting_max']}, vLLM TTFT p95 {_fmt(out['vllm_ttft_ms_p95'], ' ms')}, "
+                   f"vLLM ITL p99 {_fmt(out['vllm_itl_ms_p99'], ' ms')}, queued p95 {_fmt(out['vllm_queued_ms_p95'], ' ms')} "
+                   f"over {len(finished)} finished requests")
+    return out
 
 
 class Reporter:

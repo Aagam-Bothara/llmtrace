@@ -88,6 +88,18 @@ bash experiments/mixed_prompts/run_gpu.sh facebook/opt-125m ./exp_gpu
 `VLLM_ENABLE_V1_MULTIPROCESSING=0` is required: the diagnosis needs batch
 metadata, which only exists with the in-process scheduler.
 
+## Visualize
+
+```bash
+llmtrace visualize ./exp_gpu/baseline_0 --compare ./exp_gpu/capped_0 --html-out report.html --trace-out baseline.perfetto.json
+```
+
+The HTML report shows the request Gantt (long prompts as wide bars, short
+requests stacking up behind the red long-chunk steps), the step-duration
+timeline with long-chunk steps in red, and the step-time-vs-tokens plot the
+diagnosis fits. The Perfetto trace lets you click a slow short request and see
+exactly which step it waited on and what else was in that step.
+
 ## What would count as a result
 
 * The traces explain the slowdown if flagged steps are markedly longer than

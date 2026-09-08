@@ -180,7 +180,7 @@ class TestTracer:
         assert len(io.load_batches(files["batches"])) == 3
         health = tracer.health()
         assert health["instrumentation"]["instrumentation_errors"] == 0
-        assert health["writer"]["dropped"] == {"traces": 0, "batches": 0, "gpu": 0}
+        assert all(v == 0 for v in health["writer"]["dropped"].values()) and "vllm_stats" in health["writer"]["dropped"]
         analysis = tracer.analyze()
         assert analysis.num_requests == 3
         assert analysis.energy_ledger is not None and analysis.energy_ledger.clock == "monotonic"

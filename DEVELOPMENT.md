@@ -44,6 +44,9 @@ was read from the tagged source (not guessed):
 | Output kinds | `vllm/sampling_params.py` | `RequestOutputKind.CUMULATIVE` (default) / `DELTA` / `FINAL_ONLY` |
 | Output construction | `vllm/v1/engine/output_processor.py` | `token_ids` cumulative unless DELTA |
 | Finish reasons | `vllm/v1/engine/__init__.py` | `stop`, `length`, `abort` |
+| `StatLoggerBase` / `StatLoggerFactory` | `vllm/v1/metrics/loggers.py` | `__init__(vllm_config, engine_index)`, `record(scheduler_stats, iteration_stats, engine_idx)`, `log_engine_initialized()`, `log()`; factories are called as `factory(vllm_config, engine_idx)`; vLLM notes the stats classes "are not considered stable interfaces" |
+| `StatLoggerManager` | same | `per_engine_logger_dict: dict[int, list[StatLoggerBase]]`; `record()` iterates that list, so a logger can be appended post-hoc (`LLMEngine.logger_manager`, `None` with `disable_log_stats`) |
+| `SchedulerStats` / `IterationStats` / `FinishedRequestStats` | `vllm/v1/metrics/stats.py` | running/waiting counts, `kv_cache_usage`, prefix-cache stats; per-step tokens, `num_preempted_reqs`, `time_to_first_tokens_iter`, `inter_token_latencies_iter`, finished-request timings (queued/prefill/decode/e2e) **without request ids** |
 
 Other versions are not supported. `VLLMInstrumentation` warns when the
 installed version differs and records both versions in `health()`.
@@ -90,6 +93,25 @@ and is out of scope; wrapping a coroutine function raises `InstrumentationError`
   `SchedulerOutput` has no identifier; `request_ids` are the engine's.
   `step_end_monotonic` is stamped when the step returns so batches are real
   execution intervals for energy membership.
+
+## vLLM's own stats (`data_plane/vllm_stats.py`)
+
+Besides its own hooks, llmtrace records what vLLM reports through the
+supported `stat_loggers` mechanism, once per engine step: KV-cache usage,
+queue depth, preemptions, prefix-cache stats, vLLM's own TTFT and inter-token
+latency samples, and per-finished-request timings. These work with the default
+multiprocess engine core. Two ways to enable it:
+
+* construction time (preferred): `LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])`;
+* post-hoc: `tracer.instrument_engine(engine)` appends a logger to
+  `engine.logger_manager.per_engine_logger_dict` when log stats are enabled,
+  and removes it on `stop()`. `health()["vllm_stats"]["unavailable_reason"]`
+  says why when it could not.
+
+Records go to `vllm_stats_<session>.jsonl`; `llmtrace analyze` and
+`llmtrace visualize` summarize and chart them. vLLM does not attach request
+ids to finished-request stats, so they are run-level evidence (e.g. for the
+KV-pressure/preemption hypothesis), not per-request attribution.
 
 ## Clocks
 

@@ -209,6 +209,8 @@ class FakeLLMEngine:
         self._steps = 0
         self.engine_core: Any = FakeInprocClient(self) if in_process_scheduler else FakeSyncMPClient()
         self.calls: List[str] = []
+        self.vllm_config = object()
+        self.logger_manager: Any = FakeStatLoggerManager()  # like LLMEngine with log_stats=True
 
     # --- vLLM 0.11.0 LLMEngine surface ---------------------------------------
 
@@ -246,6 +248,13 @@ class FakeLLMEngine:
         else:
             self._do_schedule()  # same bookkeeping, just not reachable from outside
         self.clock.advance(self.step_seconds + self.step_seconds_per_token * self.last_scheduled_tokens)
+        # LLMEngine.step() records stats after processing outputs; emulate the important fields.
+        if self.logger_manager is not None:
+            running = [r for r in self._requests.values() if not r.finished]
+            self.logger_manager.record(
+                FakeSchedulerStats(num_running_reqs=len(running), kv_cache_usage=min(1.0, 0.1 * len(running))),
+                FakeIterationStats(num_generation_tokens=len(running), num_prompt_tokens=0),
+            )
         if self.step_sleep_s:
             import time
 
@@ -336,6 +345,62 @@ def run_to_completion(engine: FakeLLMEngine, max_steps: int = 10_000) -> List[An
             if out.finished:
                 finished.append(out)
     return finished
+
+
+@dataclass
+class FakePrefixCacheStats:
+    reset: bool = False
+    requests: int = 0
+    queries: int = 0
+    hits: int = 0
+
+
+@dataclass
+class FakeSchedulerStats:
+    """Shape of vllm.v1.metrics.stats.SchedulerStats (0.11.0)."""
+
+    num_running_reqs: int = 0
+    num_waiting_reqs: int = 0
+    kv_cache_usage: float = 0.0
+    prefix_cache_stats: FakePrefixCacheStats = field(default_factory=FakePrefixCacheStats)
+    num_corrupted_reqs: int = 0
+
+
+@dataclass
+class FakeFinishedRequestStats:
+    finish_reason: str = "stop"
+    e2e_latency: float = 0.0
+    num_prompt_tokens: int = 0
+    num_generation_tokens: int = 0
+    max_tokens_param: Optional[int] = None
+    queued_time: float = 0.0
+    prefill_time: float = 0.0
+    inference_time: float = 0.0
+    decode_time: float = 0.0
+    mean_time_per_output_token: float = 0.0
+
+
+@dataclass
+class FakeIterationStats:
+    """Shape of vllm.v1.metrics.stats.IterationStats (0.11.0)."""
+
+    num_generation_tokens: int = 0
+    num_prompt_tokens: int = 0
+    num_preempted_reqs: int = 0
+    finished_requests: List[FakeFinishedRequestStats] = field(default_factory=list)
+    time_to_first_tokens_iter: List[float] = field(default_factory=list)
+    inter_token_latencies_iter: List[float] = field(default_factory=list)
+
+
+class FakeStatLoggerManager:
+    """Shape of vllm.v1.metrics.loggers.StatLoggerManager: per_engine_logger_dict + record() loop."""
+
+    def __init__(self, factories=(), vllm_config=None) -> None:
+        self.per_engine_logger_dict: Dict[int, list] = {0: [f(vllm_config, 0) for f in factories]}
+
+    def record(self, scheduler_stats, iteration_stats, engine_idx: int = 0) -> None:
+        for lg in self.per_engine_logger_dict[engine_idx]:
+            lg.record(scheduler_stats, iteration_stats, engine_idx)
 
 
 class FakeNVMLBackend:

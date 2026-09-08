@@ -71,6 +71,10 @@ def analyze(trace_paths: Tuple[str, ...], gpu_paths: Tuple[str, ...], baseline: 
         if not baseline_traces:
             click.echo(f"Warning: no baseline traces in {baseline}", err=True)
 
+    vllm_stats = io.load_vllm_stats(io.run_directories_for(list(trace_paths)))
+    if vllm_stats:
+        from llmtrace.control_plane.reporter import summarize_vllm_stats
+        result.ledger.notes.append("vLLM engine stats (stat_loggers hook): " + summarize_vllm_stats(vllm_stats)["text"])
     reporter = Reporter(ReporterConfig(cli_rich_output=not no_rich))
     analysis = reporter.generate_analysis(result.traces, baseline_traces, result.ledger, baseline_ledger)
     reporter.print_analysis(analysis)
@@ -154,6 +158,34 @@ def compare(baseline: str, current: str, ttft_threshold: float, tpot_threshold: 
     else:
         click.echo("PASSED")
     sys.exit(code)
+
+
+@main.command()
+@click.argument("run_dir", type=click.Path(exists=True))
+@click.option("--compare", "compare_dir", type=click.Path(exists=True), help="Second run directory for side-by-side report")
+@click.option("--trace-out", type=click.Path(), help="Write a Chrome/Perfetto trace JSON here (open at ui.perfetto.dev)")
+@click.option("--html-out", type=click.Path(), help="Write a self-contained HTML report here")
+@click.option("--chunk-threshold", type=int, default=128, help="Highlight steps whose largest prefill chunk exceeds this")
+@click.option("--title", default="llmtrace run report")
+def visualize(run_dir: str, compare_dir: Optional[str], trace_out: Optional[str], html_out: Optional[str],
+              chunk_threshold: int, title: str) -> None:
+    """Export a Perfetto trace and/or an HTML report from a recorded run directory."""
+    from llmtrace.visualize import RunData, export_chrome_trace, render_html_report
+
+    if not trace_out and not html_out:
+        click.echo("Nothing to do: pass --trace-out and/or --html-out", err=True)
+        sys.exit(EXIT_USAGE)
+    run = RunData.load(run_dir)
+    if not run.traces:
+        click.echo(f"No traces in {run_dir}", err=True)
+        sys.exit(EXIT_USAGE)
+    if trace_out:
+        counts = export_chrome_trace(run, trace_out)
+        click.echo(f"Perfetto trace written to {trace_out} ({counts['events']} events; open at https://ui.perfetto.dev)")
+    if html_out:
+        cmp = RunData.load(compare_dir) if compare_dir else None
+        render_html_report(run, html_out, cmp, chunk_threshold, title)
+        click.echo(f"HTML report written to {html_out}")
 
 
 @main.command()

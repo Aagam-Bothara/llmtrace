@@ -20,7 +20,7 @@ server is touched: every candidate is a fresh engine started by the runner.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -53,7 +53,12 @@ class ExperimentPlan(BaseModel):
     # parallelism read from the effective config. The baseline runs with exactly these; each candidate applies its
     # scheduling_change on top.
     source_engine_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    unreproduced: List[str] = Field(default_factory=list)  # effective settings with no engine kwarg form (flagged, not silently dropped)
     baseline_config: Dict[str, Any] = Field(default_factory=dict)  # effective knobs the candidates are relative to (display)
+
+    @property
+    def reproducible(self) -> bool:
+        return not self.unreproduced
     baseline_name: str = "baseline"
     repeats: int = 3
     candidates: List[Candidate] = Field(default_factory=list)
@@ -76,6 +81,8 @@ class ExperimentPlan(BaseModel):
             lines.append("baseline engine kwargs (reproduced for every run): " + ", ".join(f"{k}={v}" for k, v in self.source_engine_kwargs.items()))
         if self.baseline_config:
             lines.append("baseline effective: " + ", ".join(f"{k}={v}" for k, v in self.baseline_config.items() if v is not None))
+        for u in self.unreproduced:
+            lines.append(f"NOT REPRODUCED: {u}")
         lines.append("")
         if not self.candidates:
             lines.append("no candidates: no supported finding maps to a bounded configuration change")
@@ -108,22 +115,70 @@ def effective_knobs(manifest: Optional[RunManifest]) -> Dict[str, Any]:
     return out
 
 
-def source_engine_kwargs(manifest: Optional[RunManifest]) -> Dict[str, Any]:
-    """Engine kwargs that reproduce the source run: explicit kwargs + its scheduling change, plus revision and
-    parallelism from the effective config when they were not explicit."""
+# Effective-config entries (as written by manifest.engine_effective_config) that can be handed back to
+# vLLM 0.11.0's LLM(...) / EngineArgs, with the kwarg name and a value converter. Anything else that appears in
+# the effective record is reported as unreproduced rather than silently dropped.
+def _dtype(v: Any) -> Any:
+    s = str(v)
+    return s[len("torch."):] if s.startswith("torch.") else s
+
+
+_REPRODUCIBLE: Dict[str, Dict[str, Any]] = {
+    "scheduler_config": {
+        "max_num_batched_tokens": ("max_num_batched_tokens", int), "max_num_seqs": ("max_num_seqs", int),
+        "max_model_len": ("max_model_len", int), "enable_chunked_prefill": ("enable_chunked_prefill", bool),
+        "long_prefill_token_threshold": ("long_prefill_token_threshold", int),
+        "max_num_partial_prefills": ("max_num_partial_prefills", int), "max_long_partial_prefills": ("max_long_partial_prefills", int),
+        "policy": ("scheduling_policy", str),
+    },
+    "cache_config": {
+        "block_size": ("block_size", int), "gpu_memory_utilization": ("gpu_memory_utilization", float),
+        "enable_prefix_caching": ("enable_prefix_caching", bool),
+    },
+    "model_config": {"revision": ("revision", str), "dtype": ("dtype", _dtype), "seed": ("seed", int), "max_model_len": ("max_model_len", int)},
+    "parallel_config": {
+        "tensor_parallel_size": ("tensor_parallel_size", int), "pipeline_parallel_size": ("pipeline_parallel_size", int),
+        "data_parallel_size": ("data_parallel_size", int),
+    },
+}
+# Derived or identifying values that are not knobs: not reproduced, not flagged.
+_DERIVED = {("cache_config", "num_gpu_blocks"), ("model_config", "model")}
+
+
+def source_engine_kwargs(manifest: Optional[RunManifest]) -> Tuple[Dict[str, Any], List[str]]:
+    """(engine kwargs that reproduce the source run, effective settings that could not be turned into kwargs).
+
+    Supported settings are reconstructed from the effective configuration first (so a budget or a disabled prefix
+    cache that was only ever recorded there is kept), then the run's explicit engine kwargs and scheduling change
+    are applied on top. For the fake engine every recorded knob is a constructor argument."""
     if manifest is None:
-        return {}
-    out: Dict[str, Any] = {**manifest.engine_kwargs, **manifest.scheduling_change}
+        return {}, []
+    out: Dict[str, Any] = {}
+    unreproduced: List[str] = []
     cfg = manifest.effective_engine_config or {}
-    par = cfg.get("parallel_config") or {}
-    for k in ("tensor_parallel_size", "pipeline_parallel_size"):
-        v = par.get(k)
-        if v is not None and k not in out and _int(v) not in (None, 1):
-            out[k] = _int(v)
-    rev = (cfg.get("model_config") or {}).get("revision") or manifest.model_revision
-    if rev and "revision" not in out and manifest.engine == "vllm":
-        out["revision"] = rev
-    return out
+    if manifest.engine == "fake":
+        out.update({k: v for k, v in (cfg.get("fake_engine") or {}).items() if v is not None})
+    else:
+        for section, entries in cfg.items():
+            if section == "fake_engine" or not isinstance(entries, dict):
+                continue
+            for key, val in entries.items():
+                if val is None or (section, key) in _DERIVED:
+                    continue
+                spec = _REPRODUCIBLE.get(section, {}).get(key)
+                if spec is None:
+                    unreproduced.append(f"{section}.{key}={val!r} (no engine kwarg form)")
+                    continue
+                kwarg, conv = spec
+                try:
+                    out[kwarg] = conv(val)
+                except (TypeError, ValueError):
+                    unreproduced.append(f"{section}.{key}={val!r} (value not convertible for {kwarg})")
+        if manifest.model_revision and "revision" not in out:
+            out["revision"] = manifest.model_revision
+    out.update(manifest.engine_kwargs)
+    out.update(manifest.scheduling_change)
+    return out, unreproduced
 
 
 def _int(v: Any) -> Optional[int]:
@@ -137,14 +192,18 @@ def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = 
                      batches: Optional[List[BatchMetadata]] = None, max_candidates: int = 4, repeats: int = 3,
                      source_run: Optional[str] = None) -> ExperimentPlan:
     knobs = effective_knobs(manifest)
+    src_kwargs, unreproduced = source_engine_kwargs(manifest)
     plan = ExperimentPlan(source_run=source_run, workload_hash=manifest.workload_hash if manifest else None,
                           source_engine=manifest.engine if manifest else None,
                           source_model=(manifest.model if manifest and manifest.engine == "vllm" else None),
                           source_model_revision=manifest.model_revision if manifest else None,
-                          source_engine_kwargs=source_engine_kwargs(manifest),
+                          source_engine_kwargs=src_kwargs, unreproduced=unreproduced,
                           baseline_config={k: v for k, v in knobs.items() if v is not None}, repeats=repeats)
     if manifest is None:
         plan.notes.append("no manifest: baseline knobs unknown, candidates use vLLM 0.11.0 defaults as the reference")
+    if unreproduced:
+        plan.notes.append("the baseline cannot reproduce every effective setting of the source run (see NOT REPRODUCED); "
+                          "comparisons against the source run's own numbers are not like-for-like")
     by_h = {f.hypothesis: f for f in findings}
     cands: List[Candidate] = []
 

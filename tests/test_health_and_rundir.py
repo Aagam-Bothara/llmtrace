@@ -69,6 +69,10 @@ class TestAssessHealth:
         assert len(a.telemetry_problems) == 5
         lossy = assess_health(_health(gpu_sampler__read_errors=3, gpu_sampler__dropped=10))
         assert lossy.ok and lossy.gpu_telemetry_ok is False
+        # records lost in the writer queue count against the signal they belong to
+        w = assess_health(_health(writer__dropped={"traces": 0, "gpu": 10, "gpu_steps": 2, "vllm_stats": 1, "batches": 3}))
+        assert w.ok and w.gpu_telemetry_ok is False and w.gpu_steps_ok is False and w.vllm_stats_ok is False
+        assert sum("dropped by the writer" in t for t in w.telemetry_problems) == 4
 
     def test_nested_only_and_missing(self):
         assert assess_health({"instrumentation_errors": 0, "active_requests": 0}).ok
@@ -105,6 +109,10 @@ class TestDecideUsesFullHealth:
         assert r.eligible and r.meets_target and r.joules_per_output_token is None and r.device_joules is None
         assert any("read error" in t for t in r.telemetry_problems)
         assert any("energy not compared" in n for n in dec.notes)
+        writer_lossy = self._run(tmp_path, "wl", _health(writer__dropped={"traces": 0, "gpu": 10}))
+        io.write_jsonl(tmp_path / "wl" / "gpu_x.jsonl", const_power(0.0, 1.0, 0.1, 100.0))
+        rw = evaluate({"wl": [writer_lossy]}, Target.parse("short ttft_p95 <= 20ms")).configs[0].repeats[0]
+        assert rw.eligible and rw.joules_per_output_token is None and rw.device_joules is None
         clean = self._run(tmp_path, "clean", CLEAN)
         io.write_jsonl(tmp_path / "clean" / "gpu_x.jsonl", const_power(0.0, 1.0, 0.1, 100.0))
         r2 = evaluate({"clean": [clean]}, Target.parse("short ttft_p95 <= 20ms")).configs[0].repeats[0]
@@ -176,15 +184,45 @@ class TestPlanReproducesSource:
                         effective_engine_config={"scheduler_config": {"max_num_batched_tokens": 512, "max_num_seqs": 256},
                                                  "parallel_config": {"tensor_parallel_size": 2, "pipeline_parallel_size": 1},
                                                  "model_config": {"revision": "abc123"}})
-        kw = source_engine_kwargs(m)
-        assert kw == {"max_num_batched_tokens": 512, "max_model_len": 4096, "long_prefill_token_threshold": 128,
-                      "tensor_parallel_size": 2, "revision": "abc123"}
+        kw, unreproduced = source_engine_kwargs(m)
+        assert kw == {"max_num_batched_tokens": 512, "max_num_seqs": 256, "max_model_len": 4096, "long_prefill_token_threshold": 128,
+                      "tensor_parallel_size": 2, "pipeline_parallel_size": 1, "revision": "abc123"}
+        assert unreproduced == []
         p = plan_experiments([Finding(hypothesis="queue_overload", status=SUPPORTED, summary="s")], m, [])
         assert p.source_engine == "vllm" and p.source_model == "org/model" and p.source_engine_kwargs == kw
         cfgs = p.configs()
         assert cfgs[0] == {"name": "baseline", "engine_kwargs": kw, "scheduling_change": {}}
         assert all(c["engine_kwargs"] == kw for c in cfgs)
         assert "baseline engine kwargs" in p.format() and "revision abc123" in p.format()
+
+    def test_effective_only_settings_are_reconstructed_and_unknown_ones_flagged(self):
+        # nothing explicit: the budget, the sequence cap and the disabled prefix cache exist only in the effective record
+        m = RunManifest(engine="vllm", model="org/model", engine_kwargs={}, scheduling_change={},
+                        effective_engine_config={
+                            "scheduler_config": {"max_num_batched_tokens": 512, "max_num_seqs": 32, "enable_chunked_prefill": True,
+                                                 "long_prefill_token_threshold": 0, "policy": "fcfs", "max_model_len": 2048},
+                            "cache_config": {"block_size": 16, "gpu_memory_utilization": 0.5, "enable_prefix_caching": False, "num_gpu_blocks": 1234},
+                            "model_config": {"model": "org/model", "revision": None, "dtype": "torch.bfloat16", "max_model_len": 2048, "seed": 0,
+                                             "weird_knob": "x"},
+                            "parallel_config": {"tensor_parallel_size": 1, "pipeline_parallel_size": 1, "data_parallel_size": 1}})
+        kw, unreproduced = source_engine_kwargs(m)
+        assert kw["max_num_batched_tokens"] == 512 and kw["max_num_seqs"] == 32 and kw["enable_prefix_caching"] is False
+        assert kw["scheduling_policy"] == "fcfs" and kw["dtype"] == "bfloat16" and kw["block_size"] == 16 and kw["seed"] == 0
+        assert "num_gpu_blocks" not in kw and "model" not in kw and "revision" not in kw
+        assert unreproduced == ["model_config.weird_knob='x' (no engine kwarg form)"]
+        p = plan_experiments([Finding(hypothesis="queue_overload", status=SUPPORTED, summary="s")], m, [])
+        assert not p.reproducible and "NOT REPRODUCED: model_config.weird_knob" in p.format()
+        assert any("not like-for-like" in n for n in p.notes)
+        assert p.configs()[0]["engine_kwargs"]["max_num_batched_tokens"] == 512
+        # explicit overrides win over the effective record
+        m2 = m.model_copy(update={"scheduling_change": {"max_num_seqs": 64}})
+        kw2, _ = source_engine_kwargs(m2)
+        assert kw2["max_num_seqs"] == 64 and kw2["max_num_batched_tokens"] == 512
+        # fake engine: every recorded knob is a constructor argument
+        fake = RunManifest(engine="fake", effective_engine_config={"fake_engine": {"step_seconds": 0.0015, "max_num_batched_tokens": 512,
+                                                                                   "long_prefill_token_threshold": 0, "prefill_chunk": None}})
+        kwf, unf = source_engine_kwargs(fake)
+        assert kwf == {"step_seconds": 0.0015, "max_num_batched_tokens": 512, "long_prefill_token_threshold": 0} and unf == []
 
     def test_run_plan_baseline_keeps_source_budget(self, tmp_path):
         spec = WorkloadSpec(name="mini", seed=1, classes=[
@@ -200,14 +238,15 @@ class TestPlanReproducesSource:
         res = r.invoke(main, ["plan", str(tmp_path / "src"), "--repeats", "1", "--max-candidates", "1", "--json", str(tmp_path / "plan.json")])
         assert res.exit_code == 0, res.output
         p = ExperimentPlan.model_validate_json((tmp_path / "plan.json").read_text())
-        assert p.source_engine == "fake" and p.source_engine_kwargs == {"max_num_batched_tokens": 512}
+        assert p.source_engine == "fake" and p.source_engine_kwargs["max_num_batched_tokens"] == 512
+        assert p.source_engine_kwargs["step_seconds"] == 0.0015 and p.reproducible  # the fake's effective knobs come along
         res = r.invoke(main, ["run", "--workload", str(tmp_path / "w.json"), "--plan", str(tmp_path / "plan.json"), "--out", str(tmp_path / "exp")])
         assert res.exit_code == 0, res.output  # engine taken from the plan (fake)
         base = RunManifest.read(str(tmp_path / "exp" / "baseline" / "r0"))
-        assert base.engine_kwargs == {"max_num_batched_tokens": 512}
+        assert base.engine_kwargs["max_num_batched_tokens"] == 512
         assert base.effective_engine_config["fake_engine"]["max_num_batched_tokens"] == 512  # not the 8192 default
         cand = RunManifest.read(str(tmp_path / "exp" / p.candidates[0].name / "r0"))
-        assert cand.engine_kwargs == {"max_num_batched_tokens": 512} and cand.scheduling_change == p.candidates[0].scheduling_change
+        assert cand.engine_kwargs["max_num_batched_tokens"] == 512 and cand.scheduling_change == p.candidates[0].scheduling_change
         assert cand.effective_engine_config["fake_engine"]["max_num_batched_tokens"] == 512
         # a plan from a vllm run cannot be silently run on the fake engine without a warning
         p2 = p.model_copy(update={"source_engine": "vllm", "source_model": "org/m"})
@@ -215,4 +254,4 @@ class TestPlanReproducesSource:
         res = r.invoke(main, ["run", "--workload", str(tmp_path / "w.json"), "--plan", str(tmp_path / "plan2.json"), "--engine", "fake",
                               "--out", str(tmp_path / "exp2")])
         assert res.exit_code == 0 and "made from a vllm run, running on fake" in res.output
-        assert json.loads((tmp_path / "exp2" / "baseline" / "r0" / "manifest.json").read_text())["engine_kwargs"] == {"max_num_batched_tokens": 512}
+        assert json.loads((tmp_path / "exp2" / "baseline" / "r0" / "manifest.json").read_text())["engine_kwargs"]["max_num_batched_tokens"] == 512

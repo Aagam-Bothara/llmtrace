@@ -377,6 +377,8 @@ def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out
                 click.echo(f"warning: plan was made from a {p.source_engine} run, running on {engine}")
             if model is None and p.source_model:
                 model = p.source_model
+            for u in p.unreproduced:
+                click.echo(f"warning: baseline does not reproduce {u}")
             repeat = p.repeats
             for cfg in p.configs():
                 # the source run's engine kwargs first, explicit --engine-kwargs on top, then the candidate's change

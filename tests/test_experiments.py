@@ -139,7 +139,10 @@ class TestPlanner:
                                    _manifest(max_num_batched_tokens=2048, max_num_seqs=256, long_prefill_token_threshold=0), batches)
         assert [c.name for c in p_small.candidates] == ["cap1024", "cap512", "budget1024"]
         assert all(c.scheduling_change and c.source_finding == "long_prompt_interference" and c.expected_cost for c in p.candidates)
-        assert p.configs()[0] == {"name": "baseline", "engine_kwargs": {}, "scheduling_change": {}}
+        # the baseline reproduces the source's effective settings even though none were explicit kwargs
+        assert p.configs()[0] == {"name": "baseline", "scheduling_change": {},
+                                  "engine_kwargs": {"max_num_batched_tokens": 8192, "max_num_seqs": 256, "long_prefill_token_threshold": 0}}
+        assert p.reproducible
         # already capped at 256: only smaller values, none below the chunk threshold of 256 -> skipped with a reason
         m2 = _manifest(max_num_batched_tokens=8192, max_num_seqs=256, long_prefill_token_threshold=256)
         p2 = plan_experiments([_finding("long_prompt_interference", chunk_threshold=256)], m2, batches)

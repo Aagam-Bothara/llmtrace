@@ -61,6 +61,7 @@ def assess_health(health: Optional[Dict[str, Any]]) -> HealthAssessment:
         if _n(writer, "write_errors"):
             problems.append(f"{_n(writer, 'write_errors')} writer error(s): {writer.get('last_error')}")
         dropped = writer.get("dropped") or {}
+        lossy = set()  # data types whose records were dropped before reaching disk
         for kind, count in dropped.items():
             if not count:
                 continue
@@ -68,6 +69,7 @@ def assess_health(health: Optional[Dict[str, Any]]) -> HealthAssessment:
                 problems.append(f"{count} trace(s) dropped by the writer queue")
             else:
                 tele.append(f"{count} {kind} record(s) dropped by the writer queue")
+                lossy.add(kind)
         if _n(health, "collection_errors"):
             problems.append(f"{_n(health, 'collection_errors')} collector error(s): {health.get('last_collection_error')}")
 
@@ -84,6 +86,8 @@ def assess_health(health: Optional[Dict[str, Any]]) -> HealthAssessment:
             if _n(gpu, "dropped"):
                 tele.append(f"{_n(gpu, 'dropped')} GPU sample(s) dropped")
                 gpu_ok = False
+            if "gpu" in lossy:
+                gpu_ok = False  # samples lost between the sampler and the file: the energy integral has holes
         cuda = health.get("cuda_timing")
         steps_ok: Optional[bool] = None
         if isinstance(cuda, dict):
@@ -93,6 +97,8 @@ def assess_health(health: Optional[Dict[str, Any]]) -> HealthAssessment:
             if _n(cuda, "errors") or _n(cuda, "dropped"):
                 tele.append(f"GPU step timing: {_n(cuda, 'errors')} error(s), {_n(cuda, 'dropped')} dropped")
                 steps_ok = False
+            if "gpu_steps" in lossy:
+                steps_ok = False
         stats = health.get("vllm_stats")
         stats_ok: Optional[bool] = None
         if isinstance(stats, dict):
@@ -101,6 +107,8 @@ def assess_health(health: Optional[Dict[str, Any]]) -> HealthAssessment:
                 tele.append(f"vLLM stats unavailable: {stats.get('unavailable_reason')}")
             if _n(stats, "errors") or _n(stats, "dropped"):
                 tele.append(f"vLLM stats: {_n(stats, 'errors')} error(s), {_n(stats, 'dropped')} dropped")
+                stats_ok = False
+            if "vllm_stats" in lossy:
                 stats_ok = False
         return HealthAssessment(ok=not problems, problems=problems, telemetry_problems=tele,
                                 gpu_telemetry_ok=gpu_ok, gpu_steps_ok=steps_ok, vllm_stats_ok=stats_ok)

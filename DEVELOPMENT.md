@@ -54,8 +54,10 @@ traces, writer errors, collector errors) make a repeat ineligible for any
 comparison. Telemetry problems (GPU sampler unavailable, lossy or erroring;
 GPU step timing unavailable or erroring; vLLM stats unavailable; dropped
 batch, GPU, stats or collector records) do not affect latency targets, but
-`decide` reports energy per token as unavailable for that repeat and notes
-why.
+each one clears the flag of the signal it belongs to (`gpu_telemetry_ok`,
+`gpu_steps_ok`, `vllm_stats_ok`), including records dropped in the writer
+queue, and `decide` reports energy per token as unavailable for a repeat
+whose GPU telemetry flag is false, with the reason in the notes.
 
 ## Verified vLLM target
 
@@ -216,12 +218,21 @@ are deduplicated and capped (`--max-candidates`), skipped items are listed
 with the reason, and the plan is JSON that `llmtrace run --plan` executes as
 fresh engines under the same workload (`<out>/<config>/r<i>`), warning if the
 workload hash differs from the plan's source run. The plan carries the source
-run's engine (`fake`/`vllm`), model, revision and `source_engine_kwargs` (its
-explicit engine kwargs and scheduling change plus tensor/pipeline parallelism
-and revision from the effective config); the baseline runs with exactly
-those and every candidate applies its change on top, so a source run with a
-512-token budget keeps that budget in the baseline. `--engine` and `--model`
-default to the plan's values. Nothing is executed by the planner and no
+run's engine (`fake`/`vllm`), model, revision and `source_engine_kwargs`.
+Those kwargs are reconstructed from the effective configuration through an
+explicit map of settings that have an engine kwarg form (`_REPRODUCIBLE`:
+token budget, sequence cap, chunked prefill, prefill threshold, partial
+prefill limits, scheduling policy, block size, memory utilization, prefix
+caching, revision, dtype, seed, max model length, tensor/pipeline/data
+parallelism; for the fake engine every recorded knob), then the run's
+explicit engine kwargs and scheduling change are applied on top. Effective
+entries with no kwarg form are listed in `unreproduced` (`NOT REPRODUCED`
+in the plan text, a warning at `run --plan`, and `plan.reproducible` is
+false); derived values such as `num_gpu_blocks` are neither. The baseline
+runs with exactly those kwargs and every candidate applies its change on
+top, so a source run with a 512-token budget recorded only in its effective
+config keeps that budget in the baseline. `--engine` and `--model` default to
+the plan's values. Nothing is executed by the planner and no
 running server is modified.
 
 ## GPU span per step (`data_plane/cuda_timing.py`)

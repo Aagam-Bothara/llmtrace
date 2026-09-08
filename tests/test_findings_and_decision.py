@@ -84,6 +84,10 @@ class TestFindings:
         f = check_tracer_self_effect(batches, ev)
         assert f.status == "supported" and f.parameters["steps"] == ["b10"]
         assert check_tracer_self_effect(batches, [CollectorEvent(timestamp=3.0, monotonic=3.0005, duration_ms=1.0)]).status == "not_supported"
+        # A 100 ms prefill step overlapping a 0.2 ms drain is not a tracer effect (the drain is immaterial to the excess).
+        big = [_batch(i, ["a"], {"a": 1}, 0.011) for i in range(10)] + [_batch(10, ["a", "long-0"], {"a": 1, "long-0": 1536}, 0.100)]
+        f2 = check_tracer_self_effect(big, [CollectorEvent(timestamp=10.0, monotonic=10.02, duration_ms=0.2)])
+        assert f2.status == "not_supported"
 
     def test_evaluate_all_and_format(self):
         out = evaluate_all([_trace("short-0")], [], [], [])
@@ -151,13 +155,29 @@ class TestDecision:
 
     def test_expected_request_count_and_health_from_manifest(self, tmp_path):
         short = self._run(tmp_path, "s", [1.0, 2.0], manifest=RunManifest(expected_requests=3, health={"instrumentation_errors": 0}))
-        sick = self._run(tmp_path, "h", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation_errors": 2}))
+        sick = self._run(tmp_path, "h", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation": {"instrumentation_errors": 2}}))
         fine = self._run(tmp_path, "f", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation_errors": 0}))
         dec = evaluate({"short": [short], "sick": [sick], "fine": [fine]}, Target.parse("short ttft_p95 <= 100ms"))
         by = {c.name: c for c in dec.configs}
         assert "2 traced requests but 3 expected" in by["short"].repeats[0].problems[0]
         assert "health not clean" in by["sick"].repeats[0].problems[0]
         assert dec.candidates == ["fine"]
+
+    def test_exclude_class_reconciles_expected_count(self, tmp_path):
+        d = tmp_path / "s"
+        d.mkdir()
+        traces = [RequestTrace(request_id=f"short-{i}", start_time=0.0, end_time=1.0, prompt_length=4, output_length=4,
+                               model_name="m", ttft_ms=10.0) for i in range(3)]
+        traces += [RequestTrace(request_id=f"settle-{i}", start_time=0.0, end_time=1.0, prompt_length=4, output_length=4,
+                                model_name="m", ttft_ms=10.0) for i in range(2)]
+        io.write_jsonl(d / "traces_x.jsonl", traces)
+        RunManifest(expected_requests=3).write(str(d))  # old driver counted the workload only
+        assert evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms")).candidates == []
+        dec = evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms"), exclude_classes=["settle"])
+        assert dec.candidates == ["c"] and dec.configs[0].repeats[0].requests == 3
+        assert any("open-loop" in n for n in dec.notes)
+        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 20ms", "--config", f"c={d}", "--exclude-class", "settle"])
+        assert r.exit_code == 0 and "candidates meeting the target in every repeat: c" in r.output
 
     def test_ttft_sched_target_uses_manifest_delays(self, tmp_path):
         m = RunManifest(expected_requests=2, arrivals=[ArrivalRecord(request_id="short-0", scheduled_s=0, actual_s=0.05, delay_ms=50.0),
@@ -170,7 +190,8 @@ class TestDecision:
         assert sched.configs[0].repeats[0].arrival_delay_ms_max == pytest.approx(50.0)
 
     def test_cli_decide_and_findings(self, tmp_path):
-        a = self._run(tmp_path, "a0", [10, 20]); b = self._run(tmp_path, "b0", [5, 6])
+        a = self._run(tmp_path, "a0", [10, 20])
+        b = self._run(tmp_path, "b0", [5, 6])
         r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 15ms", "--config", f"A={a}", "--config", f"B={b}",
                                       "--json", str(tmp_path / "d.json")])
         assert r.exit_code == 0, r.output
@@ -190,6 +211,14 @@ class TestManifestAndCollectorEvents:
         back = RunManifest.read(str(tmp_path))
         assert back.arrival_delay_ms_p50 == 50.0 and back.arrival_delay_ms_max == 50.0 and back.workload_hash.startswith("sha256:")
         assert workload_hash([{"a": 1}]) == workload_hash([{"a": 1}]) != workload_hash([{"a": 2}])
+
+    def test_gpu_loader_does_not_pick_up_gpu_steps(self, tmp_path):
+        from conftest import mk_sample
+
+        from llmtrace.data_plane.cuda_timing import StepGpuTiming
+        io.write_jsonl(tmp_path / "gpu_x.jsonl", [mk_sample(1.0)])
+        io.write_jsonl(tmp_path / "gpu_steps_x.jsonl", [StepGpuTiming(step_index=1, timestamp=0, host_step_ms=1.0, gpu_span_ms=0.5)])
+        assert len(io.load_gpu_samples([tmp_path])) == 1 and len(io.load_gpu_steps([tmp_path])) == 1
 
     def test_tracer_writes_collector_events(self, tmp_path):
         tracer = LLMTracer(TracerConfig(output_dir=str(tmp_path), collection_interval_s=0.02), gpu_backend=FakeNVMLBackend({0: 1.0}))
@@ -212,5 +241,5 @@ class TestManifestAndCollectorEvents:
         m = RunManifest.read(str(out))
         assert m.status == "ok" and m.synthetic and len(m.arrivals) == 7 and m.workload_hash
         assert m.scheduling_change == {"long_prefill_token_threshold": 256} and m.tracer_config["collection_interval_s"] > 0
-        assert m.expected_requests == 7 and all(a.submit_ms is not None and a.submit_ms >= 0 for a in m.arrivals)
+        assert m.expected_requests == 7 and all(a.submit_ms is not None and a.submit_ms >= 0 for a in m.arrivals)  # fake path has no settle phase
         assert all(a.delay_ms is not None and a.delay_ms >= -0.01 for a in m.arrivals)  # driver tolerance is 1 us

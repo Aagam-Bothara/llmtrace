@@ -45,6 +45,21 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   stream of the same NVML sensor (within 0.15% over identical boundaries).
 * Overhead on opt-125m only: +4% (`generate()`) / +9% (cumulative loop) wall
   time over 256 recorded engine steps.
+* CUDA-event GPU span per step (RTX 4000 Ada, A100): one span per step, never
+  above host time, resolved without synchronizing; long-prefill interference
+  shown to be GPU compute (7.9 vs 1.7 ms on opt-125m; 103 vs 11 ms on
+  Qwen2.5-7B); host share 9 to 13% on opt-125m, 2% on the 7B model; refused
+  for TP>1 executors.
+* `AsyncLLM` request-level tracing (RTX 4000 Ada): concurrent streams, client
+  cancellation, restoration, and vLLM per-step stats over the multiprocess core.
+* Nsight Systems cross-check of the step spans (RTX A5000, opt-125m): every
+  NVTX step range matched a span; the span was never below Nsight's busy time
+  (kernels plus CUDA-graph executions); 58% busy on decode steps of this
+  launch-bound model, 84% on 1536-token prefill steps
+  (`scripts/nsys_step_compare.py`).
+* Qwen2.5-7B on A100 at TP=1 and TP=2: the mixed-prompt experiment reproduces
+  (improved 3/3 and 2/2), with `decide` selecting the capped configs for a
+  50 ms short-TTFT target and reporting the energy-per-token cost of TP=2.
 * The CPU suite on the pod ran 83 tests: `tests/test_collection.py` was
   skipped whole by a module-level pyarrow skip (fixed afterwards; not re-run
   on hardware).
@@ -56,8 +71,9 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 
 ## Implemented but unverified on hardware
 
-* Behaviour under chunked prefill across steps, preemption, speculative
-  decoding, `n > 1`, multi-GPU, abort under load.
+* Behaviour under preemption, speculative decoding, `n > 1`, abort under load,
+  pipeline parallelism, models above 7B. The span-vs-busy gap is characterized
+  on opt-125m only; the event-recording overhead itself is not measured.
 * Throttle-reason bits other than `none`.
 * Overhead on models where a step takes longer than a few milliseconds
   (expected to be smaller in relative terms; not measured).
@@ -65,7 +81,9 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 ## Not implemented
 
 * `llmtrace monitor` (attach to an external process).
-* `AsyncLLM` / OpenAI-compatible server instrumentation.
+* Instrumenting the OpenAI-compatible server process itself (only a directly
+  constructed `AsyncLLM` is supported; the server would need a hook point to
+  call `instrument_async_engine` inside its process).
 * Distributed / multi-node coordination (multi-GPU telemetry on one host is
   supported by the ledger; tensor-parallel workers are not instrumented).
 * DCGM, dashboards, OTLP export, ML-based diagnosis.

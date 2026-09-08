@@ -1,0 +1,468 @@
+INFO 09-08 18:54:59 [__init__.py:216] Automatically detected platform cuda.
+vLLM 0.11.0 (llmtrace verified against 0.11.0)
+VLLM_ENABLE_V1_MULTIPROCESSING=0
+  PASS  vLLM version matches the verified target
+INFO 09-08 18:55:01 [utils.py:233] non-default args: {'gpu_memory_utilization': 0.5, 'disable_log_stats': True, 'model': 'facebook/opt-125m'}
+WARNING 09-08 18:55:02 [model.py:371] The global random seed is set to 0. Since VLLM_ENABLE_V1_MULTIPROCESSING is set to False, this may affect the random state of the Python process that launched vLLM.
+INFO 09-08 18:55:11 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 18:55:11 [model.py:1510] Using max model len 2048
+INFO 09-08 18:55:11 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 18:55:13 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":512,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 18:55:14 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 18:55:14 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 18:55:14 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 18:55:15 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 18:55:15 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 18:55:15 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+INFO 09-08 18:55:19 [weight_utils.py:413] Time spent downloading weights for facebook/opt-125m: 3.618642 seconds
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.21it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.20it/s]
+
+INFO 09-08 18:55:19 [default_loader.py:267] Loading weights took 0.25 seconds
+INFO 09-08 18:55:19 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 4.187599 seconds
+INFO 09-08 18:55:21 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/b466c2e9ef/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 18:55:21 [backends.py:559] Dynamo bytecode transform time: 1.45 s
+INFO 09-08 18:55:22 [backends.py:197] Cache the graph for dynamic shape for later use
+[rank0]:W0908 18:55:23.212000 346 torch/_inductor/utils.py:1436] [0/0] Not enough SMs to use max_autotune_gemm mode
+INFO 09-08 18:55:26 [backends.py:218] Compiling a graph for dynamic shape takes 5.29 s
+INFO 09-08 18:55:29 [monitor.py:34] torch.compile takes 6.75 s in total
+INFO 09-08 18:55:30 [gpu_worker.py:298] Available KV cache memory: 9.08 GiB
+INFO 09-08 18:55:30 [kv_cache_utils.py:1087] GPU KV cache size: 264,608 tokens
+INFO 09-08 18:55:30 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 129.20x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  12%|█▏        | 8/67 [00:00<00:00, 76.15it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  27%|██▋       | 18/67 [00:00<00:00, 85.12it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  42%|████▏     | 28/67 [00:00<00:00, 88.16it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 38/67 [00:00<00:00, 88.13it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  70%|███████   | 47/67 [00:00<00:00, 87.76it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  84%|████████▎ | 56/67 [00:00<00:00, 87.37it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  97%|█████████▋| 65/67 [00:00<00:00, 88.08it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 67/67 [00:00<00:00, 83.23it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  23%|██▎       | 8/35 [00:00<00:00, 77.40it/s]Capturing CUDA graphs (decode, FULL):  49%|████▊     | 17/35 [00:00<00:00, 81.09it/s]Capturing CUDA graphs (decode, FULL):  74%|███████▍  | 26/35 [00:00<00:00, 84.48it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 35/35 [00:00<00:00, 85.39it/s]
+INFO 09-08 18:55:32 [gpu_model_runner.py:3480] Graph capturing finished in 2 secs, took 0.23 GiB
+INFO 09-08 18:55:32 [core.py:210] init engine (profile, create kv cache, warmup model) took 12.54 seconds
+INFO 09-08 18:55:33 [llm.py:306] Supported_tasks: ('generate',)
+engine: vllm.v1.engine.llm_engine.LLMEngine; engine_core client: InprocClient
+Adding requests:   0%|          | 0/1 [00:00<?, ?it/s]Adding requests: 100%|██████████| 1/1 [00:00<00:00, 449.07it/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00, 19.14it/s, est. speed input: 268.07 toks/s, output: 612.57 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00, 19.08it/s, est. speed input: 268.07 toks/s, output: 612.57 toks/s]
+Adding requests:   0%|          | 0/8 [00:00<?, ?it/s]Adding requests: 100%|██████████| 8/8 [00:00<00:00, 4554.08it/s]
+Processed prompts:   0%|          | 0/8 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 8/8 [00:00<00:00, 140.42it/s, est. speed input: 1966.38 toks/s, output: 4213.30 toks/s]Processed prompts: 100%|██████████| 8/8 [00:00<00:00, 140.17it/s, est. speed input: 1966.38 toks/s, output: 4213.30 toks/s]
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+
+=== Phase A (run 0): LLM.generate(), FINAL_ONLY outputs; timing expected unavailable
+Adding requests:   0%|          | 0/8 [00:00<?, ?it/s]Adding requests: 100%|██████████| 8/8 [00:00<00:00, 4848.21it/s]
+Processed prompts:   0%|          | 0/8 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 8/8 [00:00<00:00, 133.92it/s, est. speed input: 1875.29 toks/s, output: 4018.17 toks/s]Processed prompts: 100%|██████████| 8/8 [00:00<00:00, 133.72it/s, est. speed input: 1875.29 toks/s, output: 4018.17 toks/s]
+[traced generate] run 0: 0.062s wall
+  PASS  generated text identical to untraced run
+{
+  "state": "stopped",
+  "session_id": "b4f69907edf2",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "executor_visible": false,
+    "executor_unavailable_reason": "not instrumented",
+    "cuda_timing": {
+      "available": true,
+      "unavailable_reason": null,
+      "resolved": 32,
+      "pending": 0,
+      "buffered": 0,
+      "dropped": 0,
+      "errors": 0,
+      "last_error": null,
+      "nvtx": false
+    },
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 32
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "executor_visible_during_run": true,
+  "executor_unavailable_reason_during_run": null,
+  "cuda_timing": {
+    "available": true,
+    "unavailable_reason": null,
+    "resolved": 32,
+    "pending": 0,
+    "buffered": 0,
+    "dropped": 0,
+    "errors": 0,
+    "last_error": null,
+    "nvtx": false
+  },
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX 4000 Ada Generation"
+      }
+    ],
+    "samples_taken": 2,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "vllm_stats": {
+    "loggers_created": 0,
+    "engine_initialized": [],
+    "buffered": 0,
+    "dropped": 0,
+    "errors": 0,
+    "last_error": null,
+    "unavailable_reason": "engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)"
+  },
+  "writer": {
+    "written": {
+      "traces": 8,
+      "batches": 32,
+      "gpu": 2,
+      "vllm_stats": 0,
+      "collector": 1,
+      "gpu_steps": 32
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0,
+      "vllm_stats": 0,
+      "collector": 0,
+      "gpu_steps": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  8 traces for 8 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=32
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+  PASS  executor visible during run == True (was True; reason: None)
+  PASS  cuda timing clean: {'available': True, 'unavailable_reason': None, 'resolved': 32, 'pending': 0, 'buffered': 0, 'dropped': 0, 'errors': 0, 'last_error': None, 'nvtx': False}
+  PASS  32 GPU spans for 32 batches
+  PASS  0 < gpu_span_ms <= host_step_ms for every step
+gpu span p50 1.597 ms, host step p50 1.783 ms, median host share 10%
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+             Overview              
+┌────────────┬────────────────────┐
+│ Requests   │ 8 {'completed': 8} │
+│ Duration   │ 0.06s              │
+│ Throughput │ 130.41 req/s       │
+└────────────┴────────────────────┘
+   Latency (step-granular, measured at   
+         engine step boundaries)         
+┏━━━━━━━━━━━┳━━━┳━━━━━┳━━━━━┳━━━━━┳━━━━━┓
+┃ Metric    ┃ N ┃ Avg ┃ P50 ┃ P95 ┃ P99 ┃
+┡━━━━━━━━━━━╇━━━╇━━━━━╇━━━━━╇━━━━━╇━━━━━┩
+│ TTFT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+│ TPOT (ms) │ 0 │ n/a │ n/a │ n/a │ n/a │
+└───────────┴───┴─────┴─────┴─────┴─────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 1.29 J         │
+│ Attributed to requests            │ 0.00 J         │
+│ Unallocated (idle/unattributable) │ 1.29 J         │
+│ Requests with allocation          │ 0/8            │
+│ Avg attributed per request        │ n/a            │
+│ Avg per output token              │ n/a            │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 59%            │
+│ GPU samples                       │ 8              │
+│ Avg GPU utilization               │ 0.0%           │
+│ Avg power draw                    │ 34.9 W         │
+│ Throttle incidents                │ 0              │
+└───────────────────────────────────┴────────────────┘
+vLLM stats not collected: engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  9: output tokens 32 == engine 32
+  PASS  9: prompt tokens match engine (14)
+  PASS  10: output tokens 16 == engine 16
+  PASS  10: prompt tokens match engine (14)
+  PASS  11: output tokens 32 == engine 32
+  PASS  11: prompt tokens match engine (14)
+  PASS  12: output tokens 32 == engine 32
+  PASS  12: prompt tokens match engine (14)
+  PASS  13: output tokens 32 == engine 32
+  PASS  13: prompt tokens match engine (14)
+  PASS  14: output tokens 32 == engine 32
+  PASS  14: prompt tokens match engine (14)
+  PASS  15: output tokens 32 == engine 32
+  PASS  15: prompt tokens match engine (14)
+  PASS  16: output tokens 32 == engine 32
+  PASS  16: prompt tokens match engine (14)
+  PASS  10: output_kind recorded as final_only (final_only)
+  PASS  10: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  10: TPOT unavailable under FINAL_ONLY
+  PASS  9: output_kind recorded as final_only (final_only)
+  PASS  9: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  9: TPOT unavailable under FINAL_ONLY
+  PASS  11: output_kind recorded as final_only (final_only)
+  PASS  11: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  11: TPOT unavailable under FINAL_ONLY
+  PASS  12: output_kind recorded as final_only (final_only)
+  PASS  12: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  12: TPOT unavailable under FINAL_ONLY
+  PASS  13: output_kind recorded as final_only (final_only)
+  PASS  13: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  13: TPOT unavailable under FINAL_ONLY
+  PASS  14: output_kind recorded as final_only (final_only)
+  PASS  14: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  14: TPOT unavailable under FINAL_ONLY
+  PASS  15: output_kind recorded as final_only (final_only)
+  PASS  15: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  15: TPOT unavailable under FINAL_ONLY
+  PASS  16: output_kind recorded as final_only (final_only)
+  PASS  16: TTFT unavailable with FINAL_ONLY reason (output_kind=FINAL_ONLY: intermediate outputs not emitted)
+  PASS  16: TPOT unavailable under FINAL_ONLY
+
+=== Phase B (run 0): raw LLMEngine loop with CUMULATIVE outputs; timing expected
+[traced engine loop] run 0: 0.062s wall
+  PASS  8 finished outputs
+  PASS  engine-loop outputs returned in input order
+  PASS  engine-loop text identical to generate() text (matched by request id)
+{
+  "state": "stopped",
+  "session_id": "190cc506e4dd",
+  "instrumentation": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "executor_visible": false,
+    "executor_unavailable_reason": "not instrumented",
+    "cuda_timing": {
+      "available": true,
+      "unavailable_reason": null,
+      "resolved": 32,
+      "pending": 0,
+      "buffered": 0,
+      "dropped": 0,
+      "errors": 0,
+      "last_error": null,
+      "nvtx": false
+    },
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 32
+  },
+  "scheduler_visible_during_run": true,
+  "scheduler_unavailable_reason_during_run": null,
+  "executor_visible_during_run": true,
+  "executor_unavailable_reason_during_run": null,
+  "cuda_timing": {
+    "available": true,
+    "unavailable_reason": null,
+    "resolved": 32,
+    "pending": 0,
+    "buffered": 0,
+    "dropped": 0,
+    "errors": 0,
+    "last_error": null,
+    "nvtx": false
+  },
+  "gpu_sampler": {
+    "available": true,
+    "unavailable_reason": null,
+    "devices": [
+      {
+        "gpu_id": 0,
+        "name": "NVIDIA RTX 4000 Ada Generation"
+      }
+    ],
+    "samples_taken": 2,
+    "buffered": 0,
+    "dropped": 0,
+    "read_errors": 0,
+    "last_error": null
+  },
+  "vllm_stats": {
+    "loggers_created": 0,
+    "engine_initialized": [],
+    "buffered": 0,
+    "dropped": 0,
+    "errors": 0,
+    "last_error": null,
+    "unavailable_reason": "engine has no logger_manager (vLLM stats logging disabled: disable_log_stats=True?)"
+  },
+  "writer": {
+    "written": {
+      "traces": 8,
+      "batches": 32,
+      "gpu": 2,
+      "vllm_stats": 0,
+      "collector": 1,
+      "gpu_steps": 32
+    },
+    "dropped": {
+      "traces": 0,
+      "batches": 0,
+      "gpu": 0,
+      "vllm_stats": 0,
+      "collector": 0,
+      "gpu_steps": 0
+    },
+    "write_errors": 0,
+    "last_error": null,
+    "queued": 0
+  },
+  "collection_errors": 0,
+  "last_collection_error": null,
+  "incomplete_requests_written": 0
+}
+  PASS  scheduler visible during run == True (was True; reason: None)
+  PASS  no instrumentation errors
+  PASS  no active requests leaked
+  PASS  engine methods restored
+  PASS  LLMEngine.step/add_request are the originals again
+  PASS  GPU telemetry available (None)
+  PASS  GPU samples were taken during inference
+  PASS  no dropped writes
+  PASS  8 traces for 8 requests
+  PASS  all traces completed
+  PASS  every duration within inference wall time
+scheduler_visible_during_run=True reason=None batches=32
+  PASS  batch metadata recorded
+  PASS  every trace linked to batches
+  PASS  every trace flagged scheduler_visible
+  PASS  every batch has a step end time
+  PASS  first batch is all prefill
+  PASS  executor visible during run == True (was True; reason: None)
+  PASS  cuda timing clean: {'available': True, 'unavailable_reason': None, 'resolved': 32, 'pending': 0, 'buffered': 0, 'dropped': 0, 'errors': 0, 'last_error': None, 'nvtx': False}
+  PASS  32 GPU spans for 32 batches
+  PASS  0 < gpu_span_ms <= host_step_ms for every step
+gpu span p50 1.600 ms, host step p50 1.798 ms, median host share 11%
+╭──────────────────────────╮
+│ llmtrace Analysis Report │
+╰──────────────────────────╯
+             Overview              
+┌────────────┬────────────────────┐
+│ Requests   │ 8 {'completed': 8} │
+│ Duration   │ 0.06s              │
+│ Throughput │ 128.48 req/s       │
+└────────────┴────────────────────┘
+ Latency (step-granular, measured at engine  
+              step boundaries)               
+┏━━━━━━━━━━━┳━━━┳━━━━━━┳━━━━━━┳━━━━━━┳━━━━━━┓
+┃ Metric    ┃ N ┃ Avg  ┃ P50  ┃ P95  ┃ P99  ┃
+┡━━━━━━━━━━━╇━━━╇━━━━━━╇━━━━━━╇━━━━━━╇━━━━━━┩
+│ TTFT (ms) │ 8 │ 4.04 │ 3.92 │ 4.79 │ 4.79 │
+│ TPOT (ms) │ 8 │ 1.86 │ 1.85 │ 1.87 │ 1.87 │
+└───────────┴───┴──────┴──────┴──────┴──────┘
+Energy (integrated from sampled power; allocations are
+                      estimates)                      
+┌───────────────────────────────────┬────────────────┐
+│ Device energy in run window       │ 1.26 J         │
+│ Attributed to requests            │ 0.00 J         │
+│ Unallocated (idle/unattributable) │ 1.26 J         │
+│ Requests with allocation          │ 0/8            │
+│ Avg attributed per request        │ n/a            │
+│ Avg per output token              │ n/a            │
+│ Allocation policy                 │ equal_share    │
+│ Membership source                 │ batch_metadata │
+│ Telemetry coverage                │ 54%            │
+│ GPU samples                       │ 8              │
+│ Avg GPU utilization               │ 39.0%          │
+│ Avg power draw                    │ 37.0 W         │
+│ Throttle incidents                │ 0              │
+└───────────────────────────────────┴────────────────┘
+  PASS  energy ledger conserved
+  PASS  membership source batch_metadata
+  PASS  smoke-0-0: output tokens 32 == engine 32
+  PASS  smoke-0-0: prompt tokens match engine (14)
+  PASS  smoke-0-1: output tokens 16 == engine 16
+  PASS  smoke-0-1: prompt tokens match engine (14)
+  PASS  smoke-0-2: output tokens 32 == engine 32
+  PASS  smoke-0-2: prompt tokens match engine (14)
+  PASS  smoke-0-3: output tokens 32 == engine 32
+  PASS  smoke-0-3: prompt tokens match engine (14)
+  PASS  smoke-0-4: output tokens 32 == engine 32
+  PASS  smoke-0-4: prompt tokens match engine (14)
+  PASS  smoke-0-5: output tokens 32 == engine 32
+  PASS  smoke-0-5: prompt tokens match engine (14)
+  PASS  smoke-0-6: output tokens 32 == engine 32
+  PASS  smoke-0-6: prompt tokens match engine (14)
+  PASS  smoke-0-7: output tokens 32 == engine 32
+  PASS  smoke-0-7: prompt tokens match engine (14)
+  PASS  smoke-0-1: output_kind cumulative (cumulative)
+  PASS  smoke-0-1: TTFT measured (4.47605736553669)
+  PASS  smoke-0-1: TPOT measured (1.865128055214882)
+  PASS  smoke-0-1: one token at first observation (no spec decode)
+  PASS  smoke-0-1: queue + prefill == TTFT
+  PASS  smoke-0-0: output_kind cumulative (cumulative)
+  PASS  smoke-0-0: TTFT measured (4.786284640431404)
+  PASS  smoke-0-0: TPOT measured (1.854175881993386)
+  PASS  smoke-0-0: one token at first observation (no spec decode)
+  PASS  smoke-0-0: queue + prefill == TTFT
+  PASS  smoke-0-2: output_kind cumulative (cumulative)
+  PASS  smoke-0-2: TTFT measured (4.282791167497635)
+  PASS  smoke-0-2: TPOT measured (1.854175881993386)
+  PASS  smoke-0-2: one token at first observation (no spec decode)
+  PASS  smoke-0-2: queue + prefill == TTFT
+  PASS  smoke-0-3: output_kind cumulative (cumulative)
+  PASS  smoke-0-3: TTFT measured (4.090715199708939)
+  PASS  smoke-0-3: TPOT measured (1.854175881993386)
+  PASS  smoke-0-3: one token at first observation (no spec decode)
+  PASS  smoke-0-3: queue + prefill == TTFT
+  PASS  smoke-0-4: output_kind cumulative (cumulative)
+  PASS  smoke-0-4: TTFT measured (3.9167869836091995)
+  PASS  smoke-0-4: TPOT measured (1.854175881993386)
+  PASS  smoke-0-4: one token at first observation (no spec decode)
+  PASS  smoke-0-4: queue + prefill == TTFT
+  PASS  smoke-0-5: output_kind cumulative (cumulative)
+  PASS  smoke-0-5: TTFT measured (3.7470851093530655)
+  PASS  smoke-0-5: TPOT measured (1.854175881993386)
+  PASS  smoke-0-5: one token at first observation (no spec decode)
+  PASS  smoke-0-5: queue + prefill == TTFT
+  PASS  smoke-0-6: output_kind cumulative (cumulative)
+  PASS  smoke-0-6: TTFT measured (3.5784654319286346)
+  PASS  smoke-0-6: TPOT measured (1.854175881993386)
+  PASS  smoke-0-6: one token at first observation (no spec decode)
+  PASS  smoke-0-6: queue + prefill == TTFT
+  PASS  smoke-0-7: output_kind cumulative (cumulative)
+  PASS  smoke-0-7: TTFT measured (3.414282575249672)
+  PASS  smoke-0-7: TPOT measured (1.854175881993386)
+  PASS  smoke-0-7: one token at first observation (no spec decode)
+  PASS  smoke-0-7: queue + prefill == TTFT
+
+RESULT: ALL CHECKS PASSED
+[rank0]:[W908 18:55:34.991117125 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

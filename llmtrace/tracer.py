@@ -25,6 +25,7 @@ from llmtrace.control_plane.reporter import Reporter
 from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.data_plane.gpu_sampler import GPUSampler, SamplerBackend
 from llmtrace.data_plane.trace_writer import TraceWriter
+from llmtrace.data_plane.vllm_async_instrumentation import AsyncLLMInstrumentation
 from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
 from llmtrace.data_plane.cuda_timing import CudaEventBackend, CudaStepTimer
 from llmtrace.data_plane.vllm_stats import (CollectorEvent, VLLMStatsSink, attach_to_engine, detach_from_engine,
@@ -136,6 +137,17 @@ class LLMTracer:
         else:
             self._stats_attach_reason = "disabled by config"
         self.start()  # on failure start() restores the engine itself
+
+    def instrument_async_engine(self, engine: Any) -> None:
+        """Instrument a vLLM ``AsyncLLM`` (request-level traces + vLLM stats; no scheduler/executor access)."""
+        if self._state == "stopped":
+            raise RuntimeError("LLMTracer cannot be restarted; create a new instance")
+        if self.vllm_instrumentation.is_instrumented:
+            raise RuntimeError("an engine is already instrumented by this tracer")
+        self.vllm_instrumentation = AsyncLLMInstrumentation(
+            enable_batch_metadata=False, max_buffered=self.config.max_buffered_events,
+            strict=self.config.strict_instrumentation, clock_domain=self.session_id)
+        self.instrument_engine(engine)
 
     def stat_logger_factory(self) -> Any:
         """A vLLM ``StatLoggerFactory``: ``LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])``."""

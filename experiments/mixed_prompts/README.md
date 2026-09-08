@@ -103,6 +103,10 @@ with `status: failed` and the error, and `llmtrace decide` lists it as failed.
 Real runs use `ignore_eos=True` so every request generates exactly
 `max_tokens`; otherwise batch composition moves where EOS lands and the work
 differs across configurations (`--no-ignore-eos` to disable).
+`--enable-nvtx` adds an NVTX range per engine step; run under
+`nsys profile -t cuda,nvtx`, export with `nsys export --type sqlite`, and
+`scripts/nsys_step_compare.py <sqlite> <run_dir>` compares Nsight's per-step
+GPU busy time with llmtrace's CUDA-event spans (see `docs/GPU_VALIDATION.md`).
 
 Then: `llmtrace findings <run_dir>` and
 `llmtrace decide --target "short ttft_p95 <= 5ms" --config baseline=... --config capped=...`.
@@ -169,7 +173,45 @@ chunked prefill on, FCFS; `long_prefill_token_threshold` 0 vs 256.
 * No step exceeded the token model by more than 2x the median (no unexplained
   stalls) in the final set.
 
-**Does the scheduling change help?** Verdict `improved` in 3 of 3 repeats:
+**Where does the extra step time go?** (RTX 4000 Ada run, CUDA-event spans,
+`docs/gpu_runs/2026-09-08-rtx-4000-ada-cuda-spans/exp`): in the baseline the
+12 long-chunk steps have a GPU span of 7.92 ms against 1.71 ms for the other
+~1480 steps, with host overhead unchanged (p50 0.16 ms, median host share 9%).
+Under the cap the long-chunk span is 2.74 ms. So the interference is GPU
+prefill compute co-scheduled with the short requests' decode, not host work;
+the mean short TTFT change decomposes entirely into the prefill component.
+Verdicts on this second GPU: improved 3/3 (short TTFT p95 -62%, ITL max -45
+to -55%, long TTFT +114 to +116%).
+
+## Results: Qwen2.5-7B on A100 (2026-09-08)
+
+Evidence: `docs/gpu_runs/2026-09-08-a100-qwen2.5-7b/`. Workload at 10 short
+requests/s (128 output tokens, `ignore_eos`), 12 long 1536-token prompts every
+0.4 s; three repeats at TP=1 (in-process, GPU spans available) and two at TP=2
+(in-process, spans refused for the out-of-process executor).
+
+| | TP=1 baseline | TP=1 capped (256) | TP=2 baseline | TP=2 capped |
+|---|---|---|---|---|
+| short TTFT p95 (median of repeats) | 103.4 ms | 29.0 ms (-72%) | 60.5 ms | 18.1 ms (-70%) |
+| worst short stall (ITL max) | 105 ms | 30 ms (-71%) | 68 ms | 19 ms (-72%) |
+| long TTFT p50 (cost) | 104 ms | 170 ms (+64%) | 61 ms | 108 ms (+78%) |
+| GPU span, long-chunk steps vs others | 102.6 vs 11.1 ms | 27.6 vs 11.1 ms | n/a (TP=2) | n/a |
+| host share of a step | 2% | 2% | n/a | n/a |
+| output tokens/s (open-loop, see caveat) | 1159 | 1160 | 1198 | 1198 |
+| energy per output token | 0.337 J | 0.341 J | 0.490 J | 0.486 J |
+| meets short TTFT p95 <= 50 ms in every repeat | no | yes | no | yes |
+
+Reading: on a 7B model the mechanism is the same and larger in absolute terms:
+a 1536-token prefill chunk turns an 11 ms step into a 103 ms step, and every
+short request in flight or arriving during it waits for it. Capping the chunk
+at 256 tokens bounds that to 28 ms, cuts the short-request p95 TTFT and the
+worst stall by about 70%, and costs the long request 64 to 78% more time to
+first token. TP=2 halves the stall (its steps are faster) but at this arrival
+rate delivers almost the same tokens per second while spending 45% more energy
+per token; with an open-loop workload the throughput column reflects the
+arrival schedule, not capacity, and `decide` says so.
+
+**Does the scheduling change help on opt-125m?** Verdict `improved` in 3 of 3 repeats (RTX A4500):
 
 | metric (short requests unless noted) | baseline | capped (256) | change |
 |---|---|---|---|

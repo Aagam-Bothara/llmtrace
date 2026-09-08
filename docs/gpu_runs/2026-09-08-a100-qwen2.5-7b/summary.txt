@@ -1,0 +1,87 @@
+=== smoke TP=1 in-process
+smoke_tp1 exit=0
+gpu span p50 10.853 ms, host step p50 11.042 ms, median host share 2%
+  PASS  executor visible during run == True (was True; reason: None)
+gpu span p50 10.854 ms, host step p50 11.065 ms, median host share 2%
+RESULT: ALL CHECKS PASSED
+=== TP=1 baseline run 0
+tp1 baseline run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1036,
+  "wall_s": 13.338004742749035,
+=== TP=1 capped run 0
+tp1 capped run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1030,
+  "wall_s": 13.329783012159169,
+=== TP=1 baseline run 1
+tp1 baseline run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1033,
+  "wall_s": 13.333507535979152,
+=== TP=1 capped run 1
+tp1 capped run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1032,
+  "wall_s": 13.329705335199833,
+=== TP=1 baseline run 2
+tp1 baseline run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1036,
+  "wall_s": 13.32999044470489,
+=== TP=1 capped run 2
+tp1 capped run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1029,
+  "wall_s": 13.330858626402915,
+=== TP=2 baseline run 0
+tp2 baseline run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1475,
+  "wall_s": 12.911746143363416,
+=== TP=2 capped run 0
+tp2 capped run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1469,
+  "wall_s": 12.899080516770482,
+=== TP=2 baseline run 1
+tp2 baseline run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1475,
+  "wall_s": 12.899061941541731,
+=== TP=2 capped run 1
+tp2 capped run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1456,
+  "wall_s": 12.904688568785787,
+=== analysis
+  GPU span (CUDA events) on 1040 steps: p50 11.08 ms (long-chunk steps 102.58 ms, others 11.08 ms); host overhead p50 0.21 ms, median host share 2%
+  GPU span (CUDA events) on 1034 steps: p50 11.10 ms (long-chunk steps 27.64 ms, others 11.09 ms); host overhead p50 0.21 ms, median host share 2%
+short TTFT (mean) 22.63 -> 16.50 ms: queue -0.01 ms, prefill -6.13 ms, residual 0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -72.1%, short_itl_ms_max -71.2%] (threshold 20.0%); long-request TTFT p50 change 64.0% (cost)
+  GPU span (CUDA events) on 1037 steps: p50 11.11 ms (long-chunk steps 102.10 ms, others 11.11 ms); host overhead p50 0.21 ms, median host share 2%
+  GPU span (CUDA events) on 1036 steps: p50 11.09 ms (long-chunk steps 27.53 ms, others 11.08 ms); host overhead p50 0.22 ms, median host share 2%
+short TTFT (mean) 22.69 -> 16.48 ms: queue -0.01 ms, prefill -6.20 ms, residual -0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -71.8%, short_itl_ms_max -71.9%] (threshold 20.0%); long-request TTFT p50 change 64.6% (cost)
+  GPU span (CUDA events) on 1040 steps: p50 11.09 ms (long-chunk steps 102.69 ms, others 11.08 ms); host overhead p50 0.22 ms, median host share 2%
+  GPU span (CUDA events) on 1033 steps: p50 11.10 ms (long-chunk steps 27.70 ms, others 11.08 ms); host overhead p50 0.21 ms, median host share 2%
+short TTFT (mean) 22.62 -> 16.52 ms: queue +0.01 ms, prefill -6.10 ms, residual -0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -72.0%, short_itl_ms_max -71.9%] (threshold 20.0%); long-request TTFT p50 change 64.1% (cost)
+  GPU span per step: unavailable (needs in-process engine core and torch.cuda; see gpu_steps_*.jsonl)
+  GPU span per step: unavailable (needs in-process engine core and torch.cuda; see gpu_steps_*.jsonl)
+short TTFT (mean) 13.63 -> 9.36 ms: queue +0.01 ms, prefill -4.27 ms, residual 0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -70.6%, short_itl_ms_max -71.5%] (threshold 20.0%); long-request TTFT p50 change 77.2% (cost)
+  GPU span per step: unavailable (needs in-process engine core and torch.cuda; see gpu_steps_*.jsonl)
+  GPU span per step: unavailable (needs in-process engine core and torch.cuda; see gpu_steps_*.jsonl)
+short TTFT (mean) 13.59 -> 9.84 ms: queue +0.05 ms, prefill -3.80 ms, residual -0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -69.5%, short_itl_ms_max -66.0%] (threshold 20.0%); long-request TTFT p50 change 79.0% (cost)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 2 validation errors for GPUSample
+gpu_id
+  Field required [type=missing, input_value={'step_index': 1, 'timest...'source': 'cuda_events'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+device_name
+  Field required [type=missing, input_value={'step_index': 1, 'timest...'source': 'cuda_events'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+results: /workspace/exp_7b.tar.gz
+ALL_DONE

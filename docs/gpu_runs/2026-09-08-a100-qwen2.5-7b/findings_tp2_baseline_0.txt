@@ -1,0 +1,21 @@
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+    evidence: queue wait p95 across requests with a queue span = 0.559 ms  [traces_*.jsonl:spans[phase=queue]]
+    missing: vLLM per-step waiting counts (stat_loggers hook)
+[supported] long_prompt_interference: 49 request(s) decoded or waited in 12 step(s) that also prefilled a chunk > 128 tokens; those steps took 60.1 ms vs 8.2 ms for the rest. They waited while the scheduler spent its token budget on other work.
+    affected (49): short-0000, short-0001, short-0002, short-0003, short-0004, short-0005, short-0006, short-0007 ...
+    evidence: engine steps carrying a prefill chunk above the threshold = 12 steps  [batches_*.jsonl:scheduled_tokens]
+    evidence: median duration of those steps = 60.1 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: median duration of all other steps = 8.22 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: requests that shared such a step without owning the chunk = 49 requests  [traces_*.jsonl:batch_ids]
+    evidence: TTFT p95 of sharing requests = 60.6 ms  [traces_*.jsonl:ttft_ms]
+    evidence: TTFT p95 of non-sharing requests = 9.35 ms  [traces_*.jsonl:ttft_ms]
+    experiment: Replay with long_prefill_token_threshold set to a smaller per-step chunk (e.g. 256) and compare the sharing requests' TTFT p95 and worst inter-token stall against the long requests' TTFT cost.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+    evidence: max KV-cache usage = 0.00262 fraction  [batches_*.jsonl:kv_cache_usage_fraction]
+    evidence: steps with usage >= 90% = 0 steps  [batches_*.jsonl:kv_cache_usage_fraction]
+    missing: preemption counts (vLLM stat_loggers hook)
+[not_evaluable] host_overhead: No GPU step spans recorded: cannot separate GPU time from host time.
+    missing: gpu_steps_*.jsonl (CUDA events around execute_model; needs in-process engine core and torch.cuda)
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 130 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.133 ms  [collector_*.jsonl:duration_ms]

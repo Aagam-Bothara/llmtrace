@@ -66,14 +66,19 @@ Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which force
 - [ ] `tokens_at_first_observation` is 1 without speculative decoding
 
 GPU step spans (CUDA events; in-process run only)
-- [ ] `health()["executor_visible_during_run"]` is true and `gpu_steps_*.jsonl` has one record per step with `gpu_span_ms`
-- [ ] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
-- [ ] median host share per step recorded; on opt-125m expect a large host share (tiny model), which the `host_overhead` finding should report as supported
-- [ ] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels
+- [x] `health()["executor_visible_during_run"]` is true and `gpu_steps_*.jsonl` has one record per step with `gpu_span_ms` (RTX 4000 Ada run)
+- [x] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
+- [x] median host share per step recorded: 9 to 13% on opt-125m, i.e. GPU-bound; the `host_overhead` finding reports not supported (the expectation of a large host share was wrong)
+- [x] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels, and every range matched a `gpu_steps` record; `gpu_span_ms >= ` Nsight busy time on every step (RTX A5000 run, `scripts/nsys_step_compare.py`)
 - [ ] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost)
 
+AsyncLLM (`examples/vllm_async_smoke_test.py`)
+- [x] concurrent `generate()` streams traced with TTFT, token counts equal to the consumer's, status completed (RTX 4000 Ada run)
+- [x] a stream the client stops reading is recorded `aborted` with `abort_cause=client_cancelled` and a partial token count, and `AsyncLLM.abort` was called
+- [x] `generate`/`abort` restored after `stop()`; scheduler and executor reported unavailable with the AsyncLLM reason; `vllm_stats_*.jsonl` present
+
 vLLM stats (stat_loggers hook)
-- [ ] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step
+- [x] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step (AsyncLLM run; sync engine post-hoc attach still fakes-only)
 - [ ] `kv_cache_usage`, `num_running_reqs`, `num_waiting_reqs` populated; `num_preempted_reqs` is 0 in the smoke run
 - [ ] vLLM's own TTFT samples (`time_to_first_tokens_s`) agree with llmtrace `ttft_ms` within a step for the raw-engine phase
 - [ ] the logger is gone from `engine.logger_manager.per_engine_logger_dict[0]` after `stop()`
@@ -173,6 +178,111 @@ script now records `steps_observed` directly.
 Not yet exercised on hardware: larger models, chunked prefill across steps,
 preemption, speculative decoding, `n > 1`, multi-GPU, abort under load,
 `require_gpu` failure path on real NVML.
+
+## AsyncLLM (2026-09-08, RTX 4000 Ada, opt-125m)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-4000-ada-asyncllm/`. `examples/vllm_async_smoke_test.py`:
+ALL CHECKS PASSED. Six concurrent `generate()` streams traced with completion
+status, engine prompt token counts, output counts equal to what the consumer
+received, and TTFT (~190 ms for the first concurrent batch on this card);
+a stream the client stopped reading after 4 tokens was recorded as aborted
+with `abort_cause=client_cancelled` and `AsyncLLM.abort` observed; `generate`
+and `abort` restored after `stop()`; scheduler and executor reported
+unavailable with the AsyncLLM reason; 34 vLLM per-step stat records (KV usage,
+running/waiting) arrived through the `stat_loggers` hook over the
+multiprocess engine core.
+
+## 7B model on A100 (2026-09-08, 2x A100-SXM4-80GB, Qwen2.5-7B)
+
+Evidence: `docs/gpu_runs/2026-09-08-a100-qwen2.5-7b/`. Same workload shape as
+the small-model experiment at a lower arrival rate (10 short/s, 128 output
+tokens each, 12 long 1536-token prompts every 0.4 s), `ignore_eos` so work is
+identical across configurations (confirmed by `decide`: same work = yes).
+
+| Check | Result |
+|-------|--------|
+| In-process smoke, TP=1 | ALL CHECKS PASSED; GPU span p50 10.85 ms of an 11.04 ms step; host share 2% |
+| TP=1 experiment (3 repeats) | improved 3/3: short TTFT p95 103.4 -> 29.0 ms (-72%), worst short stall -71 to -72%, long TTFT p50 104 -> 170 ms (+64%); mean short TTFT change decomposes entirely into prefill |
+| TP=1 GPU spans | long-chunk steps 102.6 ms vs 11.1 ms for the rest (baseline), 27.6 ms under the cap; host overhead p50 0.21 ms, host share 2%: the interference is GPU prefill compute |
+| TP=2 experiment (2 repeats, NVLink) | improved 2/2: short TTFT p95 60.5 -> 18.1 ms (-70%), worst stall -66 to -72%, long TTFT +77 to +79%; GPU spans correctly refused (`MultiprocExecutor` runs workers out of process) |
+| Decision, target short TTFT p95 <= 50 ms | candidates: `tp1_capped`, `tp2_capped`; neither baseline meets it. Energy per output token 0.34 J (TP=1) vs 0.49 J (TP=2) at ~1160 vs ~1200 tok/s |
+| Findings, TP=1 baseline | `long_prompt_interference` supported (49 affected requests, 103 vs 11 ms steps); queue overload, KV pressure (max 1% usage), host overhead (3%) not supported; tracer self-effect not supported after the fix below |
+| Load generator | arrival delay max 8 to 24 ms (recorded in manifests); short TTFT from intended arrival p95 108 ms baseline vs 45 ms capped at TP=1 |
+
+Caveats stated in the outputs: throughput over an open-loop run reflects the
+arrival schedule unless the system saturates (the ~3% tok/s difference between
+TP=1 and TP=2 is not a capacity comparison); GPU spans are upper bounds on busy
+time; energy is an allocation with coverage 1.00 here.
+
+Tooling issues found by this run and fixed afterwards (the recorded analyses
+were recomputed locally with the fixed code, and the on-pod versions are kept
+in the logs): the `gpu_*` loader also matched `gpu_steps_*` files and crashed
+`decide`; manifests counted only the workload while the traced settling phase
+added 4 requests, so every repeat was ineligible until `--exclude-class settle`
+existed and the driver counted them; the tracer self-check flagged 100 ms
+prefill steps merely for overlapping a 0.2 ms drain; a parallel
+`pip install hf_transfer` upgraded huggingface_hub past what transformers
+4.57 accepts.
+
+## CUDA-event step spans (2026-09-08, RTX 4000 Ada)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-4000-ada-cuda-spans/`. First run of
+the GPU span timing on hardware; also the third GPU (second architecture) for
+the smoke test and the mixed-prompt experiment.
+
+| Check | Result |
+|-------|--------|
+| In-process smoke (8 x 32 tokens) | ALL CHECKS PASSED; 32 spans for 32 batches; `0 < gpu_span <= host_step` on every step; timer clean (0 dropped, 0 errors, 0 pending); every event resolved by the end of its own step (vLLM syncs on the sampled-token copy inside `execute_model`) |
+| Multiprocess smoke | ALL CHECKS PASSED; executor reported unreachable (`SyncMPClient`), no `gpu_steps` file, as designed |
+| Decode steps (smoke, 8 requests) | GPU span p50 1.60 ms of a 1.78 to 1.80 ms host step; host overhead p50 0.20 ms; first (prefill, 112 tokens) step 2.90 ms span of 3.25 ms |
+| Experiment, ~1490 steps per run | GPU span p50 1.71 ms; host overhead p50 0.16 ms; median host share 9% (finding `host_overhead`: not supported, steps are GPU-bound) |
+| Long-chunk steps (1536-token prefill) | GPU span 7.92 ms vs 1.71 ms for other steps in baseline; 2.74 ms under `long_prefill_token_threshold=256`. The interference cost is GPU prefill compute co-scheduled with decodes, not host work |
+| Experiment verdict on this GPU | improved 3/3: short TTFT p95 -62.2/-62.7/-62.4%, ITL max -54.8/-45.5/-54.0%, long TTFT +113.6 to +116.1%; mean TTFT change decomposes entirely into prefill (queue 0) |
+| TTFT from intended arrival | short p95 10.9 ms baseline vs 5.1 ms capped (engine TTFT p95 8.5 vs 3.2 ms); load-generator delay max 3 to 4 ms, now recorded in manifests |
+| Tracer self-check | 33 collector drains per run, longest 0.09 ms; no step overlapping a drain was unusually long |
+
+Not measured here: GPU busy time (see the Nsight cross-check below for how
+far the span is from it) and the event-recording overhead itself.
+
+## Nsight Systems cross-check of the step spans (2026-09-08, RTX A5000)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-nsys/`. The mixed-prompt
+experiment (reduced workload: 40 short requests at 40/s, 6 long prompts,
+opt-125m, in-process core) was run for `baseline` and `capped` under
+`nsys profile -t cuda,nvtx` with `--enable-nvtx`, exported to SQLite and
+joined per step by `scripts/nsys_step_compare.py`: for each `llmtrace step N`
+NVTX range, the union of kernel executions and CUDA-graph executions inside
+the range (Nsight's GPU busy time) against llmtrace's CUDA-event `gpu_span_ms`
+for the same step index.
+
+| Check | baseline | capped (`long_prefill_token_threshold=256`) |
+|-------|----------|------|
+| NVTX step ranges / matched to `gpu_steps` records | 626 / 626 | 654 / 654 |
+| Steps with the span below Nsight's busy time | 0 | 0 |
+| NVTX range p50 vs `host_step_ms` p50 | 1.786 vs 1.788 ms | 1.725 vs 1.726 ms |
+| Decode-only steps: busy p50 / span p50 / ratio p50 (p10 to p90) | 0.855 / 1.50 ms / 0.58 (0.48 to 0.59) | 0.853 / 1.46 ms / 0.58 (0.53 to 0.62) |
+| Long-chunk steps: busy p50 / span p50 / ratio | 6.28 / 7.48 ms / 0.84 (1536-token chunks, 130 kernels, eager) | 1.68 / 2.56 ms / 0.66 (256-token chunks, 33 kernels + 13 graph launches) |
+| GPU work per decode step | 9 kernels + 1 CUDA-graph execution | same |
+| Sum over the traced phase: busy / span / host | 572 / 1042 / 1198 ms | 589 / 1052 / 1207 ms |
+
+Reading: the span is what it was defined to be, an upper bound that includes
+launch gaps on the stream. On this 125M model a decode step is launch-bound:
+the GPU is idle for about 0.64 ms of a 1.5 ms span between nine small eager
+kernels (sampler, input preparation) and one graph launch. On the eager
+1536-token prefill steps the bound is tight (84% busy). So on opt-125m
+`host_overhead_ms` (host minus span, 9 to 13%) understates the host-side
+share of the step; the span-minus-busy gap (about 40% here) is the launch
+overhead that only a profiler can see. The bound was not checked on the 7B
+model; expect it to be tighter there (longer kernels, same gaps).
+
+Caveat found while doing this: vLLM runs decode steps as CUDA graphs, and with
+Nsight's default `--cuda-graph-trace=graph` those appear in
+`CUPTI_ACTIVITY_KIND_GRAPH_TRACE`, not in the kernel table. A first version
+of the comparison that read only kernels reported busy/span of 0.10 on decode
+steps; the script now unions both tables (and handles
+`--cuda-graph-trace=node` profiles, where the kernels appear individually).
+Profiling overhead under `nsys` was not separated from the run; the numbers
+above are not a benchmark of llmtrace or vLLM.
 
 ## Diagnosis experiment (2026-09-08, RTX A4500)
 

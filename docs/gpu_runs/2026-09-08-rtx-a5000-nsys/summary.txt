@@ -1,0 +1,9 @@
+=== profiling baseline
+baseline profile exit=0
+baseline export exit=0
+baseline compare exit=0
+=== profiling capped
+capped profile exit=0
+capped export exit=0
+capped compare exit=0
+ALL_DONE

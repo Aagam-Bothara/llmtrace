@@ -1,0 +1,93 @@
+{
+  "engine": "vllm",
+  "model": "Qwen/Qwen2.5-7B",
+  "effective_scheduler_config": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "enable_chunked_prefill": true,
+    "long_prefill_token_threshold": 0,
+    "policy": "fcfs"
+  },
+  "steps": 1475,
+  "wall_s": 12.899061941541731,
+  "health": {
+    "instrumented": false,
+    "target_vllm_version": "0.11.0",
+    "detected_vllm_version": "0.11.0",
+    "scheduler_visible": false,
+    "scheduler_unavailable_reason": "not instrumented",
+    "executor_visible": false,
+    "executor_unavailable_reason": "not instrumented",
+    "cuda_timing": {
+      "available": false,
+      "unavailable_reason": "not started",
+      "resolved": 0,
+      "pending": 0,
+      "buffered": 0,
+      "dropped": 0,
+      "errors": 0,
+      "last_error": null,
+      "nvtx": false
+    },
+    "active_requests": 0,
+    "buffered_traces": 0,
+    "buffered_batches": 0,
+    "dropped_traces": 0,
+    "dropped_batches": 0,
+    "instrumentation_errors": 0,
+    "last_error": null,
+    "steps_observed": 1479
+  },
+  "finished": 132,
+  "collection_interval_s": 0.1,
+  "warmup_requests": 132,
+  "settle_requests": 4,
+  "ignore_eos": true,
+  "effective_engine_config": {
+    "scheduler_config": {
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 256,
+      "max_model_len": 2048,
+      "enable_chunked_prefill": true,
+      "long_prefill_token_threshold": 0,
+      "max_num_partial_prefills": 1,
+      "max_long_partial_prefills": 1,
+      "policy": "fcfs"
+    },
+    "cache_config": {
+      "block_size": 16,
+      "gpu_memory_utilization": 0.5,
+      "enable_prefix_caching": true,
+      "num_gpu_blocks": 71440
+    },
+    "model_config": {
+      "model": "Qwen/Qwen2.5-7B",
+      "revision": null,
+      "dtype": "torch.bfloat16",
+      "max_model_len": 2048,
+      "seed": 0
+    },
+    "parallel_config": {
+      "tensor_parallel_size": 2,
+      "pipeline_parallel_size": 1,
+      "data_parallel_size": 1
+    }
+  },
+  "engine_version": "0.11.0",
+  "model_revision": null,
+  "config_name": "baseline",
+  "scheduling_change": {},
+  "workload": {
+    "num_short": 120,
+    "short_rate_per_s": 10.0,
+    "short_prompt_len": 32,
+    "short_max_tokens": 128,
+    "num_long": 12,
+    "long_prompt_len": 1536,
+    "long_max_tokens": 8,
+    "first_long_at_s": 0.4,
+    "long_every_s": 0.4,
+    "seed": 0
+  },
+  "synthetic": false
+}

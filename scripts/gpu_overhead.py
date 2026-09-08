@@ -72,8 +72,12 @@ def main() -> int:
         return wall
 
     for i in range(args.repeat):
-        t0 = time.perf_counter(); llm.generate(prompts, sp); res["untraced_generate"].append(time.perf_counter() - t0)
-        t0 = time.perf_counter(); run_engine_with_timing(eng, prompts, sp); res["untraced_engine_loop"].append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        llm.generate(prompts, sp)
+        res["untraced_generate"].append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        run_engine_with_timing(eng, prompts, sp)
+        res["untraced_engine_loop"].append(time.perf_counter() - t0)
         res["traced_generate"].append(traced(lambda: llm.generate(prompts, sp), "gen", i))
         res["traced_engine_loop"].append(traced(lambda: run_engine_with_timing(eng, prompts, sp), "loop", i))
 

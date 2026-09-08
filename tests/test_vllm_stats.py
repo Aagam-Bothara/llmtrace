@@ -39,7 +39,8 @@ def test_missing_fields_become_none_and_errors_do_not_propagate():
 
     lg.record(None, Bad())  # must not raise into the engine
     assert sink.errors == 1 and "boom" in sink.last_error
-    lg.log_engine_initialized(); lg.log()
+    lg.log_engine_initialized()
+    lg.log()
     assert sink.engine_initialized == [0]
 
 

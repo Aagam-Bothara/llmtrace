@@ -45,6 +45,8 @@ was read from the tagged source (not guessed):
 | Output construction | `vllm/v1/engine/output_processor.py` | `token_ids` cumulative unless DELTA |
 | Finish reasons | `vllm/v1/engine/__init__.py` | `stop`, `length`, `abort` |
 | `EngineCore.model_executor` / `Executor.execute_model` | `vllm/v1/engine/core.py`, `vllm/v1/executor/abstract.py`, `vllm/executor/uniproc_executor.py` | `EngineCore.step()` calls `self.model_executor.execute_model(scheduler_output)` synchronously; with `UniProcExecutor` (world size 1) the worker runs on the same thread, so CUDA events recorded before/after the call on the current stream bracket the step's model execution |
+| `AsyncLLM.generate` | `vllm/v1/engine/async_llm.py` | `async def generate(prompt, sampling_params, request_id, lora_request=None, trace_headers=None, priority=0, data_parallel_rank=None) -> AsyncGenerator[RequestOutput, None]`; aborts the request itself on `asyncio.CancelledError` / `GeneratorExit` |
+| `AsyncLLM.abort`, `from_engine_args`, `logger_manager` | same | `async def abort(request_id: str | Iterable[str])`; `from_engine_args(engine_args, start_engine_loop=True, usage_context=..., stat_loggers=None)`; `logger_manager` is a `StatLoggerManager` when log stats are on |
 | `StatLoggerBase` / `StatLoggerFactory` | `vllm/v1/metrics/loggers.py` | `__init__(vllm_config, engine_index)`, `record(scheduler_stats, iteration_stats, engine_idx)`, `log_engine_initialized()`, `log()`; factories are called as `factory(vllm_config, engine_idx)`; vLLM notes the stats classes "are not considered stable interfaces" |
 | `StatLoggerManager` | same | `per_engine_logger_dict: dict[int, list[StatLoggerBase]]`; `record()` iterates that list, so a logger can be appended post-hoc (`LLMEngine.logger_manager`, `None` with `disable_log_stats`) |
 | `SchedulerStats` / `IterationStats` / `FinishedRequestStats` | `vllm/v1/metrics/stats.py` | running/waiting counts, `kv_cache_usage`, prefix-cache stats; per-step tokens, `num_preempted_reqs`, `time_to_first_tokens_iter`, `inter_token_latencies_iter`, finished-request timings (queued/prefill/decode/e2e) **without request ids** |
@@ -52,8 +54,17 @@ was read from the tagged source (not guessed):
 Other versions are not supported. `VLLMInstrumentation` warns when the
 installed version differs and records both versions in `health()`.
 
-`AsyncLLM` has a different surface (async generator `generate`, no `step`)
-and is out of scope; wrapping a coroutine function raises `InstrumentationError`.
+`AsyncLLM` (`data_plane/vllm_async_instrumentation.py`) is wrapped at
+`generate` (an async-generator wrapper that forwards outputs, closes the inner
+generator on cancellation or close, and records completion, client
+cancellation and errors) and `abort`. It reuses the sync accounting for token
+counts, TTFT and TPOT, observed when outputs become visible to the consumer.
+Because `AsyncLLM.generate` aborts the request in its own exception handler
+before the wrapper sees the cancellation, cancelled streams end with
+`finish_reason == "abort"` and `metadata["abort_cause"] == "client_cancelled"`.
+The engine core is always out of process there, so scheduler and executor
+evidence is unavailable and reported as such; vLLM's per-step stats still
+arrive through the `stat_loggers` hook.
 
 ## Instrumentation semantics
 
@@ -148,7 +159,12 @@ resolved lazily with `query()` at later steps and at collection time, never
 by synchronizing; pending events are bounded and drops counted. Records go to
 `gpu_steps_*.jsonl`, feed the `host_overhead` finding, the experiment's
 per-step GPU/host split, and Perfetto counter tracks. `enable_nvtx` adds an
-NVTX range per step for Nsight Systems. Scope: vLLM's default blocking path
+NVTX range per step for Nsight Systems; `scripts/nsys_step_compare.py` joins
+an `nsys export --type sqlite` database with `gpu_steps_*` by step index and
+reports Nsight's busy time (union of `CUPTI_ACTIVITY_KIND_KERNEL` and
+`CUPTI_ACTIVITY_KIND_GRAPH_TRACE`; vLLM's decode steps are CUDA graphs and
+appear only in the latter under the default `--cuda-graph-trace=graph`)
+against the span. Scope: vLLM's default blocking path
 (`UniProcExecutor.collective_rpc` runs the worker method on the calling
 thread); with async scheduling (`non_block=True`) `execute_model` returns a
 future and the bracket would cover only submission, so spans are not

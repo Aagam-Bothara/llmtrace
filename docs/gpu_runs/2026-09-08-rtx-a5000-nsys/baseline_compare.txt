@@ -1,0 +1,17 @@
+{
+  "nvtx_steps": 626,
+  "steps_with_span_and_kernels": 626,
+  "steps_without_gpu_work": 0,
+  "gpu_busy_ms_p50": 0.854883,
+  "gpu_span_ms_p50": 1.5281920433044434,
+  "busy_over_span_p50": 0.5746039921846291,
+  "busy_over_span_min": 0.15714449492781837,
+  "busy_over_span_max": 0.8443928847073652,
+  "span_exceeds_busy_all_steps": true,
+  "span_minus_busy_ms_p50": 0.6400760322303771,
+  "long_chunk_steps": 6,
+  "long_chunk_gpu_busy_ms_p50": 6.2836894999999995,
+  "long_chunk_gpu_span_ms_p50": 7.482448101043701,
+  "kernels_per_step_p50": 9.0,
+  "graph_launches_per_step_p50": 1.0
+}

@@ -1,0 +1,2 @@
+NVIDIA RTX 4000 Ada Generation, 550.127.05
+vllm 0.11.0 torch 2.8.0+cu128

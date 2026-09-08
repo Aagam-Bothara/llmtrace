@@ -308,6 +308,14 @@ class VLLMInstrumentation:
             self.executor_unavailable_reason = ("model executor not reachable in-process (engine_core client is "
                                                 f"{type(client).__name__ if client is not None else 'None'})")
             return
+        # Only UniProcExecutor runs the model on the calling thread (vLLM 0.11.0). MultiprocExecutor /
+        # RayDistributedExecutor forward execute_model to worker processes: events recorded here would
+        # bracket an idle stream and report near-zero spans, so refuse rather than mis-measure.
+        exec_name = type(executor).__name__
+        if exec_name not in ("UniProcExecutor", "FakeModelExecutor"):
+            self.executor_unavailable_reason = (f"executor {exec_name} runs the model in other processes "
+                                                "(tensor/pipeline parallel); GPU spans need UniProcExecutor")
+            return
         if not self.cuda_timer.start():
             self.executor_unavailable_reason = f"CUDA events unavailable: {self.cuda_timer.unavailable_reason}"
             return

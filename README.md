@@ -8,10 +8,11 @@ rule-based diagnoses.
 
 ## Status: smoke-tested on one GPU
 
-Validated on real vLLM 0.11.0 with `facebook/opt-125m` (RTX A5000 smoke run and
-RTX A4500 diagnosis experiment, 2026-09-08); see
+Validated on real vLLM 0.11.0 with `facebook/opt-125m` (RTX A5000, A4500, 4000 Ada)
+and `Qwen/Qwen2.5-7B` on A100 at TP=1 and TP=2 (2026-09-08); see
 [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
-Larger models, multi-GPU, preemption and speculative decoding are untested.
+Preemption, speculative decoding, the OpenAI server process itself (only `AsyncLLM` used directly) and models above 7B are untested.
+llmtrace does not measure GPU busy time; its per-step GPU span was cross-checked against Nsight Systems on opt-125m (span = busy time plus launch gaps, never below Nsight's busy time; see [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md)).
 
 Status labels: **validated** = exercised on real vLLM 0.11.0 on a GPU with
 committed evidence; **implemented** = CPU-tested against fakes shaped like the
@@ -26,12 +27,13 @@ verified vLLM interfaces; **not implemented** = absent.
 | Timing (TTFT/TPOT) | Validated through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
 | Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps): +4% (`generate()`) and +9% (cumulative engine loop) wall time, 0.13 to 0.29 ms per engine step; larger models not measured |
 | Evidence-based findings (`llmtrace findings`) | Implemented; the long-prompt-interference finding validated on the GPU experiment |
-| vLLM engine stats via `stat_loggers` hook | Implemented (fakes only); not yet run on hardware |
-| GPU span per step (CUDA events around `execute_model`), NVTX ranges, `host_overhead` finding | Implemented (fake backend only); not yet run on hardware |
+| vLLM engine stats via `stat_loggers` hook | Validated on `AsyncLLM` (34 per-step records with KV usage over the multiprocess core); attached post-hoc on the sync engine in fakes only |
+| GPU span per step (CUDA events around `execute_model`), `host_overhead` finding | Validated (RTX 4000 Ada, A100 with Qwen2.5-7B): one span per step, never above host time, timer clean; long-prefill interference is GPU compute (7.9 vs 1.7 ms on opt-125m, 103 vs 11 ms on the 7B model); host share 9 to 13% on opt-125m, 2% on the 7B model; refused for TP>1 executors |
+| NVTX ranges per step, Nsight Systems cross-check (`scripts/nsys_step_compare.py`) | Validated (RTX A5000, opt-125m, Nsight Systems 2026.1): all 626 and 654 step ranges of two runs matched to llmtrace's spans; the span was never below Nsight's GPU busy time (kernels plus CUDA-graph executions); busy/span 0.58 on decode steps of this launch-bound 125M model, 0.84 on 1536-token prefill steps |
 | Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
-| Diagnosis experiment (short requests mixed with long prompts) | Run on one GPU: traces attribute the short-request tail to steps carrying 1536-token prefill chunks; `long_prefill_token_threshold=256` cut short TTFT p95 by 63% and worst stall by 54 to 62%, doubling long-request TTFT (`experiments/mixed_prompts/README.md`) |
+| Diagnosis experiment (short requests mixed with long prompts) | Run on opt-125m (RTX A4500, RTX 4000 Ada) and on Qwen2.5-7B (A100, TP=1 and TP=2): traces attribute the short-request tail to steps carrying 1536-token prefill chunks, CUDA spans show that cost is GPU prefill compute (103 vs 11 ms steps on the 7B model); `long_prefill_token_threshold=256` cut short TTFT p95 by 62 to 72% and the worst stall by 45 to 72%, raising long-request TTFT by 64 to 116% (`experiments/mixed_prompts/README.md`) |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
-| AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |
+| `AsyncLLM` (the OpenAI-server engine) via `instrument_async_engine()` | Validated (RTX 4000 Ada, opt-125m): 6 concurrent streams traced with TTFT and engine token counts, a client-cancelled stream recorded as aborted after 4 tokens, `generate`/`abort` restored, vLLM per-step stats via `stat_loggers` over the multiprocess core; no batch membership, queue/prefill boundary or GPU spans there, reported as unavailable with the reason |
 | Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
 
 [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) lists precisely what
@@ -64,7 +66,10 @@ configuration could not run.
 `model_executor.execute_model` call give the step's GPU span (an upper bound
 on GPU busy time; launch gaps included, other streams excluded) and the host
 overhead `host_step_ms - gpu_span_ms`. Read lazily, never by synchronizing.
-`enable_nvtx` adds an NVTX range per step for Nsight Systems.
+`enable_nvtx` adds an NVTX range per step for Nsight Systems, and
+`scripts/nsys_step_compare.py` joins an `nsys` profile with the spans per
+step (on opt-125m the span held as an upper bound on every step and was 58%
+busy on decode steps, 84% on long prefill steps; the rest is launch gaps).
 
 **Collector self-events** (`collector_*.jsonl`): when llmtrace's own drains
 ran and how long they took, so `findings` can flag engine steps the tracer

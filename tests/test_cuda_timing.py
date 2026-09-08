@@ -22,7 +22,8 @@ class TestTimer:
         t = CudaStepTimer(backend=backend, clock_domain="d")
         assert t.start()
         t.begin_step(1, 100.0, 10.0)
-        t.before_execute(); t.after_execute()
+        t.before_execute()
+        t.after_execute()
         t.end_step(host_step_ms=5.0)  # polls once: not ready yet
         assert t.stats()["pending"] == 1 and t.drain() == []  # drain polls again: still not ready (2 polls needed)
         out = t.drain()  # third poll resolves
@@ -44,7 +45,9 @@ class TestTimer:
         t.start()
         for i in range(4):
             t.begin_step(i, 0.0, 0.0)
-            t.before_execute(); t.after_execute(); t.before_execute(); t.after_execute()
+            for _ in range(2):
+                t.before_execute()
+                t.after_execute()
             t.end_step(4.0)
         s = t.stats()
         assert s["pending"] == 2 and s["dropped"] == 2
@@ -52,7 +55,10 @@ class TestTimer:
     def test_unavailable_backend(self):
         t = CudaStepTimer(backend=FakeCudaBackend(fail_available="torch.cuda not available"))
         assert not t.start() and t.unavailable_reason == "torch.cuda not available"
-        t.begin_step(1, 0, 0); t.before_execute(); t.after_execute(); t.end_step(1.0)
+        t.begin_step(1, 0, 0)
+        t.before_execute()
+        t.after_execute()
+        t.end_step(1.0)
         assert t.drain() == [] and t.stats()["available"] is False
 
     def test_nvtx_ranges(self):
@@ -89,6 +95,27 @@ class TestInstrumentationHook:
         instr.instrument_engine(engine)
         assert not instr.executor_visible and "not reachable in-process" in instr.executor_unavailable_reason
         assert instr.health()["executor_visible"] is False
+
+    def test_out_of_process_executor_is_refused(self, clock):
+        engine = FakeLLMEngine(clock=clock)
+        core = engine.engine_core.engine_core
+
+        class MultiprocExecutor:  # name matters: vLLM's TP>1 executor forwards to worker processes
+            def __init__(self, inner):
+                self.inner = inner
+
+            def execute_model(self, so):
+                return self.inner.execute_model(so)
+
+        core.model_executor = MultiprocExecutor(core.model_executor)
+        timer = CudaStepTimer(backend=FakeCudaBackend())
+        instr = VLLMInstrumentation(monotonic=clock.monotonic, wall=clock.time, cuda_timer=timer)
+        instr.instrument_engine(engine)
+        assert not instr.executor_visible and "MultiprocExecutor" in instr.executor_unavailable_reason
+        assert "execute_model" not in core.model_executor.__dict__
+        engine.add_request("r", {"prompt_token_ids": [1]}, SamplingParams(max_tokens=2))
+        run_to_completion(engine)
+        assert timer.drain() == []  # nothing mis-measured
 
     def test_cuda_unavailable_reports_reason(self, clock):
         engine = FakeLLMEngine(clock=clock)

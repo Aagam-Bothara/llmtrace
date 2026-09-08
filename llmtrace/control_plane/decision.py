@@ -119,7 +119,7 @@ def _stat(values: List[float], stat: str) -> Optional[float]:
 
 
 def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_share",
-                    min_metric_coverage: float = 1.0) -> RepeatResult:
+                    min_metric_coverage: float = 1.0, exclude_classes: Optional[List[str]] = None) -> RepeatResult:
     d = Path(run_dir)
     manifest = None
     try:
@@ -136,6 +136,11 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         err = manifest.error if manifest is not None else info.get("error")
         return RepeatResult(run_dir=str(d), status="failed", error=str(err)[:300])
     traces = io.load_traces([d])
+    excluded = 0
+    if exclude_classes:
+        keep = [t for t in traces if t.request_id.split("-")[0] not in exclude_classes]
+        excluded = len(traces) - len(keep)
+        traces = keep
     if not traces:
         return RepeatResult(run_dir=str(d), status="empty", error="no traces")
     res = Correlator(EnergyConfig(attribution_method=attribution)).correlate(traces, io.load_gpu_samples([d]), io.load_batches([d]))  # type: ignore[arg-type]
@@ -151,11 +156,14 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     completed = sum(1 for t in res.traces if t.status.value == "completed")
     aborted = sum(1 for t in res.traces if t.status.value == "aborted")
     incomplete = len(res.traces) - completed - aborted
-    expected = manifest.expected_requests if manifest and manifest.expected_requests else None
+    expected = (manifest.expected_requests - excluded) if manifest and manifest.expected_requests else None
+    if expected is not None and excluded and manifest and manifest.expected_requests == len(res.traces):
+        expected = len(res.traces)  # manifest counted only the kept classes
     health = manifest.health if manifest else info.get("health") or {}
+    inst = health.get("instrumentation", health) if isinstance(health, dict) else {}  # full tracer health or the nested dict
     health_ok = None
-    if health:
-        health_ok = not health.get("instrumentation_errors") and not health.get("active_requests") and not health.get("dropped_traces")
+    if inst:
+        health_ok = not inst.get("instrumentation_errors") and not inst.get("active_requests") and not inst.get("dropped_traces")
 
     problems: List[str] = []
     if n_sel == 0:
@@ -187,10 +195,10 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
 
 
 def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "equal_share",
-             min_metric_coverage: float = 1.0) -> Decision:
+             min_metric_coverage: float = 1.0, exclude_classes: Optional[List[str]] = None) -> Decision:
     results: List[ConfigResult] = []
     for name, dirs in configs.items():
-        reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage) for dd in dirs]
+        reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes) for dd in dirs]
         ran = [r for r in reps if r.status in ("ok", "ineligible")]
         ok = [r for r in reps if r.eligible]
         tvals = [r.target_value_ms for r in ran if r.target_value_ms is not None]
@@ -221,6 +229,9 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
                 notes.append(f"{c.name} ({Path(r.run_dir).name}): ineligible: " + "; ".join(r.problems))
         if c.work_identical_across_repeats is False:
             notes.append(f"{c.name}: output token counts differ across repeats (work not identical; use ignore_eos / fixed max_tokens)")
+    notes.append("throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it "
+                 "reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and "
+                 "use a saturating workload to compare capacity")
     all_sigs = {r.work_signature for c in results for r in c.repeats if r.status in ("ok", "ineligible")}
     if len(all_sigs) > 1:
         notes.append("output token counts differ across configurations; throughput and energy per token are not like-for-like")

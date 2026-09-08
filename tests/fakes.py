@@ -422,6 +422,50 @@ class FakeStatLoggerManager:
             lg.record(scheduler_stats, iteration_stats, engine_idx)
 
 
+class FakeAsyncLLM:
+    """Shape of vllm.v1.engine.async_llm.AsyncLLM (0.11.0): generate() is an async generator that
+    aborts on CancelledError/GeneratorExit; abort() is a coroutine; logger_manager exists."""
+
+    def __init__(self, clock: Optional[FakeClock] = None, step_seconds: float = 0.01, fail_at_token: Optional[int] = None) -> None:
+        self.clock = clock or FakeClock()
+        self.step_seconds = step_seconds
+        self.fail_at_token = fail_at_token
+        self.model_config = FakeModelConfig()
+        self.vllm_config = object()
+        self.logger_manager: Any = FakeStatLoggerManager()
+        self.aborted: List[str] = []
+        self.calls: List[str] = []
+
+    async def generate(self, prompt: Any, sampling_params: Any, request_id: str, lora_request: Any = None,
+                       trace_headers: Any = None, priority: int = 0, data_parallel_rank: Any = None):
+        import asyncio
+
+        self.calls.append(f"generate:{request_id}")
+        ids = list(prompt["prompt_token_ids"]) if isinstance(prompt, dict) else [hash(w) % 1000 for w in str(prompt).split()]
+        generated: List[int] = []
+        try:
+            while len(generated) < sampling_params.max_tokens:
+                await asyncio.sleep(0)
+                self.clock.advance(self.step_seconds)
+                generated.append(len(generated))
+                if self.fail_at_token is not None and len(generated) == self.fail_at_token:
+                    raise RuntimeError("engine generate error injected")
+                finished = len(generated) >= sampling_params.max_tokens
+                kind = sampling_params.output_kind
+                toks = generated[-1:] if kind is RequestOutputKind.DELTA else list(generated)
+                if kind is RequestOutputKind.FINAL_ONLY and not finished:
+                    continue
+                yield RequestOutput(request_id, None, ids, None,
+                                    [CompletionOutput(0, "", toks, finish_reason="length" if finished else None)], finished)
+        except (asyncio.CancelledError, GeneratorExit):
+            await self.abort(request_id)
+            raise
+
+    async def abort(self, request_id: Any) -> None:
+        self.calls.append(f"abort:{request_id}")
+        self.aborted.append(str(request_id))
+
+
 class FakeNVMLBackend:
     """SamplerBackend fake: constant or scripted power per GPU."""
 

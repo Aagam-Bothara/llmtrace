@@ -1,0 +1,44 @@
+=== baseline run 0
+baseline run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1490,
+  "wall_s": 3.2109220139682293,
+=== capped run 0
+capped run 0 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1487,
+  "wall_s": 3.213037883862853,
+=== baseline run 1
+baseline run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1479,
+  "wall_s": 3.213867999613285,
+=== capped run 1
+capped run 1 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1492,
+  "wall_s": 3.212181845679879,
+=== baseline run 2
+baseline run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 0, 'policy': 'fcfs'}
+  "steps": 1479,
+  "wall_s": 3.215358743444085,
+=== capped run 2
+capped run 2 exit=0
+effective scheduler config: {'max_num_batched_tokens': 8192, 'max_num_seqs': 256, 'enable_chunked_prefill': True, 'long_prefill_token_threshold': 256, 'policy': 'fcfs'}
+  "steps": 1459,
+  "wall_s": 3.2110525220632553,
+=== analysis
+  short_tpot_ms_p95      2.29 -> 2.29 ms  (-0.1%)
+  short_ttft_ms_p95      8.47 -> 3.20 ms  (-62.2%)
+  long_ttft_ms_p50       8.89 -> 19.20 ms  (115.9%)
+verdict: improved on [short_ttft_ms_p95 -62.2%, short_itl_ms_max -54.8%] (threshold 20.0%); long-request TTFT p50 change 115.9% (cost)
+  short_tpot_ms_p95      2.31 -> 2.29 ms  (-0.9%)
+  short_ttft_ms_p95      8.53 -> 3.18 ms  (-62.7%)
+  long_ttft_ms_p50       8.96 -> 19.14 ms  (113.6%)
+verdict: improved on [short_ttft_ms_p95 -62.7%, short_itl_ms_max -45.5%] (threshold 20.0%); long-request TTFT p50 change 113.6% (cost)
+  short_tpot_ms_p95      2.31 -> 2.43 ms  (5.2%)
+  short_ttft_ms_p95      8.55 -> 3.22 ms  (-62.4%)
+  long_ttft_ms_p50       8.95 -> 19.33 ms  (116.1%)
+verdict: improved on [short_ttft_ms_p95 -62.4%, short_itl_ms_max -54.0%] (threshold 20.0%); long-request TTFT p50 change 116.1% (cost)
+results: /workspace/cuda_results/exp.tar.gz

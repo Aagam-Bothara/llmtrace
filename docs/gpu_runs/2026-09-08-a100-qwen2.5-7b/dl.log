@@ -1,0 +1,10 @@
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 25.0.1 -> 26.2.1
+[notice] To update, run: python -m pip install --upgrade pip
+/usr/local/lib/python3.11/dist-packages/huggingface_hub/constants.py:299: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+  warnings.warn(
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 11 files:   9%|▉         | 1/11 [00:00<00:01,  7.90it/s]Fetching 11 files:  45%|████▌     | 5/11 [00:00<00:00, 18.87it/s]Fetching 11 files:  64%|██████▎   | 7/11 [00:20<00:00, 18.87it/s]Fetching 11 files:  73%|███████▎  | 8/11 [00:33<00:15,  5.23s/it]Fetching 11 files:  82%|████████▏ | 9/11 [00:34<00:09,  4.50s/it]Fetching 11 files: 100%|██████████| 11/11 [00:47<00:00,  5.22s/it]Fetching 11 files: 100%|██████████| 11/11 [00:47<00:00,  4.31s/it]
+/workspace/hf/hub/models--Qwen--Qwen2.5-7B/snapshots/d149729398750b98c0af14eb82c78cfe92750796
+DL_EXIT=0

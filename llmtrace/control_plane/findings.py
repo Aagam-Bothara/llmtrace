@@ -236,7 +236,13 @@ def check_tracer_self_effect(batches: List[BatchMetadata], collector_events: Lis
         a, b_ = ev.monotonic, ev.monotonic + ev.duration_ms / 1000.0
         for bid, d in dur.items():
             b = by_id[bid]
-            if b.monotonic <= b_ and b.step_end_monotonic >= a and d >= factor * med:
+            if not (b.monotonic <= b_ and b.step_end_monotonic >= a) or d < factor * med:
+                continue
+            # A long step that merely overlaps a short drain is not the tracer's doing: the drain must be a
+            # material part of the step's excess over the median (a 100 ms prefill step overlapping a 0.2 ms
+            # drain is explained by its tokens, not by llmtrace).
+            excess = d - med
+            if ev.duration_ms >= max(1.0, 0.25 * excess):
                 hits.append((bid, d, ev.duration_ms))
     events = [Evidence(source="collector_*.jsonl", statement="collector drains recorded", value=float(len(collector_events)), unit="drains"),
               Evidence(source="collector_*.jsonl:duration_ms", statement="longest drain",

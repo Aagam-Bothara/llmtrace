@@ -49,8 +49,9 @@ from llmtrace.vllm_helpers import run_engine_with_timing
 outputs = run_engine_with_timing(llm.llm_engine, prompts, SamplingParams(max_tokens=64))
 ```
 
-Only the synchronous `LLMEngine` used by `vllm.LLM` is supported. `AsyncLLM`
-(the OpenAI server) is rejected with `InstrumentationError`.
+`AsyncLLM` (the OpenAI-server engine) is supported through
+`tracer.instrument_async_engine(engine)` with request-level traces and vLLM's
+per-step stats only; see `examples/vllm_async_smoke_test.py`.
 
 ## 3. Offline analysis
 

@@ -1,0 +1,36 @@
+== /workspace/exp_7b/tp1_baseline_0
+long  n=12 completed=12  TTFT p50/p95 = 103.81/104.51 ms (from intended arrival p95 113.03 ms, arrival delay max 9.22 ms)   TPOT p50/p95 = 12.94/13.40 ms   ITL p50/p99/max = 12.44/17.22/17.22 ms   step p50/max = 12.18/103.58 ms
+other n=4 completed=4  TTFT p50/p95 = 15.15/15.89 ms   TPOT p50/p95 = 10.79/10.79 ms   ITL p50/p99/max = 10.85/10.86/10.86 ms   step p50/max = 10.61/14.67 ms
+short n=120 completed=120  TTFT p50/p95 = 13.46/103.38 ms (from intended arrival p95 108.03 ms, arrival delay max 13.26 ms)   TPOT p50/p95 = 11.80/16.06 ms   ITL p50/p99/max = 11.63/104.49/105.38 ms   step p50/max = 11.41/103.58 ms
+steps: 1040, of which 12 carried a prefill chunk > 128 tokens (largest 1536).
+  step duration p50: with long chunk 102.92 ms vs without 11.30 ms
+  step time ~ 10.49 ms + 58.283 us/token (r2=0.999)
+  GPU span (CUDA events) on 1040 steps: p50 11.08 ms (long-chunk steps 102.58 ms, others 11.08 ms); host overhead p50 0.21 ms, median host share 2%
+  0 step(s) exceed the token model by > 22.61 ms (unexplained stalls):
+short requests: 49/120 shared at least one step with a long prefill chunk; 11% of all short-request step time was in such steps.
+  TPOT p95: affected 16.08 ms vs unaffected 11.93 ms; TTFT p95: affected 103.78 ms vs unaffected 13.98 ms
+
+== /workspace/exp_7b/tp1_capped_0
+long  n=12 completed=12  TTFT p50/p95 = 170.29/171.48 ms (from intended arrival p95 181.95 ms, arrival delay max 10.47 ms)   TPOT p50/p95 = 12.80/12.91 ms   ITL p50/p99/max = 12.39/15.60/15.60 ms   step p50/max = 14.73/30.13 ms
+other n=4 completed=4  TTFT p50/p95 = 14.25/14.75 ms   TPOT p50/p95 = 10.73/10.73 ms   ITL p50/p99/max = 10.70/10.83/10.83 ms   step p50/max = 10.59/13.82 ms
+short n=120 completed=120  TTFT p50/p95 = 13.61/28.88 ms (from intended arrival p95 45.46 ms, arrival delay max 24.31 ms)   TPOT p50/p95 = 11.86/16.36 ms   ITL p50/p99/max = 11.67/29.23/30.40 ms   step p50/max = 11.45/30.13 ms
+steps: 1034, of which 72 carried a prefill chunk > 128 tokens (largest 256).
+  step duration p50: with long chunk 27.86 ms vs without 11.31 ms
+  step time ~ 10.46 ms + 60.695 us/token (r2=0.987)
+  GPU span (CUDA events) on 1034 steps: p50 11.10 ms (long-chunk steps 27.64 ms, others 11.09 ms); host overhead p50 0.21 ms, median host share 2%
+  0 step(s) exceed the token model by > 22.64 ms (unexplained stalls):
+short requests: 50/120 shared at least one step with a long prefill chunk; 18% of all short-request step time was in such steps.
+  TPOT p95: affected 16.72 ms vs unaffected 11.94 ms; TTFT p95: affected 29.10 ms vs unaffected 13.94 ms
+
+== comparison (candidate vs baseline; negative = faster)
+  short_itl_ms_p99       104.49 -> 29.23 ms  (-72.0%)
+  short_itl_ms_max       105.38 -> 30.40 ms  (-71.2%)
+  short_step_ms_max      103.58 -> 30.13 ms  (-70.9%)
+  short_tpot_ms_p95      16.06 -> 16.36 ms  (1.8%)
+  short_tpot_ms_p50      11.80 -> 11.86 ms  (0.5%)
+  short_ttft_ms_p95      103.38 -> 28.88 ms  (-72.1%)
+  short_ttft_sched_ms_p95 108.03 -> 45.46 ms  (-57.9%)
+  long_ttft_ms_p50       103.81 -> 170.29 ms  (64.0%)
+  long_tpot_ms_p50       12.94 -> 12.80 ms  (-1.1%)
+short TTFT (mean) 22.63 -> 16.50 ms: queue -0.01 ms, prefill -6.13 ms, residual 0.000 ms; dominant component: prefill
+verdict: improved on [short_ttft_ms_p95 -72.1%, short_itl_ms_max -71.2%] (threshold 20.0%); long-request TTFT p50 change 64.0% (cost)

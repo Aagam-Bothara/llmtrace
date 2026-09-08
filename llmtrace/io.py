@@ -37,13 +37,23 @@ def _load_file(path: Path, model: Type[T]) -> List[T]:
     raise ValueError(f"Unsupported trace file: {path}")
 
 
+_PREFIXES = ("traces", "batches", "gpu", "vllm_stats", "collector", "gpu_steps")
+
+
+def _matches_prefix(path: Path, prefix: str) -> bool:
+    """``gpu_*`` must not pick up ``gpu_steps_*``: the longest known prefix wins."""
+    name = path.name
+    best = max((p for p in _PREFIXES if name.startswith(p + "_")), key=len, default=None)
+    return best == prefix
+
+
 def _expand(paths: Iterable[PathLike], prefix: str) -> List[Path]:
     files: List[Path] = []
     for p in paths:
         p = Path(p)
         if p.is_dir():
-            files.extend(sorted(p.glob(f"{prefix}_*.jsonl")))
-            files.extend(sorted(p.glob(f"{prefix}_*.parquet")))
+            files.extend(f for f in sorted(p.glob(f"{prefix}_*.jsonl")) if _matches_prefix(f, prefix))
+            files.extend(f for f in sorted(p.glob(f"{prefix}_*.parquet")) if _matches_prefix(f, prefix))
         elif p.exists():
             files.append(p)
         else:

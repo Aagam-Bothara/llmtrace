@@ -1,0 +1,3 @@
+{"timestamp":1788896577.7093408,"monotonic":56935593.04763268,"clock_domain":"022f09b836a3","duration_ms":0.14882534742355347,"traces":0,"batches":0,"samples":2,"stats":0}
+{"timestamp":1788896577.809685,"monotonic":56935593.14797734,"clock_domain":"022f09b836a3","duration_ms":0.09550899267196655,"traces":0,"batches":0,"samples":2,"stats":4}
+{"timestamp":1788896577.88279,"monotonic":56935593.22108256,"clock_domain":"022f09b836a3","duration_ms":0.051118433475494385,"traces":7,"batches":0,"samples":2,"stats":30}

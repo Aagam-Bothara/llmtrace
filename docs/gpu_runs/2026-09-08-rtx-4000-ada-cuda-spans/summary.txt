@@ -1,0 +1,4 @@
+smoke exit=0
+smoke_multiproc exit=0
+exp exit=0
+ALL_DONE

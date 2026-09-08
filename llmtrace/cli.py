@@ -215,8 +215,12 @@ def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_t
 @click.option("--config", "configs", multiple=True, required=True,
               help="name=run_dir[,run_dir...] (repeats of one configuration); repeatable")
 @click.option("--attribution", default="equal_share", type=click.Choice(["equal_share", "proportional_tokens", "window_only"]))
+@click.option("--exclude-class", "exclude_classes", multiple=True,
+              help="Drop requests of this class (id prefix before '-') before evaluating, e.g. settle or warm; repeatable")
+@click.option("--min-metric-coverage", type=float, default=1.0, help="Share of selected requests that must carry the target metric")
 @click.option("--json", "json_out", type=click.Path(), help="Write the decision JSON here")
-def decide(target: str, configs: Tuple[str, ...], attribution: str, json_out: Optional[str]) -> None:
+def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_classes: Tuple[str, ...], min_metric_coverage: float,
+           json_out: Optional[str]) -> None:
     """Compare configurations against a latency target (advisory; changes nothing)."""
     from llmtrace.control_plane.decision import Target, evaluate, format_decision
 
@@ -232,7 +236,7 @@ def decide(target: str, configs: Tuple[str, ...], attribution: str, json_out: Op
             sys.exit(EXIT_USAGE)
         name, dirs = c.split("=", 1)
         parsed[name.strip()] = [d.strip() for d in dirs.split(",") if d.strip()]
-    dec = evaluate(parsed, tgt, attribution)
+    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None)
     click.echo(format_decision(dec))
     if json_out:
         Path(json_out).write_text(dec.model_dump_json(indent=2), encoding="utf-8")

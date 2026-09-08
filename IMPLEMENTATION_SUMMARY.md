@@ -1,7 +1,8 @@
 # Implementation Status
 
 Honest inventory of what exists, what is verified, and what is not.
-Last updated for version 0.2.0. No GPU run has been performed.
+Last updated for version 0.2.0 after the first GPU run (2026-09-08, one RTX
+A5000, vLLM 0.11.0, `facebook/opt-125m`; details in `docs/GPU_VALIDATION.md`).
 
 ## Verified locally (CPU, fakes)
 
@@ -31,13 +32,25 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   missing metrics and zero baselines reported; GPU samples matched per run;
   `monitor` exits 3.
 
+## Verified on hardware (one run, one GPU, one tiny model)
+
+* Patching and restoration of the real `vllm.v1.engine.llm_engine.LLMEngine`
+  (0.11.0) under both engine-core modes.
+* In-process scheduler discovery via `engine.engine_core.engine_core.scheduler`;
+  batch records with real request ids; prefill/decode classification.
+* NVML backend field mapping (all fields populated on an A5000; throttle bits
+  observed only as `none`).
+* TTFT/TPOT through the raw engine loop; FINAL_ONLY handling under `generate()`.
+* Device energy within 6% of an independent `nvidia-smi` integral.
+* Overhead on opt-125m: +4% (`generate()`) / +9% (cumulative loop) wall time.
+
 ## Implemented but unverified on hardware
 
-* Patching of the real `vllm.v1.engine.llm_engine.LLMEngine` (0.11.0).
-* In-process scheduler discovery via `engine.engine_core.engine_core.scheduler`.
-* NVML backend (`NVMLBackend`) field mapping and throttle bits.
-* Behaviour under chunked prefill, preemption, speculative decoding, `n > 1`.
-* Overhead of instrumentation and sampling.
+* Behaviour under chunked prefill across steps, preemption, speculative
+  decoding, `n > 1`, multi-GPU, abort under load.
+* Throttle-reason bits other than `none`.
+* Overhead on models where a step takes longer than a few milliseconds
+  (expected to be smaller in relative terms; not measured).
 
 ## Not implemented
 

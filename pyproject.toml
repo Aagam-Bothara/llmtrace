@@ -26,7 +26,7 @@ nvml = ["nvidia-ml-py>=12.535.133"]
 parquet = ["pyarrow>=12.0.0"]
 # The one vLLM version whose engine interfaces were verified (see DEVELOPMENT.md).
 # Linux + NVIDIA GPU only.
-vllm = ["vllm==0.11.0", "nvidia-ml-py>=12.535.133"]
+vllm = ["vllm==0.11.0", "transformers>=4.56,<5", "nvidia-ml-py>=12.535.133"]  # transformers 5.x breaks vLLM 0.11.0 tokenizer (all_special_tokens_extended)
 dev = [
     "pytest>=7.0.0",
     "ruff>=0.1.0",

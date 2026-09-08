@@ -1,8 +1,8 @@
-# First GPU Validation Checklist
+# GPU Validation
 
-Nothing in llmtrace has run on a GPU yet. This is the plan for the first run.
-Record results in this file (or an issue) with the exact commands and outputs;
-do not summarise from memory.
+The first GPU run happened on 2026-09-08 (results below). The checklist that
+follows is the procedure for repeating it; record results with exact commands
+and outputs, never from memory.
 
 ## Environment
 
@@ -79,6 +79,70 @@ Tracing enabled vs disabled
 Failure surfacing
 - [ ] with `strict_instrumentation=True`, inject a fault (e.g. monkeypatch `_on_step_completed`) and confirm the exception surfaces after the engine call
 - [ ] with `require_gpu=True` and NVML blocked, confirm `instrument_engine()` raises **and** the engine is restored (`"step" not in engine.__dict__`), no `llmtrace-*` threads remain
+
+## Results: first GPU run (2026-09-08)
+
+Environment: RunPod Secure Cloud, 1x NVIDIA RTX A5000 (24 GB), driver
+580.159.04, CUDA 13.0 runtime, Python 3.11.11, vLLM 0.11.0, transformers 4.57.6
+(after the pin below), llmtrace working tree at this commit. Model
+`facebook/opt-125m`, temperature 0. Raw logs and trace files are in the run
+artifacts (`gpu_smoke_results/`, `long_results/`); numbers below are copied
+from them.
+
+Executed via `scripts/gpu_smoke_run.sh`, then a longer workload
+(64 prompts x 256 tokens) with `scripts/gpu_overhead.py` and an independent
+`nvidia-smi --query-gpu=power.draw -lms 50` log.
+
+| Step | Result |
+|------|--------|
+| CPU suite on the GPU box | 106 passed |
+| Smoke, multiprocess engine core (default) | ALL CHECKS PASSED: `SyncMPClient`, scheduler reported unreachable with the documented reason, no batches, membership `request_window` |
+| Smoke, in-process engine core (`VLLM_ENABLE_V1_MULTIPROCESSING=0`) | ALL CHECKS PASSED: `InprocClient`, scheduler found at `engine.engine_core.engine_core.scheduler`, 32 batches for 8 x 32-token requests, every trace linked to batches, membership `batch_metadata`, queue + prefill == TTFT |
+| Phase A (`LLM.generate()`) | `output_kind=final_only`, TTFT/TPOT unavailable with the FINAL_ONLY reason, token counts equal to the engine's, text identical to untraced |
+| Phase B (raw engine loop, cumulative) | TTFT and TPOT measured for all requests, `tokens_at_first_observation == 1`, text identical to `generate()` |
+| Restoration | `step`/`add_request` back to originals after every `stop()`; no leaked requests; no instrumentation errors; no dropped writes |
+| NVML | all fields populated (power, limit, util, memory, clocks, temperature, throttle `none`); sampler interval median 48.6 ms at a 50 ms setting |
+| Real batch classification | first step `num_prefill=8, num_decode=0`; all later steps decode-only; `kv_cache_usage_fraction` populated |
+| Energy ledger | conservation error <= 2e-13 J on every run |
+
+Energy cross-check (64 x 256 tokens, in-process; llmtrace 50 ms sampler vs
+independent `nvidia-smi` 50 ms log, both integrated over the same wall-clock
+request window):
+
+| Run | window | llmtrace device J | nvidia-smi J |
+|-----|--------|-------------------|--------------|
+| generate 0 | 0.802 s | 149.29 | 143.49 |
+| generate 1 | 0.805 s | 162.67 | 152.68 |
+| generate 2 | 0.824 s | 164.97 | 165.38 |
+| engine loop 0 | 0.877 s | 177.79 | 167.96 |
+| engine loop 1 | 0.876 s | 177.15 | 177.30 |
+| engine loop 2 | 0.881 s | 176.55 | 177.05 |
+
+Agreement is within 6% with 16 to 18 samples per window on each side, i.e.
+within one sample interval of edge effect. Three of 64 requests per run had
+too little coverage for a per-request figure and are reported as such.
+
+Overhead (`scripts/gpu_overhead.py`, 5 interleaved repeats, medians of
+`generate()`-equivalent wall time; opt-125m steps are ~3 ms, so this is a
+worst-case relative figure for a tiny model, not a general one):
+
+| Configuration | untraced | traced | ratio | per engine step |
+|---------------|----------|--------|-------|-----------------|
+| `LLM.generate()` (FINAL_ONLY) | 0.7686 s | 0.8012 s | 1.042 | +0.13 ms |
+| engine loop (CUMULATIVE) | 0.7966 s | 0.8708 s | 1.093 | +0.29 ms |
+
+Not yet exercised on hardware: larger models, chunked prefill across steps,
+preemption, speculative decoding, `n > 1`, multi-GPU, abort under load,
+`require_gpu` failure path on real NVML.
+
+## Findings from GPU runs
+
+* 2026-09-08, RunPod RTX A5000 (driver 580.159.04), Python 3.11, vLLM 0.11.0:
+  `pip install vllm==0.11.0` resolved `transformers` to 5.16.1, and every
+  `LLM(...)` construction failed with
+  `AttributeError: GPT2Tokenizer has no attribute all_special_tokens_extended`
+  (in `vllm/transformers_utils/tokenizer.py`). Not an llmtrace bug; the `vllm`
+  extra now pins `transformers>=4.56,<5`.
 
 ## Things likely to need adjustment after the first run
 

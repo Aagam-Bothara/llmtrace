@@ -1,0 +1,12 @@
+=== cpu_tests: python -m pytest -q
+cpu_tests exit=0
+=== A_multiproc: python examples/vllm_smoke_test.py --model facebook/opt-125m --out /workspace/gpu_smoke_results/traces_multiproc
+A_multiproc exit=0
+=== B_inproc: python examples/vllm_smoke_test.py --model facebook/opt-125m --out /workspace/gpu_smoke_results/traces_inproc
+B_inproc exit=0
+=== untraced: python examples/vllm_smoke_test.py --model facebook/opt-125m --no-trace --repeat 5
+untraced exit=0
+=== traced_repeat: python examples/vllm_smoke_test.py --model facebook/opt-125m --out /workspace/gpu_smoke_results/traces_repeat --repeat 5
+traced_repeat exit=0
+=== C_power_crosscheck: python examples/vllm_smoke_test.py --model facebook/opt-125m --out /workspace/gpu_smoke_results/traces_crosscheck
+C_power_crosscheck exit=0

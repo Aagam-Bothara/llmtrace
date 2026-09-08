@@ -6,26 +6,27 @@ llmtrace instruments a vLLM `LLMEngine`, samples GPU telemetry alongside it,
 and turns the two into per-request lifecycle traces, an energy ledger, and
 rule-based diagnoses.
 
-## Status: pre-GPU-validation
+## Status: smoke-tested on one GPU
 
-This is an early implementation that has **not yet been run against real vLLM
-or a real GPU**. What exists today:
+Validated once on real vLLM 0.11.0 (RTX A5000, `facebook/opt-125m`, 2026-09-08);
+see [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
+Larger models, multi-GPU, preemption and speculative decoding are untested.
 
 | Area | Status |
 |------|--------|
-| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Implemented against interfaces verified from the vLLM 0.11.0 source; exercised only with a fake engine (CPU tests) |
-| Scheduler batch metadata | Implemented for the in-process scheduler (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); reported as unavailable otherwise |
-| GPU telemetry (NVML, background thread) | Implemented; exercised only with a fake backend |
-| Energy ledger (per-GPU integration, allocation policies, conservation) | Implemented and unit-tested with known totals |
+| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Verified on hardware: patched, traced 8/8 and 64/64 requests, restored cleanly |
+| Scheduler batch metadata | Verified in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
+| GPU telemetry (NVML, background thread) | Verified: all fields populated on an A5000, samples taken while `generate()` blocks |
+| Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; device energy within 6% of an independent `nvidia-smi` integral on the GPU run |
+| Timing (TTFT/TPOT) | Verified through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
+| Overhead | opt-125m, 64 x 256 tokens: +4% (`generate()`) and +9% (cumulative engine loop) wall time, i.e. 0.13 to 0.29 ms per engine step; a tiny-model worst case, not a general figure |
 | Rules-based diagnosis, CLI `analyze` / `compare`, offline analysis | Implemented and CPU-tested |
 | `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
 | AsyncLLM / OpenAI-compatible server | Not supported; instrumenting it raises `InstrumentationError` |
 | Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
-| Overhead measurements | None taken yet; see `docs/GPU_VALIDATION.md` |
 
-See [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for what the first GPU
-run must check, and [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
-for a precise list of what is and is not verified.
+[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) lists precisely what
+is and is not verified.
 
 ## What it records
 

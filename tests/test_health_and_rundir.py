@@ -194,6 +194,36 @@ class TestIsolatedRun:
         m2 = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(out), overwrite=True), timeout_s=300)
         assert m2.status == "ok" and len(io.load_traces([str(out)])) == 2
 
+    def test_nonzero_exit_after_manifest_is_failed_and_excluded_from_decide(self, tmp_path):
+        from llmtrace.runner import run_workload_isolated
+        from llmtrace.testing.fakes import isolated_entry_exit_nonzero
+        good = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "good")), timeout_s=300)
+        crashed = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "crashed")), timeout_s=300,
+                                        entry=isolated_entry_exit_nonzero)
+        assert good.status == "ok"
+        assert crashed.status == "failed" and "exited with code 3" in (crashed.error or "")
+        on_disk = RunManifest.read(str(tmp_path / "crashed"))
+        assert on_disk.status == "failed" and on_disk.error == crashed.error
+        assert len(io.load_traces([str(tmp_path / "crashed")])) == 2  # the data the child wrote is kept, but not trusted
+        dec = evaluate({"good": [str(tmp_path / "good")], "crashed": [str(tmp_path / "crashed")],
+                        "mixed": [str(tmp_path / "good"), str(tmp_path / "crashed")]}, Target.parse("a ttft_p95 <= 1000ms"))
+        by = {c.name: c for c in dec.configs}
+        assert by["crashed"].repeats[0].status == "failed" and "exited with code 3" in by["crashed"].repeats[0].error
+        assert by["crashed"].all_ok is False and by["crashed"].meets_target_all_repeats is False
+        assert by["mixed"].all_eligible is False and by["mixed"].meets_target_all_repeats is False
+        assert dec.candidates == ["good"]
+        assert any("crashed" in n and "failed" in n for n in dec.notes)
+
+    def test_timeout_after_manifest_is_failed(self, tmp_path):
+        from llmtrace.runner import run_workload_isolated
+        from llmtrace.testing.fakes import isolated_entry_hang
+        m = run_workload_isolated(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "hung")), timeout_s=20,
+                                  entry=isolated_entry_hang)
+        assert m.status == "failed" and "timed out after 20 s" in (m.error or "")
+        assert RunManifest.read(str(tmp_path / "hung")).status == "failed"
+        dec = evaluate({"hung": [str(tmp_path / "hung")]}, Target.parse("a ttft_p95 <= 1000ms"))
+        assert dec.configs[0].repeats[0].status == "failed" and dec.candidates == []
+
     def test_child_failure_is_a_failed_manifest(self, tmp_path):
         from llmtrace.runner import run_workload_isolated
         out = tmp_path / "bad"

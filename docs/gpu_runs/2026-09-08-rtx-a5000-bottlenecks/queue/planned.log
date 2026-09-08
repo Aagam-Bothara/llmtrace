@@ -1,0 +1,241 @@
+INFO 09-08 22:53:47 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:53:49 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 8192, 'max_num_seqs': 8, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:53:49 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:53:49 [model.py:1510] Using max model len 2048
+INFO 09-08 22:53:49 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 22:53:50 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":16,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:53:52 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:53:52 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:53:52 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:53:53 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:53:53 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:53:53 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.73it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.73it/s]
+
+INFO 09-08 22:53:53 [default_loader.py:267] Loading weights took 0.22 seconds
+INFO 09-08 22:53:53 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.537454 seconds
+INFO 09-08 22:53:55 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:53:55 [backends.py:559] Dynamo bytecode transform time: 1.51 s
+INFO 09-08 22:53:56 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.311 s
+INFO 09-08 22:53:56 [monitor.py:34] torch.compile takes 1.51 s in total
+INFO 09-08 22:53:57 [gpu_worker.py:298] Available KV cache memory: 11.40 GiB
+INFO 09-08 22:53:57 [kv_cache_utils.py:1087] GPU KV cache size: 331,984 tokens
+INFO 09-08 22:53:57 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 162.10x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  60%|██████    | 3/5 [00:00<00:00, 18.16it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:00<00:00, 23.45it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:00<00:00, 98.16it/s]
+INFO 09-08 22:53:58 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:53:58 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.29 seconds
+INFO 09-08 22:53:58 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20749
+INFO 09-08 22:53:58 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/baseline/r0] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=2.442s arrival delay p50/max 3.4343749284744263 / 6.690072827041149 ms
+    scheduler visible: True (None); executor visible: True (None)
+INFO 09-08 22:54:08 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:54:10 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 8192, 'max_num_seqs': 8, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:54:10 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:54:10 [model.py:1510] Using max model len 2048
+INFO 09-08 22:54:10 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 22:54:11 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":16,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:54:13 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:54:13 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:54:13 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:54:14 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:54:14 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:54:14 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.65it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.64it/s]
+
+INFO 09-08 22:54:14 [default_loader.py:267] Loading weights took 0.22 seconds
+INFO 09-08 22:54:14 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.439692 seconds
+INFO 09-08 22:54:16 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:54:16 [backends.py:559] Dynamo bytecode transform time: 1.52 s
+INFO 09-08 22:54:17 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.314 s
+INFO 09-08 22:54:17 [monitor.py:34] torch.compile takes 1.52 s in total
+INFO 09-08 22:54:18 [gpu_worker.py:298] Available KV cache memory: 11.40 GiB
+INFO 09-08 22:54:18 [kv_cache_utils.py:1087] GPU KV cache size: 331,984 tokens
+INFO 09-08 22:54:18 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 162.10x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:00<00:00, 56.82it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:00<00:00, 105.92it/s]
+INFO 09-08 22:54:19 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:54:19 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.18 seconds
+INFO 09-08 22:54:19 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20749
+INFO 09-08 22:54:19 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/baseline/r1] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=2.516s arrival delay p50/max 3.3871368505060673 / 7.129065692424774 ms
+    scheduler visible: True (None); executor visible: True (None)
+INFO 09-08 22:54:29 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:54:31 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 8192, 'max_num_seqs': 16, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:54:31 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:54:31 [model.py:1510] Using max model len 2048
+INFO 09-08 22:54:32 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 22:54:32 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":32,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:54:35 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:54:35 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:54:35 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:54:35 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:54:35 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:54:35 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.68it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.67it/s]
+
+INFO 09-08 22:54:36 [default_loader.py:267] Loading weights took 0.22 seconds
+INFO 09-08 22:54:36 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.413456 seconds
+INFO 09-08 22:54:38 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:54:38 [backends.py:559] Dynamo bytecode transform time: 1.55 s
+INFO 09-08 22:54:38 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.276 s
+INFO 09-08 22:54:39 [monitor.py:34] torch.compile takes 1.55 s in total
+INFO 09-08 22:54:39 [gpu_worker.py:298] Available KV cache memory: 11.40 GiB
+INFO 09-08 22:54:40 [kv_cache_utils.py:1087] GPU KV cache size: 331,984 tokens
+INFO 09-08 22:54:40 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 162.10x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 62.28it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 62.16it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 98.31it/s]
+INFO 09-08 22:54:40 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:54:40 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.29 seconds
+INFO 09-08 22:54:41 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20749
+INFO 09-08 22:54:41 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/seqs16/r0] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=2.343s arrival delay p50/max 3.725998103618622 / 7.465885952115059 ms
+    scheduler visible: True (None); executor visible: True (None)
+INFO 09-08 22:54:51 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:54:53 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 8192, 'max_num_seqs': 16, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:54:53 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:54:53 [model.py:1510] Using max model len 2048
+INFO 09-08 22:54:54 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 09-08 22:54:54 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":32,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:54:56 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:54:57 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:54:57 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:54:57 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:54:57 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:54:57 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.71it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.71it/s]
+
+INFO 09-08 22:54:57 [default_loader.py:267] Loading weights took 0.22 seconds
+INFO 09-08 22:54:58 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.428013 seconds
+INFO 09-08 22:55:00 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:55:00 [backends.py:559] Dynamo bytecode transform time: 1.53 s
+INFO 09-08 22:55:00 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.324 s
+INFO 09-08 22:55:00 [monitor.py:34] torch.compile takes 1.53 s in total
+INFO 09-08 22:55:01 [gpu_worker.py:298] Available KV cache memory: 11.40 GiB
+INFO 09-08 22:55:01 [kv_cache_utils.py:1087] GPU KV cache size: 331,984 tokens
+INFO 09-08 22:55:01 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 162.10x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 53.21it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 53.14it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 117.15it/s]
+INFO 09-08 22:55:02 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:55:02 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.16 seconds
+INFO 09-08 22:55:02 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20749
+INFO 09-08 22:55:02 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/seqs16/r1] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=2.264s arrival delay p50/max 3.002000041306019 / 5.717155057936907 ms
+    scheduler visible: True (None); executor visible: True (None)
+INFO 09-08 22:55:11 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:55:14 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 16384, 'max_num_seqs': 8, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:55:14 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:55:14 [model.py:1510] Using max model len 2048
+INFO 09-08 22:55:14 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 09-08 22:55:15 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":16,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:55:17 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:55:17 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:55:18 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:55:18 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:55:18 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:55:18 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  5.08it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  5.08it/s]
+
+INFO 09-08 22:55:18 [default_loader.py:267] Loading weights took 0.20 seconds
+INFO 09-08 22:55:19 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.408897 seconds
+INFO 09-08 22:55:20 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:55:20 [backends.py:559] Dynamo bytecode transform time: 1.26 s
+INFO 09-08 22:55:21 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.281 s
+INFO 09-08 22:55:21 [monitor.py:34] torch.compile takes 1.26 s in total
+INFO 09-08 22:55:22 [gpu_worker.py:298] Available KV cache memory: 11.30 GiB
+INFO 09-08 22:55:22 [kv_cache_utils.py:1087] GPU KV cache size: 329,248 tokens
+INFO 09-08 22:55:22 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 160.77x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:00<00:00, 65.25it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  50%|█████     | 2/4 [00:00<00:00, 13.70it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:00<00:00, 24.92it/s]
+INFO 09-08 22:55:23 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:55:23 [core.py:210] init engine (profile, create kv cache, warmup model) took 3.97 seconds
+INFO 09-08 22:55:23 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20578
+INFO 09-08 22:55:23 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/budget16384/r0] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=2.452s arrival delay p50/max 3.423080313950777 / 6.818752270191908 ms
+    scheduler visible: True (None); executor visible: True (None)
+INFO 09-08 22:55:32 [__init__.py:216] Automatically detected platform cuda.
+INFO 09-08 22:55:35 [utils.py:233] non-default args: {'dtype': 'float16', 'seed': 0, 'max_model_len': 2048, 'block_size': 16, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.5, 'max_num_batched_tokens': 16384, 'max_num_seqs': 8, 'enable_chunked_prefill': True, 'model': 'facebook/opt-125m'}
+INFO 09-08 22:55:35 [model.py:547] Resolved architecture: OPTForCausalLM
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 09-08 22:55:35 [model.py:1510] Using max model len 2048
+INFO 09-08 22:55:35 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 09-08 22:55:36 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='facebook/opt-125m', speculative_config=None, tokenizer='facebook/opt-125m', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=facebook/opt-125m, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":16,"local_cache_dir":null}
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 09-08 22:55:38 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 09-08 22:55:38 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 09-08 22:55:38 [gpu_model_runner.py:2602] Starting to load model facebook/opt-125m...
+INFO 09-08 22:55:38 [gpu_model_runner.py:2634] Loading model from scratch...
+INFO 09-08 22:55:38 [cuda.py:366] Using Flash Attention backend on V1 engine.
+INFO 09-08 22:55:38 [weight_utils.py:392] Using model weights format ['*.safetensors', '*.bin', '*.pt']
+Loading pt checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.95it/s]
+Loading pt checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.94it/s]
+
+INFO 09-08 22:55:39 [default_loader.py:267] Loading weights took 0.21 seconds
+INFO 09-08 22:55:39 [gpu_model_runner.py:2653] Model loading took 0.2389 GiB and 0.403419 seconds
+INFO 09-08 22:55:41 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/ea9bb08622/rank_0_0/backbone for vLLM's torch.compile
+INFO 09-08 22:55:41 [backends.py:559] Dynamo bytecode transform time: 1.53 s
+INFO 09-08 22:55:41 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 0.265 s
+INFO 09-08 22:55:42 [monitor.py:34] torch.compile takes 1.53 s in total
+INFO 09-08 22:55:42 [gpu_worker.py:298] Available KV cache memory: 11.30 GiB
+INFO 09-08 22:55:42 [kv_cache_utils.py:1087] GPU KV cache size: 329,248 tokens
+INFO 09-08 22:55:42 [kv_cache_utils.py:1091] Maximum concurrency for 2,048 tokens per request: 160.77x
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  60%|██████    | 3/5 [00:00<00:00, 15.86it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:00<00:00, 21.58it/s]
+Capturing CUDA graphs (decode, FULL):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:00<00:00, 111.06it/s]
+INFO 09-08 22:55:43 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.06 GiB
+INFO 09-08 22:55:43 [core.py:210] init engine (profile, create kv cache, warmup model) took 4.04 seconds
+INFO 09-08 22:55:43 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 20578
+INFO 09-08 22:55:43 [llm.py:306] Supported_tasks: ('generate',)
+[/workspace/bn/queue/planned/budget16384/r1] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=2.449s arrival delay p50/max 3.1447303481400013 / 6.103087216615677 ms
+    scheduler visible: True (None); executor visible: True (None)
+compare with: llmtrace decide --target '<class> ttft_p95 <= <ms>' --config baseline=/workspace/bn/queue/planned/baseline/r0,/workspace/bn/queue/planned/baseline/r1 --config seqs16=/workspace/bn/queue/planned/seqs16/r0,/workspace/bn/queue/planned/seqs16/r1 --config budget16384=/workspace/bn/queue/planned/budget16384/r0,/workspace/bn/queue/planned/budget16384/r1

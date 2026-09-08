@@ -1,0 +1,12 @@
+target: kv e2e_p95 <= 4000 ms
+slo: kv: e2e <= 4000 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  2/2     no          7434.5 [7408.5..7460.5] [7311.8..7516.2]      33%     6520   0.0276  0.99       yes
+mem16          yes  2/2     no          5387.9 [5288.0..5487.7] [5486.0..5487.9]       0%     9117   0.0206  1.00       yes
+seqs128        yes  2/2     no          6546.3 [6457.6..6634.9] [6483.2..6660.6]       0%     7439   0.0251  0.99       yes
+
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: none
+recommendation (advisory): No configuration met the target in every repeat; see per-repeat values and notes.
+Decision written to /workspace/bn2/kv/decision.json

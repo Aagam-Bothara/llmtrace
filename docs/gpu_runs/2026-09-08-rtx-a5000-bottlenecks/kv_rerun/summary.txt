@@ -1,0 +1,54 @@
+2026-09-08T23:04:29Z
+NVIDIA RTX A5000, 580.159.04, 24564 MiB
+3.11.11 torch 2.8.0+cu128 vllm 0.11.0 transformers 4.57.6 llmtrace 0.2.0
+=== kv: source run (mem06: --set gpu_memory_utilization=0.06)
+source exit=0 :: [/workspace/bn2/kv/source] vllm config=mem06 workload=sha256:ad1f3d767f3e30a4 steps=2473 finished=48/48 (+4 settle) wall=7.522s arrival delay p50/max 6.406226195394993 / 13.796232175081968 ms
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+[supported] long_prompt_interference: 38 request(s) decoded or waited in 18 step(s) that also prefilled a chunk > 128 tokens; those steps took 6.9 ms vs 2.8 ms for the rest. They waited while the scheduler spent its token budget o
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 1547 step(s) with 56 preemption(s) reported by vLLM.
+[not_supported] host_overhead: Host-side time is 20% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+plan exit=0
+source: vllm, facebook/opt-125m
+baseline engine kwargs (reproduced for every run): max_num_batched_tokens=8192, max_num_seqs=256, max_model_len=2048, enable_chunked_prefill=True, long_prefill_token_threshold=0, max_num_partial_prefills=1, max_long_partial_prefil
+[mem16] --set gpu_memory_utilization=0.16
+[seqs128] --set max_num_seqs=128
+skipped: queue_overload: not_supported
+skipped: host_overhead: not_supported
+skipped: cap1024: beyond --max-candidates 2
+skipped: cap512: beyond --max-candidates 2
+note: every candidate is a fresh engine started by llmtrace run; no running server is modified
+run --plan exit=0
+[/workspace/bn2/kv/planned/baseline/r0] vllm config=baseline workload=sha256:ad1f3d767f3e30a4 steps=2473 finished=48/48 (+4 settle) wall=7.513s arrival delay p50/max 6.267639808356762 / 13.67153692990
+[/workspace/bn2/kv/planned/baseline/r1] vllm config=baseline workload=sha256:ad1f3d767f3e30a4 steps=2473 finished=48/48 (+4 settle) wall=7.566s arrival delay p50/max 6.306093651801348 / 13.68453167378
+[/workspace/bn2/kv/planned/mem16/r0] vllm config=mem16 workload=sha256:ad1f3d767f3e30a4 steps=1025 finished=48/48 (+4 settle) wall=5.494s arrival delay p50/max 6.14908104762435 / 11.741450987756252 ms
+[/workspace/bn2/kv/planned/mem16/r1] vllm config=mem16 workload=sha256:ad1f3d767f3e30a4 steps=1025 finished=48/48 (+4 settle) wall=5.294s arrival delay p50/max 6.083147134631872 / 11.529490351676941 m
+[/workspace/bn2/kv/planned/seqs128/r0] vllm config=seqs128 workload=sha256:ad1f3d767f3e30a4 steps=1777 finished=48/48 (+4 settle) wall=6.521s arrival delay p50/max 6.108975037932396 / 13.2403727620840
+[/workspace/bn2/kv/planned/seqs128/r1] vllm config=seqs128 workload=sha256:ad1f3d767f3e30a4 steps=1777 finished=48/48 (+4 settle) wall=6.697s arrival delay p50/max 6.3148061744868755 / 13.535202015191
+decide exit=0
+target: kv e2e_p95 <= 4000 ms
+slo: kv: e2e <= 4000 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  2/2     no          7434.5 [7408.5..7460.5] [7311.8..7516.2]      33%     6520   0.0276  0.99       yes
+mem16          yes  2/2     no          5387.9 [5288.0..5487.7] [5486.0..5487.9]       0%     9117   0.0206  1.00       yes
+seqs128        yes  2/2     no          6546.3 [6457.6..6634.9] [6483.2..6660.6]       0%     7439   0.0251  0.99       yes
+
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: none
+recommendation (advisory): No configuration met the target in every repeat; see per-repeat values and notes.
+Decision written to /workspace/bn2/kv/decision.json
+--- findings on mem16 r0
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+[supported] long_prompt_interference: 49 request(s) decoded or waited in 3 step(s) that also prefilled a chunk > 128 tokens; those steps took 17.0 ms vs 4.7 ms for the rest. They waited while the sche
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 70%).
+[not_supported] host_overhead: Host-side time is 23% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+--- findings on seqs128 r0
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+[supported] long_prompt_interference: 46 request(s) decoded or waited in 6 step(s) that also prefilled a chunk > 128 tokens; those steps took 24.2 ms vs 3.2 ms for the rest. They waited while the sche
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 904 step(s) with 28 preemption(s) reported by vLLM.
+[not_supported] host_overhead: Host-side time is 21% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+1 MiB
+ALL_DONE_kv

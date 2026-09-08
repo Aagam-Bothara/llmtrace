@@ -247,6 +247,29 @@ the smoke test and the mixed-prompt experiment.
 Not measured here: GPU busy time (see the Nsight cross-check below for how
 far the span is from it) and the event-recording overhead itself.
 
+## Two induced bottlenecks and the 7B overhead matrix (2026-09-08, RTX A5000 and A100 80GB, session 3)
+
+Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-bottlenecks/` (opt-125m) and
+`docs/gpu_runs/2026-09-08-a100-qwen2.5-7b-overhead-queue/` (Qwen2.5-7B).
+Each bottleneck was induced with a workload spec and one engine setting, then
+taken through `findings`, `plan --max-candidates 2 --repeats 2`, `run --plan`
+(one spawned process per engine) and `decide`.
+
+| Check | Result |
+|-------|--------|
+| Queue overload, opt-125m: bursts of 32 requests (64 prompt, 64 output tokens) every second, `max_num_seqs=8` | `queue_overload` supported: 72 of 96 requests waited over 100 ms (in-process queue spans); the other four hypotheses not supported. Plan: `seqs16` (running count reached the cap) and `budget16384` |
+| Its `decide`, target burst TTFT p95 <= 300 ms, SLO ttft <= 300 ms and tpot <= 10 ms | baseline 379 ms [362..396], CI [363..396], goodput 75%; `seqs16` 166 ms [138..194], CI [160..194], goodput 100%, the only candidate; `budget16384` 346 ms [342..351], goodput 75%: doubling the token budget changed nothing because the sequence cap, not the budget, was the limit (a negative control the planner proposed alongside). `seqs16` halved the step count (384 vs 768) and the energy per token (0.0107 vs 0.0240 J) |
+| Same queue loop on Qwen2.5-7B (A100 80GB) | 88 requests waited; `seqs16` cut TTFT p95 from 6.38 s [6.377..6.378] to 2.14 s [2.131..2.146] with J/token 0.23 vs 0.43; `budget16384` again changed nothing (6.36 s). No candidate met the 300 ms target, which was set for the small model; `decide` said so |
+| KV-cache pressure, opt-125m: 48 requests of 256 prompt and 1024 output tokens at once, `gpu_memory_utilization=0.06` | `kv_cache_pressure` supported: usage 100% in 1547 of 2473 steps with 56 preemptions from vLLM's per-step stats (the sync-engine stats hook at work); `long_prompt_interference` also supported (38 requests, 18 long-chunk steps, 6.9 vs 2.8 ms) |
+| First plan attempt | With candidates in rule order and the cap at two, the interference candidates `cap1024`/`cap512` were proposed and the KV ones skipped as beyond the cap. `decide` on them: e2e p95 7.48 s baseline vs 7.40 and 7.43 s, no candidate, both replays still at 100% usage with 55 to 56 preemptions. A correct negative result that exposed a planner defect: candidates are now ranked by the affected-request count of their finding (48 KV vs 38 interference here), and `plan --finding` restricts them |
+| KV rerun after the fix | Plan: `mem16` (`gpu_memory_utilization` 0.06 to 0.16) and `seqs128`. `decide`, target kv e2e p95 <= 4000 ms: baseline 7.43 s [7.41..7.46], `mem16` 5.39 s [5.29..5.49] (-28%; 1025 steps vs 2473; J/token 0.0206 vs 0.0276; `findings` on it: KV usage max 70%, no preemptions, `kv_cache_pressure` not supported), `seqs128` 6.55 s [6.46..6.63] (28 preemptions, half). No candidate met the target (set before the numbers were known); goodput under e2e <= 4 s was 33% for the baseline and 0% for both candidates because without preemption every request finishes at about the same, later time, while preemption lets a third finish early: the p95 and the SLO share can move in opposite directions |
+| Overhead matrix on Qwen2.5-7B (64 x 256 tokens, 3 repeats) | untraced `generate()` 3.360 s, untraced engine loop 3.378 s, traced `generate()` 3.400 s (+1.2%, 0.16 ms per step), traced engine loop 3.436 s (+1.7%, 0.23 ms per step), without GPU step timing 3.415 s: CUDA-event recording 0.08 ms per step (+0.6%). The relative cost falls with model size as expected (opt-125m: +7.7% / +14.4%, 0.11 ms per step for events) |
+| Memory after the runs | 1 MiB (A5000), 0 MiB (A100): per-process engines released everything |
+
+Not measured: KV pressure on the 7B model (only queue overload was repeated
+there); the `host_overhead` and `tracer_observer_effect` findings as positive
+results; anything above 7B.
+
 ## Generic runner, plan loop, stats hook, overhead matrix (2026-09-08, RTX A5000, session 2)
 
 Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-runner-plan/` (its README lists

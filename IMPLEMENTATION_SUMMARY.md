@@ -90,7 +90,12 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 * vLLM per-step stats through the post-hoc `stat_loggers` attach on the sync
   engine (RTX A5000), with `disable_log_stats=False`.
 * Overhead matrix with GPU step timing on/off on opt-125m (RTX A5000): CUDA
-  events cost 0.11 ms per step (+3.0%).
+  events cost 0.11 ms per step (+3.0%); on Qwen2.5-7B (A100 80GB) the whole
+  tracer is +1.2% / +1.7% and CUDA events 0.08 ms per step (+0.6%).
+* Queue overload and KV-cache pressure induced on real vLLM (RTX A5000;
+  queue also on the 7B model on A100): found by `findings`, candidates from
+  `plan`, replayed by `run --plan`, compared by `decide`; a planner ranking
+  defect found and fixed in the process (session 3 evidence).
 * Qwen2.5-7B on A100 at TP=1 and TP=2: the mixed-prompt experiment reproduces
   (improved 3/3 and 2/2), with `decide` selecting the capped configs for a
   50 ms short-TTFT target and reporting the energy-per-token cost of TP=2.
@@ -108,7 +113,7 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 * Behaviour under preemption, speculative decoding, `n > 1`, abort under load,
   pipeline parallelism, models above 7B. The span-vs-busy gap is characterized
   on opt-125m only; the event-recording overhead is measured on opt-125m
-  only (0.11 ms per step), not on larger models.
+  and Qwen2.5-7B (0.11 and 0.08 ms per step); nothing above 7B.
 * Throttle-reason bits other than `none`.
 * Overhead on models where a step takes longer than a few milliseconds
   (expected to be smaller in relative terms; not measured).

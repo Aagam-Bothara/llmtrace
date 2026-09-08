@@ -1,0 +1,22 @@
+[supported] queue_overload: 72 request(s) waited >= 100 ms before first being scheduled.
+    affected (72): burst-0008, burst-0009, burst-0010, burst-0011, burst-0012, burst-0013, burst-0014, burst-0015 ...
+    evidence: queue wait p95 across requests with a queue span = 337 ms  [traces_*.jsonl:spans[phase=queue]]
+    evidence: max requests waiting in vLLM's queue per step = 24 requests  [vllm_stats_*.jsonl:num_waiting_reqs]
+    evidence: vLLM's own queued time p95 = 337 ms  [vllm_stats_*.jsonl:finished_requests.queued_time]
+    experiment: Replay the same workload at a lower arrival rate, or with a higher max_num_seqs / max_num_batched_tokens, and compare queue wait p95 and throughput.
+[not_supported] long_prompt_interference: No engine step carried a prefill chunk larger than 128 tokens.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+    evidence: max KV-cache usage = 0.00311 fraction  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: steps with usage >= 90% = 0 steps  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: preemptions reported by vLLM = 0 requests  [vllm_stats_*.jsonl:num_preempted_reqs]
+    missing: which requests were preempted (vLLM stats carry no request ids)
+[not_supported] host_overhead: Host-side time is 17% of a typical step; steps are GPU-bound.
+    evidence: median GPU span per step = 1.29 ms  [gpu_steps_*.jsonl:gpu_span_ms]
+    evidence: median host step time = 1.55 ms  [gpu_steps_*.jsonl:host_step_ms]
+    evidence: median share of step time not spanned by the GPU = 0.167 fraction  [gpu_steps_*.jsonl:host_overhead_ms/host_step_ms]
+    evidence: steps with a resolved GPU span = 772 steps  [gpu_steps_*.jsonl]
+    missing: GPU busy time (CUPTI); the CUDA-event span includes launch gaps
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 25 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.111 ms  [collector_*.jsonl:duration_ms]
+Findings written to /workspace/bn/queue/findings_budget16384.json

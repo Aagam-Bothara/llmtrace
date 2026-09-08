@@ -1,0 +1,70 @@
+{
+  "plan_version": 2,
+  "source_run": "/workspace/b7/bn/queue/source",
+  "workload_hash": "sha256:c2afe1bcfd8d9888",
+  "source_engine": "vllm",
+  "source_model": "Qwen/Qwen2.5-7B",
+  "source_model_revision": null,
+  "source_engine_kwargs": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 8,
+    "max_model_len": 2048,
+    "enable_chunked_prefill": true,
+    "long_prefill_token_threshold": 0,
+    "max_num_partial_prefills": 1,
+    "max_long_partial_prefills": 1,
+    "scheduling_policy": "fcfs",
+    "block_size": 16,
+    "gpu_memory_utilization": 0.5,
+    "enable_prefix_caching": true,
+    "dtype": "bfloat16",
+    "seed": 0,
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1
+  },
+  "unreproduced": [],
+  "baseline_config": {
+    "long_prefill_token_threshold": 0,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 8,
+    "gpu_memory_utilization": 0.5,
+    "enable_prefix_caching": true,
+    "max_model_len": 2048
+  },
+  "baseline_name": "baseline",
+  "repeats": 2,
+  "candidates": [
+    {
+      "name": "seqs16",
+      "scheduling_change": {
+        "max_num_seqs": 16
+      },
+      "source_finding": "queue_overload",
+      "rationale": "requests waited in the queue while the running count reached max_num_seqs=8",
+      "expected_effect": "queue wait p95 falls; throughput rises if the GPU has headroom",
+      "expected_cost": "per-token latency (TPOT) rises for every class as steps carry more sequences; KV-cache pressure rises",
+      "repeats": 2
+    },
+    {
+      "name": "budget16384",
+      "scheduling_change": {
+        "max_num_batched_tokens": 16384
+      },
+      "source_finding": "queue_overload",
+      "rationale": "a larger per-step token budget (8192 -> 16384) admits more prefill per step",
+      "expected_effect": "queue wait and TTFT fall when prefill is the bottleneck",
+      "expected_cost": "steps get longer: TPOT rises for decoding requests (the long_prompt_interference trade-off)",
+      "repeats": 2
+    }
+  ],
+  "skipped": [
+    "long_prompt_interference: not_supported",
+    "kv_cache_pressure: not_supported",
+    "host_overhead: not_supported"
+  ],
+  "notes": [
+    "queue_overload can also be a capacity problem: replaying at a lower arrival rate is a workload change, not a configuration change",
+    "every candidate is a fresh engine started by llmtrace run; no running server is modified"
+  ]
+}

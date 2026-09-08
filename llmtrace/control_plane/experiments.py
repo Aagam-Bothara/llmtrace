@@ -190,8 +190,17 @@ def _int(v: Any) -> Optional[int]:
 
 def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = None,
                      batches: Optional[List[BatchMetadata]] = None, max_candidates: int = 4, repeats: int = 3,
-                     source_run: Optional[str] = None) -> ExperimentPlan:
+                     source_run: Optional[str] = None, only_findings: Optional[List[str]] = None) -> ExperimentPlan:
+    """``only_findings`` restricts candidates to those hypotheses. Otherwise candidates are ordered by how many
+    requests their source finding affects (most first; ties keep the rule order), so the cap keeps the
+    candidates for the finding that touches the most requests: on the KV-pressure run of GPU session 3 the
+    interference candidates would otherwise have crowded out the KV ones."""
     knobs = effective_knobs(manifest)
+    if only_findings:
+        unknown = [f for f in only_findings if f not in {x.hypothesis for x in findings}]
+        findings = [f for f in findings if f.hypothesis in only_findings]
+        if unknown:
+            findings = list(findings)  # keep going; the plan notes the unknown names
     src_kwargs, unreproduced = source_engine_kwargs(manifest)
     plan = ExperimentPlan(source_run=source_run, workload_hash=manifest.workload_hash if manifest else None,
                           source_engine=manifest.engine if manifest else None,
@@ -201,6 +210,10 @@ def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = 
                           baseline_config={k: v for k, v in knobs.items() if v is not None}, repeats=repeats)
     if manifest is None:
         plan.notes.append("no manifest: baseline knobs unknown, candidates use vLLM 0.11.0 defaults as the reference")
+    if only_findings:
+        plan.notes.append(f"candidates restricted to: {', '.join(only_findings)}")
+        for u in unknown:
+            plan.skipped.append(f"{u}: no such finding in this run")
     if unreproduced:
         plan.notes.append("the baseline cannot reproduce every effective setting of the source run (see NOT REPRODUCED); "
                           "comparisons against the source run's own numbers are not like-for-like")
@@ -303,7 +316,9 @@ def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = 
         elif f.status != SUPPORTED and f.hypothesis in ("long_prompt_interference", "queue_overload", "kv_cache_pressure", "host_overhead"):
             plan.skipped.append(f"{f.hypothesis}: {f.status}")
 
-    # dedupe by change, keep order, cap
+    # rank by the source finding's affected requests (most first, stable), dedupe by change, cap
+    affected = {f.hypothesis: f.affected_count for f in findings}
+    cands.sort(key=lambda c: -affected.get(c.source_finding, 0))
     seen = set()
     for c in cands:
         key = tuple(sorted(c.scheduling_change.items()))

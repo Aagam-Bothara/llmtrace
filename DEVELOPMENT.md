@@ -43,7 +43,7 @@ leave `status: failed` in the manifest. Derived summaries are produced by
 run directory by the runner. Real engines get one spawned process each
 (`run_workload_isolated`): vLLM 0.11.0's `LLM` has no close, and a second
 engine started in the same process fails on free GPU memory (seen on the RTX
-A5000 session); the child writes the manifest and the parent reads it back,
+A5000 session); the child writes the manifest and the parent reads it back; a child that exits nonzero or is killed on timeout leaves `status: failed` with the reason even when it had already written a manifest, so `decide` excludes it,
 recording a child that died without one as a failed run. The runner passes
 `disable_log_stats=False` to `LLM(...)`, because `vllm.LLM` otherwise disables
 stats logging and there is no `logger_manager` to attach to. A directory that
@@ -220,8 +220,10 @@ token budget; `kv_cache_pressure` raises `gpu_memory_utilization` by 0.1 (at
 most 0.95), halves `max_num_seqs`, enables prefix caching if off;
 `host_overhead` doubles `max_num_seqs`. Baseline knobs come from the
 manifest's effective config (real sections or the fake engine's). Candidates
-are deduplicated and capped (`--max-candidates`), skipped items are listed
-with the reason, and the plan is JSON that `llmtrace run --plan` executes as
+are ranked by the affected-request count of their source finding (most
+first, ties in rule order; `--finding` restricts the plan to named
+hypotheses), deduplicated and capped (`--max-candidates`), skipped items are
+listed with the reason, and the plan is JSON that `llmtrace run --plan` executes as
 fresh engines under the same workload (`<out>/<config>/r<i>`), warning if the
 workload hash differs from the plan's source run. The plan carries the source
 run's engine (`fake`/`vllm`), model, revision and `source_engine_kwargs`.

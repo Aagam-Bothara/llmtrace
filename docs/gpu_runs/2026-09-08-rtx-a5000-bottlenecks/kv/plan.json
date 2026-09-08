@@ -1,0 +1,70 @@
+{
+  "plan_version": 2,
+  "source_run": "/workspace/bn/kv/source",
+  "workload_hash": "sha256:ad1f3d767f3e30a4",
+  "source_engine": "vllm",
+  "source_model": "facebook/opt-125m",
+  "source_model_revision": null,
+  "source_engine_kwargs": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "max_model_len": 2048,
+    "enable_chunked_prefill": true,
+    "long_prefill_token_threshold": 0,
+    "max_num_partial_prefills": 1,
+    "max_long_partial_prefills": 1,
+    "scheduling_policy": "fcfs",
+    "block_size": 16,
+    "gpu_memory_utilization": 0.06,
+    "enable_prefix_caching": true,
+    "dtype": "float16",
+    "seed": 0,
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1
+  },
+  "unreproduced": [],
+  "baseline_config": {
+    "long_prefill_token_threshold": 0,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "gpu_memory_utilization": 0.06,
+    "enable_prefix_caching": true,
+    "max_model_len": 2048
+  },
+  "baseline_name": "baseline",
+  "repeats": 2,
+  "candidates": [
+    {
+      "name": "cap1024",
+      "scheduling_change": {
+        "long_prefill_token_threshold": 1024
+      },
+      "source_finding": "long_prompt_interference",
+      "rationale": "steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 1024 tokens per step bounds step time (largest observed chunk 1185)",
+      "expected_effect": "short-request TTFT p95 and worst inter-token stall fall",
+      "expected_cost": "long-request TTFT rises (prefill spread over more steps); prefill throughput may fall",
+      "repeats": 2
+    },
+    {
+      "name": "cap512",
+      "scheduling_change": {
+        "long_prefill_token_threshold": 512
+      },
+      "source_finding": "long_prompt_interference",
+      "rationale": "steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 512 tokens per step bounds step time (largest observed chunk 1185)",
+      "expected_effect": "short-request TTFT p95 and worst inter-token stall fall",
+      "expected_cost": "long-request TTFT rises (prefill spread over more steps); prefill throughput may fall",
+      "repeats": 2
+    }
+  ],
+  "skipped": [
+    "queue_overload: not_supported",
+    "host_overhead: not_supported",
+    "mem16: beyond --max-candidates 2",
+    "seqs128: beyond --max-candidates 2"
+  ],
+  "notes": [
+    "every candidate is a fresh engine started by llmtrace run; no running server is modified"
+  ]
+}

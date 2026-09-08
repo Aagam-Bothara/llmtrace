@@ -1,0 +1,19 @@
+experiment plan from /workspace/bn/kv/source (workload sha256:ad1f3d767f3e30a4), 2 repeats each
+source: vllm, facebook/opt-125m
+baseline engine kwargs (reproduced for every run): max_num_batched_tokens=8192, max_num_seqs=256, max_model_len=2048, enable_chunked_prefill=True, long_prefill_token_threshold=0, max_num_partial_prefills=1, max_long_partial_prefills=1, scheduling_policy=fcfs, block_size=16, gpu_memory_utilization=0.06, enable_prefix_caching=True, dtype=float16, seed=0, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1
+baseline effective: long_prefill_token_threshold=0, max_num_batched_tokens=8192, max_num_seqs=256, gpu_memory_utilization=0.06, enable_prefix_caching=True, max_model_len=2048
+
+[cap1024] --set long_prefill_token_threshold=1024
+    from: long_prompt_interference. steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 1024 tokens per step bounds step time (largest observed chunk 1185)
+    expect: short-request TTFT p95 and worst inter-token stall fall
+    cost: long-request TTFT rises (prefill spread over more steps); prefill throughput may fall
+[cap512] --set long_prefill_token_threshold=512
+    from: long_prompt_interference. steps carrying prefill chunks above 128 tokens were markedly longer; capping long prompts at 512 tokens per step bounds step time (largest observed chunk 1185)
+    expect: short-request TTFT p95 and worst inter-token stall fall
+    cost: long-request TTFT rises (prefill spread over more steps); prefill throughput may fall
+skipped: queue_overload: not_supported
+skipped: host_overhead: not_supported
+skipped: mem16: beyond --max-candidates 2
+skipped: seqs128: beyond --max-candidates 2
+note: every candidate is a fresh engine started by llmtrace run; no running server is modified
+Plan written to /workspace/bn/kv/plan.json; execute with: llmtrace run --plan /workspace/bn/kv/plan.json --workload <spec.json> --engine <fake|vllm> --out <dir>

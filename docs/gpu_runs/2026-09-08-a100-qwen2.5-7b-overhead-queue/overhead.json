@@ -1,0 +1,94 @@
+{
+ "wall_s": {
+  "untraced_generate": [
+   3.3690774430288,
+   3.3565766810206696,
+   3.359913033025805
+  ],
+  "untraced_engine_loop": [
+   3.381254910957068,
+   3.371457297995221,
+   3.3774541270104237
+  ],
+  "traced_generate": [
+   3.3995248209685087,
+   3.399761173001025,
+   3.4014743639854714
+  ],
+  "traced_engine_loop": [
+   3.4224466999876313,
+   3.4433371070190333,
+   3.435792558011599
+  ],
+  "traced_engine_loop_nospans": [
+   3.4139885249896906,
+   3.414898020972032,
+   3.4187207859940827
+  ]
+ },
+ "steps_observed": {
+  "traced_generate": [
+   256,
+   256,
+   256
+  ],
+  "traced_engine_loop": [
+   256,
+   256,
+   256
+  ],
+  "traced_engine_loop_nospans": [
+   256,
+   256,
+   256
+  ]
+ },
+ "finish_reasons": {
+  "traced_generate_0": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_0": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_nospans_0": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_generate_1": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_1": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_nospans_1": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_generate_2": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_2": {
+   "stop": 55,
+   "length": 9
+  },
+  "traced_engine_loop_nospans_2": {
+   "stop": 55,
+   "length": 9
+  }
+ },
+ "config": {
+  "model": "Qwen/Qwen2.5-7B",
+  "num_prompts": 64,
+  "max_tokens": 256,
+  "repeat": 3,
+  "sample_interval_ms": 50,
+  "out": "/workspace/b7/overhead_traces",
+  "json": "/workspace/b7/overhead.json",
+  "gpu_step_timing": "both"
+ }
+}

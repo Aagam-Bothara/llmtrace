@@ -1,0 +1,923 @@
+{
+  "manifest_version": 1,
+  "created_at": 1788907989.438826,
+  "status": "ok",
+  "error": null,
+  "label": "source",
+  "engine": "vllm",
+  "synthetic": false,
+  "model": "facebook/opt-125m",
+  "model_revision": null,
+  "engine_version": "0.11.0",
+  "llmtrace_version": "0.2.0",
+  "llmtrace_git_commit": null,
+  "python": "3.11.11",
+  "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+  "gpu": {
+    "devices": [
+      {
+        "name": "NVIDIA RTX A5000",
+        "driver": "580.159.04",
+        "memory": "24564 MiB"
+      }
+    ]
+  },
+  "workload": {
+    "name": "queue_burst",
+    "description": "Bursts of 32 requests every second onto an engine capped at 8 concurrent sequences: requests wait in the scheduler queue.",
+    "seed": 0,
+    "vocab_size": 50000,
+    "min_token_id": 100,
+    "classes": [
+      {
+        "name": "burst",
+        "count": 96,
+        "prompt_len": {
+          "kind": "fixed",
+          "value": 64
+        },
+        "max_tokens": {
+          "kind": "fixed",
+          "value": 64
+        },
+        "arrival": {
+          "kind": "burst",
+          "start_s": 0.0,
+          "burstiness": 1.0,
+          "burst_size": 32,
+          "burst_every_s": 1.0
+        }
+      }
+    ]
+  },
+  "workload_hash": "sha256:c2afe1bcfd8d9888",
+  "seed": 0,
+  "config_name": "seqs8",
+  "scheduling_change": {
+    "max_num_seqs": 8
+  },
+  "engine_kwargs": {},
+  "effective_engine_config": {
+    "scheduler_config": {
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 8,
+      "max_model_len": 2048,
+      "enable_chunked_prefill": true,
+      "long_prefill_token_threshold": 0,
+      "max_num_partial_prefills": 1,
+      "max_long_partial_prefills": 1,
+      "policy": "fcfs"
+    },
+    "cache_config": {
+      "block_size": 16,
+      "gpu_memory_utilization": 0.5,
+      "enable_prefix_caching": true,
+      "num_gpu_blocks": 20738
+    },
+    "model_config": {
+      "model": "facebook/opt-125m",
+      "revision": null,
+      "dtype": "torch.float16",
+      "max_model_len": 2048,
+      "seed": 0
+    },
+    "parallel_config": {
+      "tensor_parallel_size": 1,
+      "pipeline_parallel_size": 1,
+      "data_parallel_size": 1
+    }
+  },
+  "tracer_config": {
+    "output_dir": "/workspace/bn/queue/source",
+    "output_format": "jsonl",
+    "gpu_sampler": {
+      "sample_interval_ms": 50,
+      "gpu_ids": null,
+      "max_buffered_samples": 100000,
+      "require_gpu": false
+    },
+    "energy": {
+      "enabled": true,
+      "attribution_method": "equal_share",
+      "max_sample_gap_s": 1.0,
+      "min_coverage_fraction": 0.5,
+      "energy_price_usd_per_kwh": null
+    },
+    "autopsy": {
+      "enabled": true,
+      "queue_overload_threshold_ms": 100.0,
+      "throttle_severity_threshold": 3,
+      "memory_pressure_threshold_pct": 90.0,
+      "low_gpu_util_threshold_pct": 50.0,
+      "batch_fragmentation_threshold": 0.3
+    },
+    "reporter": {
+      "cli_rich_output": true
+    },
+    "enable_batch_metadata": true,
+    "gpu_step_timing": true,
+    "enable_nvtx": false,
+    "collect_vllm_stats": true,
+    "collection_interval_s": 0.1,
+    "max_buffered_events": 10000,
+    "background_writes": true,
+    "max_write_queue": 10000,
+    "strict_instrumentation": false,
+    "write_incomplete_requests": true
+  },
+  "arrivals": [
+    {
+      "request_id": "burst-0000",
+      "scheduled_s": 0.0,
+      "actual_s": 0.00008303206413984299,
+      "delay_ms": 0.08303206413984299,
+      "submit_ms": 0.17370609566569328
+    },
+    {
+      "request_id": "burst-0001",
+      "scheduled_s": 0.0,
+      "actual_s": 0.00032429397106170654,
+      "delay_ms": 0.32429397106170654,
+      "submit_ms": 0.11628912761807442
+    },
+    {
+      "request_id": "burst-0002",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0005018399097025394,
+      "delay_ms": 0.5018399097025394,
+      "submit_ms": 0.1061740331351757
+    },
+    {
+      "request_id": "burst-0003",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0006685010157525539,
+      "delay_ms": 0.6685010157525539,
+      "submit_ms": 0.10515609756112099
+    },
+    {
+      "request_id": "burst-0004",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0008309558033943176,
+      "delay_ms": 0.8309558033943176,
+      "submit_ms": 0.10354537516832352
+    },
+    {
+      "request_id": "burst-0005",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0009991060942411423,
+      "delay_ms": 0.9991060942411423,
+      "submit_ms": 0.09966082870960236
+    },
+    {
+      "request_id": "burst-0006",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0011559491977095604,
+      "delay_ms": 1.1559491977095604,
+      "submit_ms": 0.09498000144958496
+    },
+    {
+      "request_id": "burst-0007",
+      "scheduled_s": 0.0,
+      "actual_s": 0.001308223232626915,
+      "delay_ms": 1.308223232626915,
+      "submit_ms": 0.09570689871907234
+    },
+    {
+      "request_id": "burst-0008",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0014611589722335339,
+      "delay_ms": 1.4611589722335339,
+      "submit_ms": 0.09600305929780006
+    },
+    {
+      "request_id": "burst-0009",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0017548291943967342,
+      "delay_ms": 1.7548291943967342,
+      "submit_ms": 0.11814571917057037
+    },
+    {
+      "request_id": "burst-0010",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0019365721382200718,
+      "delay_ms": 1.9365721382200718,
+      "submit_ms": 0.10555796325206757
+    },
+    {
+      "request_id": "burst-0011",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0020991559140384197,
+      "delay_ms": 2.0991559140384197,
+      "submit_ms": 0.0967392697930336
+    },
+    {
+      "request_id": "burst-0012",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0022530239075422287,
+      "delay_ms": 2.2530239075422287,
+      "submit_ms": 0.09318022057414055
+    },
+    {
+      "request_id": "burst-0013",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0024029510095715523,
+      "delay_ms": 2.4029510095715523,
+      "submit_ms": 0.09466521441936493
+    },
+    {
+      "request_id": "burst-0014",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0025544818490743637,
+      "delay_ms": 2.5544818490743637,
+      "submit_ms": 0.09584613144397736
+    },
+    {
+      "request_id": "burst-0015",
+      "scheduled_s": 0.0,
+      "actual_s": 0.002708650194108486,
+      "delay_ms": 2.708650194108486,
+      "submit_ms": 0.09541865438222885
+    },
+    {
+      "request_id": "burst-0016",
+      "scheduled_s": 0.0,
+      "actual_s": 0.002862393856048584,
+      "delay_ms": 2.862393856048584,
+      "submit_ms": 0.09793229401111603
+    },
+    {
+      "request_id": "burst-0017",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0030247219838202,
+      "delay_ms": 3.0247219838202,
+      "submit_ms": 0.09963382035493851
+    },
+    {
+      "request_id": "burst-0018",
+      "scheduled_s": 0.0,
+      "actual_s": 0.003181242849677801,
+      "delay_ms": 3.181242849677801,
+      "submit_ms": 0.09477324783802032
+    },
+    {
+      "request_id": "burst-0019",
+      "scheduled_s": 0.0,
+      "actual_s": 0.003333193250000477,
+      "delay_ms": 3.333193250000477,
+      "submit_ms": 0.09500887244939804
+    },
+    {
+      "request_id": "burst-0020",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0034846761263906956,
+      "delay_ms": 3.4846761263906956,
+      "submit_ms": 0.09663589298725128
+    },
+    {
+      "request_id": "burst-0021",
+      "scheduled_s": 0.0,
+      "actual_s": 0.003638843074440956,
+      "delay_ms": 3.638843074440956,
+      "submit_ms": 0.09856373071670532
+    },
+    {
+      "request_id": "burst-0022",
+      "scheduled_s": 0.0,
+      "actual_s": 0.003794558811932802,
+      "delay_ms": 3.794558811932802,
+      "submit_ms": 0.09517418220639229
+    },
+    {
+      "request_id": "burst-0023",
+      "scheduled_s": 0.0,
+      "actual_s": 0.0039472212083637714,
+      "delay_ms": 3.9472212083637714,
+      "submit_ms": 0.1025698147714138
+    },
+    {
+      "request_id": "burst-0024",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004113927949219942,
+      "delay_ms": 4.113927949219942,
+      "submit_ms": 0.09755697101354599
+    },
+    {
+      "request_id": "burst-0025",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004268831107765436,
+      "delay_ms": 4.268831107765436,
+      "submit_ms": 0.09585311636328697
+    },
+    {
+      "request_id": "burst-0026",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004421780817210674,
+      "delay_ms": 4.421780817210674,
+      "submit_ms": 0.09617721661925316
+    },
+    {
+      "request_id": "burst-0027",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004575266968458891,
+      "delay_ms": 4.575266968458891,
+      "submit_ms": 0.10236026719212532
+    },
+    {
+      "request_id": "burst-0028",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004734768997877836,
+      "delay_ms": 4.734768997877836,
+      "submit_ms": 0.09323516860604286
+    },
+    {
+      "request_id": "burst-0029",
+      "scheduled_s": 0.0,
+      "actual_s": 0.004885150119662285,
+      "delay_ms": 4.885150119662285,
+      "submit_ms": 0.1007281243801117
+    },
+    {
+      "request_id": "burst-0030",
+      "scheduled_s": 0.0,
+      "actual_s": 0.005111451260745525,
+      "delay_ms": 5.111451260745525,
+      "submit_ms": 0.10757800191640854
+    },
+    {
+      "request_id": "burst-0031",
+      "scheduled_s": 0.0,
+      "actual_s": 0.005278812255710363,
+      "delay_ms": 5.278812255710363,
+      "submit_ms": 0.0959029421210289
+    },
+    {
+      "request_id": "burst-0032",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0004630298353732,
+      "delay_ms": 0.4630298353731632,
+      "submit_ms": 0.31753629446029663
+    },
+    {
+      "request_id": "burst-0033",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0008528782054782,
+      "delay_ms": 0.8528782054781914,
+      "submit_ms": 0.12455275282263756
+    },
+    {
+      "request_id": "burst-0034",
+      "scheduled_s": 1.0,
+      "actual_s": 1.001058294903487,
+      "delay_ms": 1.058294903486967,
+      "submit_ms": 0.1145130954682827
+    },
+    {
+      "request_id": "burst-0035",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0012324661947787,
+      "delay_ms": 1.2324661947786808,
+      "submit_ms": 0.10105874389410019
+    },
+    {
+      "request_id": "burst-0036",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0013947691768408,
+      "delay_ms": 1.3947691768407822,
+      "submit_ms": 0.2822750248014927
+    },
+    {
+      "request_id": "burst-0037",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0017378171905875,
+      "delay_ms": 1.7378171905875206,
+      "submit_ms": 0.0972687266767025
+    },
+    {
+      "request_id": "burst-0038",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0018918151035905,
+      "delay_ms": 1.8918151035904884,
+      "submit_ms": 0.1139957457780838
+    },
+    {
+      "request_id": "burst-0039",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0020724381320179,
+      "delay_ms": 2.072438132017851,
+      "submit_ms": 0.10298984125256538
+    },
+    {
+      "request_id": "burst-0040",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0022359150461853,
+      "delay_ms": 2.235915046185255,
+      "submit_ms": 0.0944170169532299
+    },
+    {
+      "request_id": "burst-0041",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0023885518312454,
+      "delay_ms": 2.3885518312454224,
+      "submit_ms": 0.09151734411716461
+    },
+    {
+      "request_id": "burst-0042",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0025398079305887,
+      "delay_ms": 2.5398079305887222,
+      "submit_ms": 0.09447801858186722
+    },
+    {
+      "request_id": "burst-0043",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0026918011717498,
+      "delay_ms": 2.6918011717498302,
+      "submit_ms": 0.09271595627069473
+    },
+    {
+      "request_id": "burst-0044",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0028400761075318,
+      "delay_ms": 2.840076107531786,
+      "submit_ms": 0.09412271901965141
+    },
+    {
+      "request_id": "burst-0045",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0030008181929588,
+      "delay_ms": 3.000818192958832,
+      "submit_ms": 0.09653903543949127
+    },
+    {
+      "request_id": "burst-0046",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0031559988856316,
+      "delay_ms": 3.1559988856315613,
+      "submit_ms": 0.09610224515199661
+    },
+    {
+      "request_id": "burst-0047",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0033078910782933,
+      "delay_ms": 3.3078910782933235,
+      "submit_ms": 0.09185401722788811
+    },
+    {
+      "request_id": "burst-0048",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0034571290016174,
+      "delay_ms": 3.4571290016174316,
+      "submit_ms": 0.09555602446198463
+    },
+    {
+      "request_id": "burst-0049",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0036091301590204,
+      "delay_ms": 3.609130159020424,
+      "submit_ms": 0.09409710764884949
+    },
+    {
+      "request_id": "burst-0050",
+      "scheduled_s": 1.0,
+      "actual_s": 1.003761359024793,
+      "delay_ms": 3.7613590247929096,
+      "submit_ms": 0.0933520495891571
+    },
+    {
+      "request_id": "burst-0051",
+      "scheduled_s": 1.0,
+      "actual_s": 1.003916246816516,
+      "delay_ms": 3.9162468165159225,
+      "submit_ms": 0.09651621803641319
+    },
+    {
+      "request_id": "burst-0052",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0040689171291888,
+      "delay_ms": 4.068917129188776,
+      "submit_ms": 0.09591877460479736
+    },
+    {
+      "request_id": "burst-0053",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0043116128072143,
+      "delay_ms": 4.31161280721426,
+      "submit_ms": 0.10299123823642731
+    },
+    {
+      "request_id": "burst-0054",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0044711329974234,
+      "delay_ms": 4.47113299742341,
+      "submit_ms": 0.09385216981172562
+    },
+    {
+      "request_id": "burst-0055",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0046271528117359,
+      "delay_ms": 4.6271528117358685,
+      "submit_ms": 0.09754206985235214
+    },
+    {
+      "request_id": "burst-0056",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0047835018485785,
+      "delay_ms": 4.783501848578453,
+      "submit_ms": 0.09475322440266609
+    },
+    {
+      "request_id": "burst-0057",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0049353488720953,
+      "delay_ms": 4.9353488720953465,
+      "submit_ms": 0.10239193215966225
+    },
+    {
+      "request_id": "burst-0058",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0050947200506926,
+      "delay_ms": 5.094720050692558,
+      "submit_ms": 0.09554019197821617
+    },
+    {
+      "request_id": "burst-0059",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0052480939775705,
+      "delay_ms": 5.248093977570534,
+      "submit_ms": 0.09572692215442657
+    },
+    {
+      "request_id": "burst-0060",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0054009011946619,
+      "delay_ms": 5.400901194661856,
+      "submit_ms": 0.09389687329530716
+    },
+    {
+      "request_id": "burst-0061",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0055511952377856,
+      "delay_ms": 5.551195237785578,
+      "submit_ms": 0.09337998926639557
+    },
+    {
+      "request_id": "burst-0062",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0057009998708963,
+      "delay_ms": 5.700999870896339,
+      "submit_ms": 0.09253527969121933
+    },
+    {
+      "request_id": "burst-0063",
+      "scheduled_s": 1.0,
+      "actual_s": 1.0058516040444374,
+      "delay_ms": 5.8516040444374084,
+      "submit_ms": 0.09382888674736023
+    },
+    {
+      "request_id": "burst-0064",
+      "scheduled_s": 2.0,
+      "actual_s": 2.000497625209391,
+      "delay_ms": 0.4976252093911171,
+      "submit_ms": 0.3235926851630211
+    },
+    {
+      "request_id": "burst-0065",
+      "scheduled_s": 2.0,
+      "actual_s": 2.00089413812384,
+      "delay_ms": 0.8941381238400936,
+      "submit_ms": 0.1251818612217903
+    },
+    {
+      "request_id": "burst-0066",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0010802121832967,
+      "delay_ms": 1.0802121832966805,
+      "submit_ms": 0.10657403618097305
+    },
+    {
+      "request_id": "burst-0067",
+      "scheduled_s": 2.0,
+      "actual_s": 2.001246696803719,
+      "delay_ms": 1.2466968037188053,
+      "submit_ms": 0.10029925033450127
+    },
+    {
+      "request_id": "burst-0068",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0014080349355936,
+      "delay_ms": 1.408034935593605,
+      "submit_ms": 0.09580608457326889
+    },
+    {
+      "request_id": "burst-0069",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0015653520822525,
+      "delay_ms": 1.5653520822525024,
+      "submit_ms": 0.09439373388886452
+    },
+    {
+      "request_id": "burst-0070",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0017156270332634,
+      "delay_ms": 1.715627033263445,
+      "submit_ms": 0.09401421993970871
+    },
+    {
+      "request_id": "burst-0071",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0018651271238923,
+      "delay_ms": 1.8651271238923073,
+      "submit_ms": 0.0948379747569561
+    },
+    {
+      "request_id": "burst-0072",
+      "scheduled_s": 2.0,
+      "actual_s": 2.002022601198405,
+      "delay_ms": 2.0226011984050274,
+      "submit_ms": 0.09650597348809242
+    },
+    {
+      "request_id": "burst-0073",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0021810848265886,
+      "delay_ms": 2.1810848265886307,
+      "submit_ms": 0.0934242270886898
+    },
+    {
+      "request_id": "burst-0074",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0023382189683616,
+      "delay_ms": 2.338218968361616,
+      "submit_ms": 0.09417301043868065
+    },
+    {
+      "request_id": "burst-0075",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0024909409694374,
+      "delay_ms": 2.4909409694373608,
+      "submit_ms": 0.09587407112121582
+    },
+    {
+      "request_id": "burst-0076",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0026437481865287,
+      "delay_ms": 2.6437481865286827,
+      "submit_ms": 0.09261071681976318
+    },
+    {
+      "request_id": "burst-0077",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0027943961322308,
+      "delay_ms": 2.7943961322307587,
+      "submit_ms": 0.09464193135499954
+    },
+    {
+      "request_id": "burst-0078",
+      "scheduled_s": 2.0,
+      "actual_s": 2.002946997061372,
+      "delay_ms": 2.9469970613718033,
+      "submit_ms": 0.10082311928272247
+    },
+    {
+      "request_id": "burst-0079",
+      "scheduled_s": 2.0,
+      "actual_s": 2.003106095828116,
+      "delay_ms": 3.10609582811594,
+      "submit_ms": 0.09366124868392944
+    },
+    {
+      "request_id": "burst-0080",
+      "scheduled_s": 2.0,
+      "actual_s": 2.003256061114371,
+      "delay_ms": 3.256061114370823,
+      "submit_ms": 0.09226473048329353
+    },
+    {
+      "request_id": "burst-0081",
+      "scheduled_s": 2.0,
+      "actual_s": 2.00340369483456,
+      "delay_ms": 3.403694834560156,
+      "submit_ms": 0.09394623339176178
+    },
+    {
+      "request_id": "burst-0082",
+      "scheduled_s": 2.0,
+      "actual_s": 2.003552851267159,
+      "delay_ms": 3.552851267158985,
+      "submit_ms": 0.09393878281116486
+    },
+    {
+      "request_id": "burst-0083",
+      "scheduled_s": 2.0,
+      "actual_s": 2.00370437419042,
+      "delay_ms": 3.7043741904199123,
+      "submit_ms": 0.26616500690579414
+    },
+    {
+      "request_id": "burst-0084",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0040338058024645,
+      "delay_ms": 4.033805802464485,
+      "submit_ms": 0.09310711175203323
+    },
+    {
+      "request_id": "burst-0085",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0042754551395774,
+      "delay_ms": 4.275455139577389,
+      "submit_ms": 0.09938795119524002
+    },
+    {
+      "request_id": "burst-0086",
+      "scheduled_s": 2.0,
+      "actual_s": 2.004431259818375,
+      "delay_ms": 4.431259818375111,
+      "submit_ms": 0.09363144636154175
+    },
+    {
+      "request_id": "burst-0087",
+      "scheduled_s": 2.0,
+      "actual_s": 2.004579643253237,
+      "delay_ms": 4.579643253237009,
+      "submit_ms": 0.09463261812925339
+    },
+    {
+      "request_id": "burst-0088",
+      "scheduled_s": 2.0,
+      "actual_s": 2.004732970148325,
+      "delay_ms": 4.732970148324966,
+      "submit_ms": 0.09317602962255478
+    },
+    {
+      "request_id": "burst-0089",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0048828860744834,
+      "delay_ms": 4.882886074483395,
+      "submit_ms": 0.09683379903435707
+    },
+    {
+      "request_id": "burst-0090",
+      "scheduled_s": 2.0,
+      "actual_s": 2.005046343896538,
+      "delay_ms": 5.046343896538019,
+      "submit_ms": 0.09777722880244255
+    },
+    {
+      "request_id": "burst-0091",
+      "scheduled_s": 2.0,
+      "actual_s": 2.005203538108617,
+      "delay_ms": 5.203538108617067,
+      "submit_ms": 0.2575167454779148
+    },
+    {
+      "request_id": "burst-0092",
+      "scheduled_s": 2.0,
+      "actual_s": 2.005517820827663,
+      "delay_ms": 5.517820827662945,
+      "submit_ms": 0.0966130755841732
+    },
+    {
+      "request_id": "burst-0093",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0056727989576757,
+      "delay_ms": 5.672798957675695,
+      "submit_ms": 0.09265309199690819
+    },
+    {
+      "request_id": "burst-0094",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0058224578388035,
+      "delay_ms": 5.82245783880353,
+      "submit_ms": 0.09504333138465881
+    },
+    {
+      "request_id": "burst-0095",
+      "scheduled_s": 2.0,
+      "actual_s": 2.0059755290858448,
+      "delay_ms": 5.975529085844755,
+      "submit_ms": 0.09855395182967186
+    }
+  ],
+  "arrival_delay_ms_p50": 3.1559988856315613,
+  "arrival_delay_ms_max": 5.975529085844755,
+  "steps": 768,
+  "wall_s": 2.4526134110055864,
+  "expected_requests": 100,
+  "finished": 96,
+  "health": {
+    "state": "stopped",
+    "session_id": "657f0ba0c837",
+    "instrumentation": {
+      "instrumented": false,
+      "target_vllm_version": "0.11.0",
+      "detected_vllm_version": "0.11.0",
+      "scheduler_visible": false,
+      "scheduler_unavailable_reason": "not instrumented",
+      "executor_visible": false,
+      "executor_unavailable_reason": "not instrumented",
+      "cuda_timing": {
+        "available": true,
+        "unavailable_reason": null,
+        "resolved": 772,
+        "pending": 0,
+        "buffered": 0,
+        "dropped": 0,
+        "errors": 0,
+        "last_error": null,
+        "nvtx": false
+      },
+      "active_requests": 0,
+      "buffered_traces": 0,
+      "buffered_batches": 0,
+      "dropped_traces": 0,
+      "dropped_batches": 0,
+      "instrumentation_errors": 0,
+      "last_error": null,
+      "steps_observed": 772
+    },
+    "scheduler_visible_during_run": true,
+    "scheduler_unavailable_reason_during_run": null,
+    "executor_visible_during_run": true,
+    "executor_unavailable_reason_during_run": null,
+    "cuda_timing": {
+      "available": true,
+      "unavailable_reason": null,
+      "resolved": 772,
+      "pending": 0,
+      "buffered": 0,
+      "dropped": 0,
+      "errors": 0,
+      "last_error": null,
+      "nvtx": false
+    },
+    "gpu_sampler": {
+      "available": true,
+      "unavailable_reason": null,
+      "devices": [
+        {
+          "gpu_id": 0,
+          "name": "NVIDIA RTX A5000"
+        }
+      ],
+      "samples_taken": 49,
+      "buffered": 0,
+      "dropped": 0,
+      "read_errors": 0,
+      "last_error": null
+    },
+    "vllm_stats": {
+      "loggers_created": 1,
+      "engine_initialized": [],
+      "buffered": 0,
+      "dropped": 0,
+      "errors": 0,
+      "last_error": null,
+      "unavailable_reason": null
+    },
+    "writer": {
+      "written": {
+        "traces": 100,
+        "batches": 772,
+        "gpu": 49,
+        "vllm_stats": 772,
+        "collector": 25,
+        "gpu_steps": 772
+      },
+      "dropped": {
+        "traces": 0,
+        "batches": 0,
+        "gpu": 0,
+        "vllm_stats": 0,
+        "collector": 0,
+        "gpu_steps": 0
+      },
+      "write_errors": 0,
+      "last_error": null,
+      "queued": 0
+    },
+    "collection_errors": 0,
+    "last_collection_error": null,
+    "incomplete_requests_written": 0
+  },
+  "extra": {
+    "engine": "vllm",
+    "model": "facebook/opt-125m",
+    "steps": 768,
+    "wall_s": 2.4526134110055864,
+    "finished": 96,
+    "collection_interval_s": 0.1,
+    "warmup_requests": 96,
+    "settle_requests": 4,
+    "ignore_eos": true,
+    "engine_version": "0.11.0",
+    "model_revision": null,
+    "synthetic": false,
+    "config_name": "seqs8",
+    "scheduling_change": {
+      "max_num_seqs": 8
+    },
+    "problems": [],
+    "telemetry_problems": []
+  }
+}

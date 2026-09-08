@@ -1,0 +1,12 @@
+target: burst ttft_p95 <= 300 ms
+slo: burst: ttft <= 300 ms, tpot <= 10 ms
+
+config         ran elig  meets    target ms (median [min..max])           95% CI  goodput    tok/s    J/tok   cov same work
+baseline       yes  2/2     no          6377.2 [6376.6..6377.8] [5622.6..6377.8]       0%      674   0.4319  1.00       yes
+seqs16         yes  2/2     no          2138.1 [2130.5..2145.6] [2131.5..2145.6]       0%     1256   0.2303  0.99       yes
+budget16384    yes  2/2     no          6356.7 [6355.4..6358.0] [5605.5..6358.0]       0%      676   0.4298  1.00       yes
+
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: none
+recommendation (advisory): No configuration met the target in every repeat; see per-repeat values and notes.
+Decision written to /workspace/b7/bn/queue/decision.json

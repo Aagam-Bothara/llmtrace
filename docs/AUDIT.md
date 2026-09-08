@@ -48,7 +48,7 @@ Package: `llmtrace/` (about 7,400 lines after this phase, including the syntheti
 | Experiments | Work-identical replay (`ignore_eos`, token-id prompts, seeds), manifests with scheduled vs actual arrivals, `decide` with eligibility rules, repeats | Only one workload shape existed before this phase; no goodput/SLO metric; uncertainty is min/median/max over repeats, no interval estimate |
 | Visualization | Perfetto trace, HTML report | Static |
 | Serving path | Sync `LLMEngine` (full), `AsyncLLM` (request level + stats) | The OpenAI server process itself has no hook point |
-| Overhead | +4% / +9% wall on opt-125m without step timing, +7.7% / +14.4% with it (256 steps); CUDA-event cost 0.11 ms per step; collector drains and warm-up artifacts found and fixed from the traces | Not measured on a 7B model |
+| Overhead | +4% / +9% wall on opt-125m without step timing, +7.7% / +14.4% with it (256 steps); +1.2% / +1.7% on Qwen2.5-7B; CUDA-event cost 0.11 and 0.08 ms per step; collector drains and warm-up artifacts found and fixed from the traces | Nothing above 7B |
 
 Provenance is carried in the records rather than in a single place:
 `prompt_length_source`, `ttft_unavailable_reason`, `output_kind`,
@@ -136,12 +136,17 @@ All from 2026-09-08 sessions, evidence under `docs/gpu_runs/`:
 | Span vs Nsight busy time: every step range matched; span >= busy on all 626 + 654 steps; 58% busy on decode, 84% on long prefill | RTX A5000 nsys (`*_compare.json`) |
 | AsyncLLM: 6 concurrent streams traced, client cancellation recorded as aborted, `stat_loggers` records over the multiprocess core | RTX 4000 Ada asyncllm |
 | TP=2 costs +45% J/token for the same work on the 7B model; `decide` selects the capped config for a 50 ms target | A100 |
+| Generic runner reproduces the experiment driver; plan loop on real vLLM (caps 1024/512 vs 256, monotone); sync-engine stats hook; CUDA-event cost 0.11 ms per step | RTX A5000 session 2 (`2026-09-08-rtx-a5000-runner-plan`) |
+| Queue overload induced (`max_num_seqs=8`, bursts of 32): 72 requests waited over 100 ms; plan's `seqs16` cut burst TTFT p95 379 to 166 ms and met the target with 100% goodput; `budget16384` changed nothing | RTX A5000 session 3 (`2026-09-08-rtx-a5000-bottlenecks/queue`) |
+| Same queue loop on Qwen2.5-7B: 88 waited; `seqs16` 6.4 to 2.1 s TTFT p95 (no candidate met a 300 ms target set for the small model) | A100 (`2026-09-08-a100-qwen2.5-7b-overhead-queue`) |
+| KV-cache pressure induced (`gpu_memory_utilization=0.06`, 48 x 1024-token outputs): 100% usage in 1547 steps, 56 preemptions; `mem16` removed preemptions and cut e2e p95 7.43 to 5.39 s, `seqs128` halved preemptions; first attempt's interference candidates changed nothing (planner ranking fixed) | RTX A5000 session 3 (`.../kv`, `.../kv_rerun`) |
+| Tracer overhead on Qwen2.5-7B: +1.2% `generate()`, +1.7% engine loop, CUDA events 0.08 ms per step | A100 |
 
-Not supported by any run: preemption, speculative decoding, `n > 1`, models
-above 7B, the OpenAI server process, the CUDA-event recording cost itself,
-this phase's `llmtrace run --engine vllm` path, the `findings` other than
-long-prompt interference (the others report not_supported or insufficient_evidence
-on the recorded runs, which is correct behaviour, not validation).
+Not supported by any run: speculative decoding, `n > 1`, models above 7B,
+the OpenAI server process, the `host_overhead` and `tracer_observer_effect`
+findings as positives (they report not_supported on every recorded run, which
+is consistent behaviour, not validation), KV pressure on a model larger than
+opt-125m.
 
 ## 6. Overlap with upstream and adjacent tooling
 
@@ -209,10 +214,11 @@ Next, in order (files named):
 | # | Item | Files | Why first |
 |---|------|-------|-----------|
 | 1 | Done (GPU session 2): the generic runner reproduces the experiment driver on an RTX A5000. Still open: make `experiments/mixed_prompts/run.py` a thin wrapper over `llmtrace.runner` | `experiments/mixed_prompts/run.py` | The driver is now redundant code |
-| 2 | Done for opt-125m (GPU session 2): CUDA events 0.11 ms per step. Still open: the 7B model | evidence | |
+| 2 | Done (GPU sessions 2 and 3): CUDA events 0.11 ms per step on opt-125m, 0.08 ms on Qwen2.5-7B | evidence | |
 | 3 | Done (second phase): findings context fields and `insufficient_evidence` | `control_plane/findings.py` | |
 | 4 | Done (second phase): goodput under SLOs, bootstrap intervals, marginal candidates | `control_plane/decision.py`, `cli.py` | |
 | 5 | Done (second phase): experiment planner and `run --plan` | `control_plane/experiments.py`, `cli.py` | Validated on the synthetic engine only; the candidates' effects on real vLLM are what the GPU session must show |
+| 5b | Done (GPU session 3): queue overload and KV pressure validated end to end; planner candidates ranked by affected requests, `--finding` filter | `control_plane/experiments.py` | Found because the cap crowded out the relevant candidates on the first KV attempt |
 | 6 | Benchmark suite: synthetic scenarios with planted bottlenecks (queueing, prefill interference, KV pressure with preemption, host overhead) and expected findings; accuracy table produced by a test | new `benchmarks/`, `tests/test_benchmark_suite.py` | Phase 5; makes diagnostic accuracy a measured number |
 | 7 | Machine-readable + human report combining findings, tested configs, deltas, regressions per class, limitations | `control_plane/report.py` (new), `cli.py` (`report`) | Phase 5 |
 | 8 | GPU integration tests behind a `gpu` marker, runnable on a self-hosted runner | `tests/gpu/`, `pyproject.toml`, workflow | Turns the manual smoke tests into repeatable checks |

@@ -1,0 +1,22 @@
+[supported] queue_overload: 80 request(s) waited >= 100 ms before first being scheduled.
+    affected (80): burst-0016, burst-0017, burst-0018, burst-0019, burst-0020, burst-0021, burst-0022, burst-0023 ...
+    evidence: queue wait p95 across requests with a queue span = 2.07e+03 ms  [traces_*.jsonl:spans[phase=queue]]
+    evidence: max requests waiting in vLLM's queue per step = 48 requests  [vllm_stats_*.jsonl:num_waiting_reqs]
+    evidence: vLLM's own queued time p95 = 2.07e+03 ms  [vllm_stats_*.jsonl:finished_requests.queued_time]
+    experiment: Replay the same workload at a lower arrival rate, or with a higher max_num_seqs / max_num_batched_tokens, and compare queue wait p95 and throughput.
+[not_supported] long_prompt_interference: No engine step carried a prefill chunk larger than 128 tokens.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+    evidence: max KV-cache usage = 0.00452 fraction  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: steps with usage >= 90% = 0 steps  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: preemptions reported by vLLM = 0 requests  [vllm_stats_*.jsonl:num_preempted_reqs]
+    missing: which requests were preempted (vLLM stats carry no request ids)
+[not_supported] host_overhead: Host-side time is 3% of a typical step; steps are GPU-bound.
+    evidence: median GPU span per step = 11.3 ms  [gpu_steps_*.jsonl:gpu_span_ms]
+    evidence: median host step time = 11.7 ms  [gpu_steps_*.jsonl:host_step_ms]
+    evidence: median share of step time not spanned by the GPU = 0.0326 fraction  [gpu_steps_*.jsonl:host_overhead_ms/host_step_ms]
+    evidence: steps with a resolved GPU span = 388 steps  [gpu_steps_*.jsonl]
+    missing: GPU busy time (CUPTI); the CUDA-event span includes launch gaps
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 50 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.148 ms  [collector_*.jsonl:duration_ms]
+Findings written to /workspace/b7/bn/queue/findings_seqs16.json

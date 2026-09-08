@@ -1,0 +1,26 @@
+[not_supported] queue_overload: No request waited >= 100 ms in the queue.
+    evidence: queue wait p95 across requests with a queue span = 31 ms  [traces_*.jsonl:spans[phase=queue]]
+    evidence: max requests waiting in vLLM's queue per step = 16 requests  [vllm_stats_*.jsonl:num_waiting_reqs]
+    evidence: vLLM's own queued time p95 = 30.9 ms  [vllm_stats_*.jsonl:finished_requests.queued_time]
+[supported] long_prompt_interference: 49 request(s) decoded or waited in 3 step(s) that also prefilled a chunk > 128 tokens; those steps took 17.0 ms vs 4.7 ms for the rest. They waited while the scheduler spent its token budget on other work.
+    affected (49): settle-1, settle-2, settle-3, kv-0001, kv-0002, kv-0003, kv-0004, kv-0005 ...
+    evidence: engine steps carrying a prefill chunk above the threshold = 3 steps  [batches_*.jsonl:scheduled_tokens]
+    evidence: median duration of those steps = 17 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: median duration of all other steps = 4.71 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: requests that shared such a step without owning the chunk = 49 requests  [traces_*.jsonl:batch_ids]
+    experiment: Replay with long_prefill_token_threshold set to a smaller per-step chunk (e.g. 256) and compare the sharing requests' TTFT p95 and worst inter-token stall against the long requests' TTFT cost.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 70%).
+    evidence: max KV-cache usage = 0.7 fraction  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: steps with usage >= 90% = 0 steps  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: preemptions reported by vLLM = 0 requests  [vllm_stats_*.jsonl:num_preempted_reqs]
+    missing: which requests were preempted (vLLM stats carry no request ids)
+[not_supported] host_overhead: Host-side time is 23% of a typical step; steps are GPU-bound.
+    evidence: median GPU span per step = 3.92 ms  [gpu_steps_*.jsonl:gpu_span_ms]
+    evidence: median host step time = 5 ms  [gpu_steps_*.jsonl:host_step_ms]
+    evidence: median share of step time not spanned by the GPU = 0.234 fraction  [gpu_steps_*.jsonl:host_overhead_ms/host_step_ms]
+    evidence: steps with a resolved GPU span = 1.03e+03 steps  [gpu_steps_*.jsonl]
+    missing: GPU busy time (CUPTI); the CUDA-event span includes launch gaps
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 55 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.161 ms  [collector_*.jsonl:duration_ms]
+Findings written to /workspace/bn2/kv/findings_mem16.json

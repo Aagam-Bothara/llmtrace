@@ -1,0 +1,19 @@
+experiment plan from /workspace/bn2/kv/source (workload sha256:ad1f3d767f3e30a4), 2 repeats each
+source: vllm, facebook/opt-125m
+baseline engine kwargs (reproduced for every run): max_num_batched_tokens=8192, max_num_seqs=256, max_model_len=2048, enable_chunked_prefill=True, long_prefill_token_threshold=0, max_num_partial_prefills=1, max_long_partial_prefills=1, scheduling_policy=fcfs, block_size=16, gpu_memory_utilization=0.06, enable_prefix_caching=True, dtype=float16, seed=0, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1
+baseline effective: long_prefill_token_threshold=0, max_num_batched_tokens=8192, max_num_seqs=256, gpu_memory_utilization=0.06, enable_prefix_caching=True, max_model_len=2048
+
+[mem16] --set gpu_memory_utilization=0.16
+    from: kv_cache_pressure. KV-cache usage reached capacity with preemptions; gpu_memory_utilization 0.06 -> 0.16 adds cache blocks
+    expect: preemptions fall; TPOT of long-running requests stabilizes
+    cost: less free memory for activations/graphs; may fail to start (recorded as a failed run)
+[seqs128] --set max_num_seqs=128
+    from: kv_cache_pressure. fewer concurrent sequences (256 -> 128) keep the cache below capacity
+    expect: no preemptions; per-request TPOT falls
+    cost: queue wait and TTFT rise; throughput falls
+skipped: queue_overload: not_supported
+skipped: host_overhead: not_supported
+skipped: cap1024: beyond --max-candidates 2
+skipped: cap512: beyond --max-candidates 2
+note: every candidate is a fresh engine started by llmtrace run; no running server is modified
+Plan written to /workspace/bn2/kv/plan.json; execute with: llmtrace run --plan /workspace/bn2/kv/plan.json --workload <spec.json> --engine <fake|vllm> --out <dir>

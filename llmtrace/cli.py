@@ -219,9 +219,11 @@ def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_t
 @click.option("--kv-threshold", type=float, default=0.9)
 @click.option("--max-candidates", type=int, default=4, show_default=True)
 @click.option("--repeats", type=int, default=3, show_default=True)
+@click.option("--finding", "only_findings", multiple=True,
+              help="Only propose candidates for this hypothesis (e.g. kv_cache_pressure); repeatable. Default: all, ranked by affected requests")
 @click.option("--json", "json_out", type=click.Path(), help="Write the plan JSON here (input for `llmtrace run --plan`)")
 def plan(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_threshold: float, max_candidates: int, repeats: int,
-         json_out: Optional[str]) -> None:
+         only_findings: Tuple[str, ...], json_out: Optional[str]) -> None:
     """From a recorded run's findings, propose a bounded set of configuration experiments (plans only; runs nothing)."""
     from llmtrace.control_plane.experiments import plan_experiments
     from llmtrace.control_plane.findings import evaluate_all
@@ -234,7 +236,8 @@ def plan(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_thres
     batches = io.load_batches([run_dir])
     result = evaluate_all(traces, batches, io.load_vllm_stats([run_dir]), io.load_collector_events([run_dir]),
                           chunk_threshold, queue_threshold_ms, kv_threshold, io.load_gpu_steps([run_dir]))
-    p = plan_experiments(result, RunManifest.read(run_dir), batches, max_candidates=max_candidates, repeats=repeats, source_run=run_dir)
+    p = plan_experiments(result, RunManifest.read(run_dir), batches, max_candidates=max_candidates, repeats=repeats, source_run=run_dir,
+                         only_findings=list(only_findings) or None)
     click.echo(p.format())
     if json_out:
         Path(json_out).write_text(p.model_dump_json(indent=2), encoding="utf-8")

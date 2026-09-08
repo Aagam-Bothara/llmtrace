@@ -489,6 +489,30 @@ class FakeAsyncLLM:
         self.aborted.append(str(request_id))
 
 
+# Spawn-safe entry points for testing ``run_workload_isolated``: they must be importable module-level functions.
+def isolated_entry_exit_nonzero(spec_json: str, opts_dict: dict) -> None:
+    """Run the workload, write its manifest, then die with exit code 3 (a crash after writing)."""
+    import os
+
+    from llmtrace.runner import RunOptions, run_workload
+    from llmtrace.workload import WorkloadSpec
+
+    run_workload(WorkloadSpec.model_validate_json(spec_json), RunOptions(**opts_dict))
+    os._exit(3)
+
+
+def isolated_entry_hang(spec_json: str, opts_dict: dict) -> None:
+    """Run the workload, write its manifest, then never return (a hung process after writing)."""
+    import time
+
+    from llmtrace.runner import RunOptions, run_workload
+    from llmtrace.workload import WorkloadSpec
+
+    run_workload(WorkloadSpec.model_validate_json(spec_json), RunOptions(**opts_dict))
+    while True:
+        time.sleep(1)
+
+
 class FakeNVMLBackend:
     """SamplerBackend fake: constant or scripted power per GPU."""
 

@@ -1,0 +1,14 @@
+{
+  "name": "kv_pressure",
+  "description": "48 long-output requests at once on an engine given very little KV-cache memory: the cache fills and vLLM preempts.",
+  "seed": 0,
+  "classes": [
+    {
+      "name": "kv",
+      "count": 48,
+      "prompt_len": {"kind": "fixed", "value": 256},
+      "max_tokens": {"kind": "fixed", "value": 1024},
+      "arrival": {"kind": "at_once"}
+    }
+  ]
+}

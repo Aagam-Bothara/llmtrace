@@ -286,37 +286,43 @@ def _isolated_entry(spec_json: str, opts_dict: Dict[str, Any]) -> None:
     run_workload(_WS.model_validate_json(spec_json), RunOptions(**opts_dict))
 
 
-def run_workload_isolated(spec: WorkloadSpec, opts: RunOptions, timeout_s: Optional[float] = None) -> RunManifest:
+def run_workload_isolated(spec: WorkloadSpec, opts: RunOptions, timeout_s: Optional[float] = None,
+                          entry: Callable[[str, Dict[str, Any]], None] = _isolated_entry) -> RunManifest:
     """Run ``run_workload`` in a fresh (spawned) process and return the manifest it wrote.
 
     One engine per process is the only reliable way to run several vLLM engines in sequence: memory, CUDA
-    context and torch.distributed state die with the child. A child that exits without writing a manifest
-    (crash, kill, timeout) is recorded as a failed run in ``out_dir``."""
+    context and torch.distributed state die with the child. The child's exit is part of the run's record: a child
+    that exits nonzero or is killed on timeout leaves ``status: failed`` with the reason, whether or not it had
+    already written a manifest (a process that died after writing is not a trustworthy run, and ``decide``
+    excludes failed runs). ``entry`` must be an importable module-level function (spawn pickles it by name)."""
     import multiprocessing as mp
 
     prepare_run_dir(opts.out_dir, opts.overwrite)  # refuse a reused directory before spawning
     child_opts = asdict(opts)
     child_opts["overwrite"] = True  # the parent already cleared it; the child must not refuse its own directory
     ctx = mp.get_context("spawn")
-    proc = ctx.Process(target=_isolated_entry, args=(spec.model_dump_json(), child_opts), daemon=False)
+    proc = ctx.Process(target=entry, args=(spec.model_dump_json(), child_opts), daemon=False)
     proc.start()
     proc.join(timeout_s)
+    failure: Optional[str] = None
     if proc.is_alive():
         proc.kill()
         proc.join()
-        exit_note = f"timed out after {timeout_s} s and was killed"
-    else:
-        exit_note = f"exit code {proc.exitcode}"
+        failure = f"run process timed out after {timeout_s} s and was killed"
+    elif proc.exitcode != 0:
+        failure = f"run process exited with code {proc.exitcode}"
     m = RunManifest.read(opts.out_dir)
     if m is None:
         m = RunManifest(label=opts.label or Path(opts.out_dir).name, engine=opts.engine, synthetic=opts.engine == "fake",
-                        model=opts.model, status="failed", error=f"run process ended without a manifest ({exit_note})",
+                        model=opts.model, status="failed",
+                        error=f"run process ended without a manifest ({failure or 'exit code 0'})",
                         workload=spec.model_dump(exclude_none=True), workload_hash=spec.hash(), seed=spec.seed,
                         config_name=opts.config_name, scheduling_change=dict(opts.scheduling_change),
                         engine_kwargs=dict(opts.engine_kwargs))
         m.write(opts.out_dir)
-    elif proc.exitcode not in (0, None) and m.status == "ok":
-        m.extra = {**m.extra, "problems": list(m.extra.get("problems") or []) + [f"run process {exit_note}"]}
+    elif failure:
+        m.status = "failed"
+        m.error = failure if not m.error else f"{m.error}; {failure}"
         m.write(opts.out_dir)
     return m
 

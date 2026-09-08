@@ -164,6 +164,23 @@ class TestPlanner:
         capped = plan_experiments(fs, m, batches, max_candidates=2)
         assert len(capped.candidates) == 2 and any("beyond --max-candidates" in s for s in capped.skipped)
 
+    def test_candidates_ranked_by_affected_requests_and_finding_filter(self):
+        m = _manifest(max_num_batched_tokens=8192, max_num_seqs=256, gpu_memory_utilization=0.06)
+        batches = [_batch(0, ["kv-0"], {"kv-0": 256}, 0.01)]
+        interference = Finding(hypothesis="long_prompt_interference", status=SUPPORTED, summary="s", affected_count=38,
+                               parameters={"chunk_threshold": 128})
+        kv = Finding(hypothesis="kv_cache_pressure", status=SUPPORTED, summary="s", affected_count=48)
+        p = plan_experiments([interference, kv], m, batches, max_candidates=2)
+        assert [c.name for c in p.candidates] == ["mem16", "seqs128"]  # the finding touching more requests comes first
+        assert any("cap" in s and "beyond --max-candidates" in s for s in p.skipped)
+        p2 = plan_experiments([interference, kv], m, batches, max_candidates=4)
+        assert [c.source_finding for c in p2.candidates] == ["kv_cache_pressure"] * 2 + ["long_prompt_interference"] * 1
+        only = plan_experiments([interference, kv], m, batches, max_candidates=4, only_findings=["long_prompt_interference"])
+        assert {c.source_finding for c in only.candidates} == {"long_prompt_interference"}
+        assert any("restricted to" in n for n in only.notes)
+        none = plan_experiments([interference, kv], m, batches, only_findings=["no_such"])
+        assert none.candidates == [] and any("no such finding" in s for s in none.skipped)
+
     def test_no_supported_findings_or_manifest(self):
         p = plan_experiments([_finding("queue_overload", status=INSUFFICIENT)], None, [])
         assert p.candidates == [] and any("no manifest" in n for n in p.notes) and "no candidates" in p.format()

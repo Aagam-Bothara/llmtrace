@@ -46,6 +46,16 @@ KV-cache usage fraction.
 **GPU telemetry** (`gpu_*.jsonl`): power, utilization, memory, clocks,
 throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 
+**Run manifest** (`manifest.json`, written by the experiment driver): workload
+and its hash, seed, model and revision, engine and llmtrace versions and git
+commit, effective engine config, GPU and driver, tracer config, per-request
+scheduled versus actual arrival, and `status: failed` with the error when a
+configuration could not run.
+
+**Collector self-events** (`collector_*.jsonl`): when llmtrace's own drains
+ran and how long they took, so `findings` can flag engine steps the tracer
+itself may have stalled.
+
 **vLLM's own engine stats** (`vllm_stats_*.jsonl`): per step, via vLLM's
 supported `stat_loggers` hook (works with the default multiprocess engine
 core): KV-cache usage, running/waiting counts, preemptions, prefix-cache
@@ -136,6 +146,21 @@ llmtrace compare --baseline ./traces/baseline --current ./traces/current \
 llmtrace init-config --output llmtrace_config.json
 llmtrace visualize ./traces/run --compare ./traces/other --html-out report.html --trace-out run.perfetto.json
 ```
+
+```bash
+llmtrace findings ./exp/baseline_0                 # hypotheses with affected requests, evidence, missing evidence, next experiment
+llmtrace decide --target "short ttft_p95 <= 300ms" \
+    --config baseline=./exp/baseline_0,./exp/baseline_1 --config capped=./exp/capped_0,./exp/capped_1
+```
+
+`findings` evaluates four hypotheses on a run (queue overload, long-prompt
+interference, KV-cache pressure with preemption, and llmtrace's own observer
+effect) and reports each as supported, not supported, or not evaluable with
+the missing evidence named. `decide` compares configurations (each a set of
+repeats) against a stated target: which meet it in every repeat, throughput,
+energy per output token with telemetry coverage, run-to-run range, failed
+repeats, and whether the work was identical. It is advisory and changes
+nothing.
 
 `visualize` writes a self-contained HTML report (request timeline with
 queue/prefill/decode phases, step durations over time and versus scheduled

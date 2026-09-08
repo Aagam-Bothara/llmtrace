@@ -26,7 +26,8 @@ from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.data_plane.gpu_sampler import GPUSampler, SamplerBackend
 from llmtrace.data_plane.trace_writer import TraceWriter
 from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation
-from llmtrace.data_plane.vllm_stats import VLLMStatsSink, attach_to_engine, detach_from_engine, make_stat_logger_factory
+from llmtrace.data_plane.vllm_stats import (CollectorEvent, VLLMStatsSink, attach_to_engine, detach_from_engine,
+                                            make_stat_logger_factory)
 from llmtrace.models.config import TracerConfig
 from llmtrace.models.trace import TraceAnalysis
 
@@ -96,6 +97,7 @@ class LLMTracer:
         self._collection_errors = 0
         self._last_collection_error: Optional[str] = None
         self._incomplete_written = 0
+        self._collector_events: List[CollectorEvent] = []  # written on the following drain, flushed at stop
         # Captured at instrument time; VLLMInstrumentation resets its own flags on restore.
         self._scheduler_visible_during_run: Optional[bool] = None
         self._scheduler_reason_during_run: Optional[str] = None
@@ -192,6 +194,9 @@ class LLMTracer:
                 self._incomplete_written = len(leftovers)
             logger.warning("%d requests were still active at stop (written as incomplete=%s)",
                            len(leftovers), self.config.write_incomplete_requests)
+        if self._collector_events:
+            self.trace_writer.write_collector_events(self._collector_events)
+            self._collector_events = []
         self.trace_writer.stop()
         health = self.health()
         if health["instrumentation"]["instrumentation_errors"] or health["writer"]["write_errors"] \
@@ -213,6 +218,9 @@ class LLMTracer:
             self._collect_once()
 
     def _collect_once(self) -> None:
+        import time as _time
+
+        t0m, t0w = _time.monotonic(), _time.time()
         try:
             traces = self.vllm_instrumentation.drain_completed_traces()
             batches = self.vllm_instrumentation.drain_batch_metadata()
@@ -226,6 +234,15 @@ class LLMTracer:
                 self.trace_writer.write_gpu_samples(samples)
             if stats:
                 self.trace_writer.write_vllm_stats(stats)
+            # Record this drain so the analysis can check whether the tracer itself stalled the engine.
+            if traces or batches or samples or stats:
+                self._collector_events.append(CollectorEvent(
+                    timestamp=t0w, monotonic=t0m, clock_domain=self.session_id,
+                    duration_ms=(_time.monotonic() - t0m) * 1000.0,
+                    traces=len(traces), batches=len(batches), samples=len(samples), stats=len(stats)))
+            if self._collector_events and (self._state != "running" or len(self._collector_events) >= 50):
+                self.trace_writer.write_collector_events(self._collector_events)
+                self._collector_events = []
         except Exception as exc:
             self._collection_errors += 1
             self._last_collection_error = f"{type(exc).__name__}: {exc}"

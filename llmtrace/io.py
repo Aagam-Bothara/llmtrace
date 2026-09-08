@@ -9,7 +9,7 @@ from typing import Iterable, List, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
-from llmtrace.data_plane.vllm_stats import VLLMIterationRecord
+from llmtrace.data_plane.vllm_stats import CollectorEvent, VLLMIterationRecord
 from llmtrace.models.trace import BatchMetadata, GPUSample, RequestTrace
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,13 @@ def load_vllm_stats(paths: Sequence[PathLike]) -> List[VLLMIterationRecord]:
     out: List[VLLMIterationRecord] = []
     for f in _expand(paths, "vllm_stats"):
         out.extend(_load_file(f, VLLMIterationRecord))
+    return out
+
+
+def load_collector_events(paths: Sequence[PathLike]) -> List[CollectorEvent]:
+    out: List[CollectorEvent] = []
+    for f in _expand(paths, "collector"):
+        out.extend(_load_file(f, CollectorEvent))
     return out
 
 

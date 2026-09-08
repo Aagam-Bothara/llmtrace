@@ -189,6 +189,57 @@ def visualize(run_dir: str, compare_dir: Optional[str], trace_out: Optional[str]
 
 
 @main.command()
+@click.argument("run_dir", type=click.Path(exists=True))
+@click.option("--chunk-threshold", type=int, default=128, help="Prefill chunk size (tokens) that counts as 'long'")
+@click.option("--queue-threshold-ms", type=float, default=100.0)
+@click.option("--kv-threshold", type=float, default=0.9, help="KV-cache usage fraction that counts as pressure")
+@click.option("--json", "json_out", type=click.Path(), help="Write findings JSON here")
+def findings(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_threshold: float, json_out: Optional[str]) -> None:
+    """Evaluate the supported hypotheses on a recorded run: queue overload, long-prompt interference, KV pressure, tracer self-effect."""
+    from llmtrace.control_plane.findings import evaluate_all, format_findings
+
+    traces = io.load_traces([run_dir])
+    if not traces:
+        click.echo(f"No traces in {run_dir}", err=True)
+        sys.exit(EXIT_USAGE)
+    result = evaluate_all(traces, io.load_batches([run_dir]), io.load_vllm_stats([run_dir]), io.load_collector_events([run_dir]),
+                          chunk_threshold, queue_threshold_ms, kv_threshold)
+    click.echo(format_findings(result))
+    if json_out:
+        Path(json_out).write_text(json.dumps([f.model_dump() for f in result], indent=2), encoding="utf-8")
+        click.echo(f"Findings written to {json_out}")
+
+
+@main.command()
+@click.option("--target", required=True, help="e.g. 'short ttft_p95 <= 300ms' (class or *; ttft|tpot|e2e; p50/p90/p95/p99/max)")
+@click.option("--config", "configs", multiple=True, required=True,
+              help="name=run_dir[,run_dir...] (repeats of one configuration); repeatable")
+@click.option("--attribution", default="equal_share", type=click.Choice(["equal_share", "proportional_tokens", "window_only"]))
+@click.option("--json", "json_out", type=click.Path(), help="Write the decision JSON here")
+def decide(target: str, configs: Tuple[str, ...], attribution: str, json_out: Optional[str]) -> None:
+    """Compare configurations against a latency target (advisory; changes nothing)."""
+    from llmtrace.control_plane.decision import Target, evaluate, format_decision
+
+    try:
+        tgt = Target.parse(target)
+    except ValueError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(EXIT_USAGE)
+    parsed: dict = {}
+    for c in configs:
+        if "=" not in c:
+            click.echo(f"--config expects name=dir[,dir...], got {c!r}", err=True)
+            sys.exit(EXIT_USAGE)
+        name, dirs = c.split("=", 1)
+        parsed[name.strip()] = [d.strip() for d in dirs.split(",") if d.strip()]
+    dec = evaluate(parsed, tgt, attribution)
+    click.echo(format_decision(dec))
+    if json_out:
+        Path(json_out).write_text(dec.model_dump_json(indent=2), encoding="utf-8")
+        click.echo(f"Decision written to {json_out}")
+
+
+@main.command()
 @click.option("--pid", type=int, help="(not implemented)")
 def monitor(pid: Optional[int]) -> None:
     """Attach to a running vLLM process. NOT IMPLEMENTED."""

@@ -88,6 +88,20 @@ bash experiments/mixed_prompts/run_gpu.sh facebook/opt-125m ./exp_gpu
 `VLLM_ENABLE_V1_MULTIPROCESSING=0` is required: the diagnosis needs batch
 metadata, which only exists with the in-process scheduler.
 
+## Manifests and work-identical replay
+
+Every run directory gets `manifest.json` (workload hash, seed, model revision,
+vLLM and llmtrace versions, git commit, effective engine config, GPU, tracer
+config, per-request scheduled vs actual arrival with delay p50/max, status).
+A configuration that fails to start (e.g. out of memory) leaves a manifest
+with `status: failed` and the error, and `llmtrace decide` lists it as failed.
+Real runs use `ignore_eos=True` so every request generates exactly
+`max_tokens`; otherwise batch composition moves where EOS lands and the work
+differs across configurations (`--no-ignore-eos` to disable).
+
+Then: `llmtrace findings <run_dir>` and
+`llmtrace decide --target "short ttft_p95 <= 5ms" --config baseline=... --config capped=...`.
+
 ## Visualize
 
 ```bash

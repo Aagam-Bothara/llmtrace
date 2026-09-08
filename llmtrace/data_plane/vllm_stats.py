@@ -115,6 +115,19 @@ def record_from_stats(scheduler_stats: Any, iteration_stats: Any, engine_idx: in
     )
 
 
+class CollectorEvent(BaseModel):
+    """One tracer collector drain: when it ran, how long it took, what it moved (observer-effect evidence)."""
+
+    timestamp: float
+    monotonic: float
+    clock_domain: Optional[str] = None
+    duration_ms: float
+    traces: int = 0
+    batches: int = 0
+    samples: int = 0
+    stats: int = 0
+
+
 class VLLMStatsSink:
     """Thread-safe bounded buffer shared by the tracer and the loggers it creates."""
 

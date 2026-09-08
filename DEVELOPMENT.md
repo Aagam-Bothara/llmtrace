@@ -113,6 +113,17 @@ Records go to `vllm_stats_<session>.jsonl`; `llmtrace analyze` and
 ids to finished-request stats, so they are run-level evidence (e.g. for the
 KV-pressure/preemption hypothesis), not per-request attribution.
 
+## Findings and decisions (`control_plane/findings.py`, `control_plane/decision.py`)
+
+A `Finding` is a hypothesis with a status (`supported`, `not_supported`,
+`not_evaluable`), the affected request ids, supporting events (each naming the
+file and field it came from), the evidence that is missing, and a suggested
+experiment. Findings never claim a root cause; the suggested experiment is the
+causal test. `decision.evaluate()` scores configurations against a parsed
+`Target` (`<class|*> <ttft|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and only
+reports; it recommends the candidate with the highest median throughput among
+those meeting the target in every repeat, labeled advisory.
+
 ## Clocks
 
 Every record has wall-clock (`*_time`, `timestamp`) and monotonic

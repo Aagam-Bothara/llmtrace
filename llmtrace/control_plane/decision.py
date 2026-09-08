@@ -35,6 +35,7 @@ from llmtrace import io
 from llmtrace.control_plane.correlator import Correlator
 from llmtrace.control_plane.reporter import percentile
 from llmtrace.control_plane.steps import ttft_from_scheduled_ms
+from llmtrace.health import assess_health
 from llmtrace.manifest import RunManifest
 from llmtrace.models.config import EnergyConfig
 from llmtrace.models.trace import RequestTrace
@@ -154,6 +155,8 @@ class RepeatResult(BaseModel):
     aborted: int = 0
     incomplete: int = 0
     health_ok: Optional[bool] = None
+    health_problems: List[str] = Field(default_factory=list)
+    telemetry_problems: List[str] = Field(default_factory=list)  # secondary signals missing or lossy (energy reported unavailable)
     arrival_delay_ms_max: Optional[float] = None
     duration_s: Optional[float] = None
     output_tokens: int = 0
@@ -260,10 +263,13 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     if expected is not None and excluded and manifest and manifest.expected_requests == len(res.traces):
         expected = len(res.traces)  # manifest counted only the kept classes
     health = manifest.health if manifest else info.get("health") or {}
-    inst = health.get("instrumentation", health) if isinstance(health, dict) else {}  # full tracer health or the nested dict
-    health_ok = None
-    if inst:
-        health_ok = not inst.get("instrumentation_errors") and not inst.get("active_requests") and not inst.get("dropped_traces")
+    hp: List[str] = []
+    tele: List[str] = []
+    health_ok: Optional[bool] = None
+    gpu_ok: Optional[bool] = None
+    if isinstance(health, dict) and health:
+        a = assess_health(health)
+        health_ok, hp, tele, gpu_ok = a.ok, a.problems, a.telemetry_problems, a.gpu_telemetry_ok
 
     problems: List[str] = []
     if n_sel == 0:
@@ -277,8 +283,10 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     if expected is not None and len(res.traces) != expected:
         problems.append(f"{len(res.traces)} traced requests but {expected} expected")
     if health_ok is False:
-        problems.append("tracer health not clean (instrumentation errors, leaked requests or dropped traces)")
+        problems.append("tracer health not clean: " + "; ".join(hp))
     eligible = not problems
+    # Energy figures need trustworthy GPU telemetry; a lossy or unavailable sampler makes them unavailable, not wrong.
+    energy_ok = gpu_ok is not False
     gp, gp_n, gp_cov = goodput(res.traces, slos or [], delays)
     return RepeatResult(
         run_dir=str(d), status="ok" if eligible else "ineligible", problems=problems, eligible=eligible,
@@ -287,11 +295,12 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         attainment_fraction=(sum(1 for v in vals if v <= target.value_ms) / len(vals)) if vals else None,
         target_values_ms=list(vals), goodput=gp, goodput_requests=gp_n, slo_metric_coverage=gp_cov,
         requests=len(res.traces), expected_requests=expected, completed=completed, aborted=aborted, incomplete=incomplete,
-        health_ok=health_ok, arrival_delay_ms_max=manifest.arrival_delay_ms_max if manifest else None,
+        health_ok=health_ok, health_problems=hp, telemetry_problems=tele,
+        arrival_delay_ms_max=manifest.arrival_delay_ms_max if manifest else None,
         duration_s=dur, output_tokens=out_tokens, tokens_per_s=out_tokens / dur, requests_per_s=len(res.traces) / dur,
-        device_joules=L.device_joules,
-        joules_per_output_token=(L.attributed_joules / out_tokens) if L.device_joules is not None and out_tokens else None,
-        telemetry_coverage=L.coverage.coverage_fraction if L.coverage else None,
+        device_joules=L.device_joules if energy_ok else None,
+        joules_per_output_token=(L.attributed_joules / out_tokens) if energy_ok and L.device_joules is not None and out_tokens else None,
+        telemetry_coverage=(L.coverage.coverage_fraction if L.coverage else None) if energy_ok else None,
         work_signature=",".join(str(x) for x in sorted(t.output_length for t in res.traces)),
     )
 
@@ -351,6 +360,8 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
         for r in c.repeats:
             if r.status == "ineligible":
                 notes.append(f"{c.name} ({Path(r.run_dir).name}): ineligible: " + "; ".join(r.problems))
+            elif r.telemetry_problems:
+                notes.append(f"{c.name} ({Path(r.run_dir).name}): telemetry incomplete, energy not compared: " + "; ".join(r.telemetry_problems))
         if c.work_identical_across_repeats is False:
             notes.append(f"{c.name}: output token counts differ across repeats (work not identical; use ignore_eos / fixed max_tokens)")
     notes.append("throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it "

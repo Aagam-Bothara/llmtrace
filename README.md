@@ -203,7 +203,7 @@ llmtrace visualize ./traces/run --compare ./traces/other --html-out report.html 
 ```bash
 llmtrace findings ./runs/base/r0 --verbose         # hypotheses: evidence, missing evidence, assumptions, competing explanations, limits
 llmtrace plan ./runs/base/r0 --json plan.json      # bounded configuration experiments derived from the supported findings
-llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp   # baseline + candidates, <out>/<config>/r<i>
+llmtrace run --workload w.json --plan plan.json --out ./exp   # baseline (source config) + candidates, <out>/<config>/r<i>
 llmtrace decide --target "short ttft_p95 <= 300ms" --slo "short: ttft <= 300ms, tpot <= 20ms" \
     --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
 ```
@@ -223,8 +223,10 @@ below the largest observed chunk, `max_num_seqs` doubled when the running
 count hit it, `gpu_memory_utilization` raised by 0.1 under KV pressure), each
 with the effect expected if the finding is the cause and the class expected
 to pay for it. `llmtrace run --plan` executes the baseline and every
-candidate as fresh engines with the same workload and repeat count; no
-running server is touched.
+candidate as fresh engines with the same workload and repeat count, starting
+from the source run's engine, model, revision, parallelism and engine
+kwargs; no running server is touched. A run directory that already holds a
+run is refused unless `--overwrite` is given.
 
 `decide` compares configurations (each a set of repeats) against a stated
 target: which meet it in every repeat, a seeded 95% bootstrap interval of the
@@ -234,8 +236,11 @@ bound misses the target is flagged marginal), goodput under per-class SLOs
 token with telemetry coverage, run-to-run range, failed repeats, and whether
 the work was identical. A repeat counts toward a candidate only if every
 selected request has the target metric, every expected request completed (no
-aborted or incomplete ones), and the tracer's health was clean; ineligible
-repeats are listed with reasons. It is advisory and changes nothing.
+aborted or incomplete ones), and the tracer's full health record was clean
+(instrumentation, writer and collector); lossy or missing GPU telemetry keeps
+the latency comparison but makes energy unavailable for that repeat.
+Ineligible repeats are listed with reasons. It is advisory and changes
+nothing.
 
 `visualize` writes a self-contained HTML report (request timeline with
 queue/prefill/decode phases, step durations over time and versus scheduled

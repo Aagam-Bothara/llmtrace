@@ -332,10 +332,12 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 @click.option("--workload", "workload_path", required=True, type=click.Path(exists=True), help="Workload spec JSON (see `llmtrace workload template`)")
 @click.option("--plan", "plan_path", type=click.Path(exists=True),
               help="Experiment plan JSON from `llmtrace plan`: runs its baseline and every candidate as <out>/<config>/r<i> (overrides --config-name/--set/--repeat)")
-@click.option("--engine", type=click.Choice(["fake", "vllm"]), default="fake", show_default=True,
-              help="fake: synthetic CPU engine (invented cost model, not evidence); vllm: real vLLM 0.11.0 on a GPU")
+@click.option("--engine", type=click.Choice(["fake", "vllm"]), default=None,
+              help="fake: synthetic CPU engine (invented cost model, not evidence); vllm: real vLLM 0.11.0 on a GPU "
+                   "[default: the plan's source engine, else fake]")
 @click.option("--out", "out_dir", required=True, type=click.Path(), help="Run directory (raw traces + manifest); with --repeat, <out>/r<i>")
-@click.option("--model", default="facebook/opt-125m", show_default=True, help="vllm only")
+@click.option("--model", default=None, help="vllm only [default: the plan's source model, else facebook/opt-125m]")
+@click.option("--overwrite", is_flag=True, help="Remove a previous run's files from a run directory instead of refusing it")
 @click.option("--config-name", default="default", show_default=True, help="Label for the configuration under test")
 @click.option("--set", "changes", multiple=True, metavar="KEY=JSON",
               help="Engine kwarg under test, e.g. --set long_prefill_token_threshold=256 (recorded as scheduling_change)")
@@ -346,9 +348,9 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 @click.option("--no-ignore-eos", is_flag=True, help="Let requests stop at EOS (work then differs across configs)")
 @click.option("--no-warmup", is_flag=True, help="vllm: skip the untraced warm-up replay")
 @click.option("--settle", type=int, default=4, show_default=True, help="vllm: traced settling requests before the measured replay")
-def run(workload_path: str, plan_path: Optional[str], engine: str, out_dir: str, model: str, config_name: str, changes: Tuple[str, ...],
-        engine_kwargs: str, repeat: int, collection_interval: float, enable_nvtx: bool, no_ignore_eos: bool, no_warmup: bool,
-        settle: int) -> None:
+def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out_dir: str, model: Optional[str], overwrite: bool,
+        config_name: str, changes: Tuple[str, ...], engine_kwargs: str, repeat: int, collection_interval: float, enable_nvtx: bool,
+        no_ignore_eos: bool, no_warmup: bool, settle: int) -> None:
     """Replay a workload spec under llmtrace and write run directories (raw data + manifest)."""
     from llmtrace.runner import RunOptions, run_workload
     from llmtrace.workload import WorkloadSpec
@@ -362,31 +364,49 @@ def run(workload_path: str, plan_path: Optional[str], engine: str, out_dir: str,
             if not k or not sep:
                 raise ValueError(f"--set expects KEY=JSON, got {c!r}")
             change[k.strip()] = json.loads(v)
-        jobs: List[Tuple[str, dict, str]] = []  # (config name, scheduling change, out dir for repeat i -> formatted later)
+        jobs: List[Tuple[str, dict, dict, str]] = []  # (config name, engine kwargs, scheduling change, out dir)
         if plan_path:
             from llmtrace.control_plane.experiments import ExperimentPlan
 
             p = ExperimentPlan.model_validate_json(Path(plan_path).read_text(encoding="utf-8"))
             if p.workload_hash and p.workload_hash != spec.hash():
                 click.echo(f"warning: plan was made from workload {p.workload_hash}, this spec is {spec.hash()}")
+            if engine is None:
+                engine = p.source_engine or "fake"
+            elif p.source_engine and engine != p.source_engine:
+                click.echo(f"warning: plan was made from a {p.source_engine} run, running on {engine}")
+            if model is None and p.source_model:
+                model = p.source_model
             repeat = p.repeats
             for cfg in p.configs():
+                # the source run's engine kwargs first, explicit --engine-kwargs on top, then the candidate's change
+                kw = {**cfg["engine_kwargs"], **extra}
                 for i in range(repeat):
-                    jobs.append((cfg["name"], cfg["scheduling_change"], str(Path(out_dir) / cfg["name"] / f"r{i}")))
+                    jobs.append((cfg["name"], kw, cfg["scheduling_change"], str(Path(out_dir) / cfg["name"] / f"r{i}")))
         else:
             for i in range(repeat):
-                jobs.append((config_name, change, out_dir if repeat == 1 else str(Path(out_dir) / f"r{i}")))
+                jobs.append((config_name, extra, change, out_dir if repeat == 1 else str(Path(out_dir) / f"r{i}")))
+        engine = engine or "fake"
+        model = model or "facebook/opt-125m"
     except Exception as exc:
         click.echo(f"Invalid arguments: {exc}", err=True)
         sys.exit(EXIT_USAGE)
     if repeat < 1:
         click.echo("--repeat must be >= 1", err=True)
         sys.exit(EXIT_USAGE)
+    from llmtrace.runner import existing_run_files
+
+    if not overwrite:
+        busy = [out for _, _, _, out in jobs if existing_run_files(out)]
+        if busy:
+            click.echo(f"{busy[0]} already holds a run ({len(busy)} such director{'y' if len(busy) == 1 else 'ies'}); "
+                       "use a new --out or --overwrite", err=True)
+            sys.exit(EXIT_USAGE)
     failed = False
-    for name, chg, out in jobs:
+    for name, kw, chg, out in jobs:
         opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=name, scheduling_change=chg,
-                          engine_kwargs=extra, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
-                          ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle)
+                          engine_kwargs=kw, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
+                          ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle, overwrite=overwrite)
         m = run_workload(spec, opts)
         if m.status != "ok":
             click.echo(f"[{out}] FAILED: {m.error}", err=True)
@@ -401,6 +421,8 @@ def run(workload_path: str, plan_path: Optional[str], engine: str, out_dir: str,
                    f"executor visible: {h.get('executor_visible_during_run')} ({h.get('executor_unavailable_reason_during_run')})")
         for pr in problems:
             click.echo(f"    PROBLEM: {pr}", err=True)
+        for tp in m.extra.get("telemetry_problems") or []:
+            click.echo(f"    telemetry: {tp}")
         failed = failed or bool(problems)
     if plan_path:
         names = [cfg["name"] for cfg in p.configs()]

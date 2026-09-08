@@ -40,7 +40,22 @@ experiment validated) under `LLMTracer`, and writes raw data only:
 `collector_*`, `workload.json`, `manifest.json`, `run_info.json`. Failures
 leave `status: failed` in the manifest. Derived summaries are produced by
 `analyze` / `findings` / `decide` / `visualize` and never written into the
-run directory by the runner.
+run directory by the runner. A directory that already holds a run is
+refused (`FileExistsError`; `--overwrite` removes the previous run's llmtrace
+files first): two runs written into one directory would load as one run with
+twice the traces and a manifest expecting half of them.
+
+## Health assessment (`health.py`)
+
+`assess_health()` is the one reading of `LLMTracer.health()` used by the
+runner (`problems` in the manifest), `doctor` and `decide`. Fatal problems
+(instrumentation errors, requests active at stop, dropped or unwritten
+traces, writer errors, collector errors) make a repeat ineligible for any
+comparison. Telemetry problems (GPU sampler unavailable, lossy or erroring;
+GPU step timing unavailable or erroring; vLLM stats unavailable; dropped
+batch, GPU, stats or collector records) do not affect latency targets, but
+`decide` reports energy per token as unavailable for that repeat and notes
+why.
 
 ## Verified vLLM target
 
@@ -200,8 +215,14 @@ manifest's effective config (real sections or the fake engine's). Candidates
 are deduplicated and capped (`--max-candidates`), skipped items are listed
 with the reason, and the plan is JSON that `llmtrace run --plan` executes as
 fresh engines under the same workload (`<out>/<config>/r<i>`), warning if the
-workload hash differs from the plan's source run. Nothing is executed by the
-planner and no running server is modified.
+workload hash differs from the plan's source run. The plan carries the source
+run's engine (`fake`/`vllm`), model, revision and `source_engine_kwargs` (its
+explicit engine kwargs and scheduling change plus tensor/pipeline parallelism
+and revision from the effective config); the baseline runs with exactly
+those and every candidate applies its change on top, so a source run with a
+512-token budget keeps that budget in the baseline. `--engine` and `--model`
+default to the plan's values. Nothing is executed by the planner and no
+running server is modified.
 
 ## GPU span per step (`data_plane/cuda_timing.py`)
 

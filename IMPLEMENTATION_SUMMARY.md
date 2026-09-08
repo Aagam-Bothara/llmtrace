@@ -46,7 +46,14 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
   candidates; recommendation by goodput when SLOs are given.
 * Experiment planner (`llmtrace plan`, `llmtrace run --plan`): bounded
   candidates from supported findings; plan -> run -> decide loop exercised on
-  the synthetic engine.
+  the synthetic engine; the baseline reproduces the source run's engine
+  kwargs, model, revision and parallelism.
+* `health.assess_health()`: one reading of the full tracer health record for
+  the runner, `doctor` and `decide` (writer and collector failures make a
+  repeat ineligible; lossy telemetry only voids the dependent metrics).
+* Run directories holding a previous run are refused (`--overwrite` to
+  replace); the async cancellation tests rendezvous on an event instead of a
+  sleep.
 
 ## Verified on hardware (one run, one GPU, one tiny model)
 

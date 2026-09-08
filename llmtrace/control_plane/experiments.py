@@ -43,10 +43,17 @@ class Candidate(BaseModel):
 
 
 class ExperimentPlan(BaseModel):
-    plan_version: int = 1
+    plan_version: int = 2
     source_run: Optional[str] = None
     workload_hash: Optional[str] = None
-    baseline_config: Dict[str, Any] = Field(default_factory=dict)  # effective knobs the candidates are relative to
+    source_engine: Optional[str] = None  # fake | vllm
+    source_model: Optional[str] = None
+    source_model_revision: Optional[str] = None
+    # Engine kwargs that reproduce the source run: its explicit kwargs and scheduling change, plus model revision and
+    # parallelism read from the effective config. The baseline runs with exactly these; each candidate applies its
+    # scheduling_change on top.
+    source_engine_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    baseline_config: Dict[str, Any] = Field(default_factory=dict)  # effective knobs the candidates are relative to (display)
     baseline_name: str = "baseline"
     repeats: int = 3
     candidates: List[Candidate] = Field(default_factory=list)
@@ -54,14 +61,21 @@ class ExperimentPlan(BaseModel):
     notes: List[str] = Field(default_factory=list)
 
     def configs(self) -> List[Dict[str, Any]]:
-        """Baseline plus candidates as (name, scheduling_change) for the runner."""
-        return [{"name": self.baseline_name, "scheduling_change": {}}] + [
-            {"name": c.name, "scheduling_change": dict(c.scheduling_change)} for c in self.candidates]
+        """Baseline plus candidates as (name, engine_kwargs, scheduling_change) for the runner: every entry carries the
+        source run's engine kwargs; a candidate's change is applied on top of them."""
+        base = dict(self.source_engine_kwargs)
+        return [{"name": self.baseline_name, "engine_kwargs": dict(base), "scheduling_change": {}}] + [
+            {"name": c.name, "engine_kwargs": dict(base), "scheduling_change": dict(c.scheduling_change)} for c in self.candidates]
 
     def format(self) -> str:
         lines = [f"experiment plan from {self.source_run or '?'} (workload {self.workload_hash or '?'}), {self.repeats} repeats each"]
+        src = ", ".join(x for x in (self.source_engine, self.source_model, f"revision {self.source_model_revision}" if self.source_model_revision else None) if x)
+        if src:
+            lines.append(f"source: {src}")
+        if self.source_engine_kwargs:
+            lines.append("baseline engine kwargs (reproduced for every run): " + ", ".join(f"{k}={v}" for k, v in self.source_engine_kwargs.items()))
         if self.baseline_config:
-            lines.append("baseline: " + ", ".join(f"{k}={v}" for k, v in self.baseline_config.items() if v is not None))
+            lines.append("baseline effective: " + ", ".join(f"{k}={v}" for k, v in self.baseline_config.items() if v is not None))
         lines.append("")
         if not self.candidates:
             lines.append("no candidates: no supported finding maps to a bounded configuration change")
@@ -94,6 +108,24 @@ def effective_knobs(manifest: Optional[RunManifest]) -> Dict[str, Any]:
     return out
 
 
+def source_engine_kwargs(manifest: Optional[RunManifest]) -> Dict[str, Any]:
+    """Engine kwargs that reproduce the source run: explicit kwargs + its scheduling change, plus revision and
+    parallelism from the effective config when they were not explicit."""
+    if manifest is None:
+        return {}
+    out: Dict[str, Any] = {**manifest.engine_kwargs, **manifest.scheduling_change}
+    cfg = manifest.effective_engine_config or {}
+    par = cfg.get("parallel_config") or {}
+    for k in ("tensor_parallel_size", "pipeline_parallel_size"):
+        v = par.get(k)
+        if v is not None and k not in out and _int(v) not in (None, 1):
+            out[k] = _int(v)
+    rev = (cfg.get("model_config") or {}).get("revision") or manifest.model_revision
+    if rev and "revision" not in out and manifest.engine == "vllm":
+        out["revision"] = rev
+    return out
+
+
 def _int(v: Any) -> Optional[int]:
     try:
         return int(v) if v is not None else None
@@ -106,6 +138,10 @@ def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = 
                      source_run: Optional[str] = None) -> ExperimentPlan:
     knobs = effective_knobs(manifest)
     plan = ExperimentPlan(source_run=source_run, workload_hash=manifest.workload_hash if manifest else None,
+                          source_engine=manifest.engine if manifest else None,
+                          source_model=(manifest.model if manifest and manifest.engine == "vllm" else None),
+                          source_model_revision=manifest.model_revision if manifest else None,
+                          source_engine_kwargs=source_engine_kwargs(manifest),
                           baseline_config={k: v for k, v in knobs.items() if v is not None}, repeats=repeats)
     if manifest is None:
         plan.notes.append("no manifest: baseline knobs unknown, candidates use vLLM 0.11.0 defaults as the reference")
@@ -224,4 +260,4 @@ def plan_experiments(findings: List[Finding], manifest: Optional[RunManifest] = 
     return plan
 
 
-__all__ = ["Candidate", "ExperimentPlan", "effective_knobs", "plan_experiments", "KNOWN_KNOBS"]
+__all__ = ["Candidate", "ExperimentPlan", "effective_knobs", "source_engine_kwargs", "plan_experiments", "KNOWN_KNOBS"]

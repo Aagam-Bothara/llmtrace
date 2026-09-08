@@ -426,15 +426,33 @@ class FakeAsyncLLM:
     """Shape of vllm.v1.engine.async_llm.AsyncLLM (0.11.0): generate() is an async generator that
     aborts on CancelledError/GeneratorExit; abort() is a coroutine; logger_manager exists."""
 
-    def __init__(self, clock: Optional[FakeClock] = None, step_seconds: float = 0.01, fail_at_token: Optional[int] = None) -> None:
+    def __init__(self, clock: Optional[FakeClock] = None, step_seconds: float = 0.01, fail_at_token: Optional[int] = None,
+                 block_at_token: Optional[int] = None) -> None:
         self.clock = clock or FakeClock()
         self.step_seconds = step_seconds
         self.fail_at_token = fail_at_token
+        # block_at_token: after yielding that many tokens the stream parks on an asyncio.Event until release() is
+        # called, so a test can cancel or abort at a known point instead of racing a sleep against the generator.
+        self.block_at_token = block_at_token
+        self._blocked: Any = None  # asyncio.Event, created inside the running loop
+        self._release: Any = None
         self.model_config = FakeModelConfig()
         self.vllm_config = object()
         self.logger_manager: Any = FakeStatLoggerManager()
         self.aborted: List[str] = []
         self.calls: List[str] = []
+
+    async def wait_blocked(self) -> None:
+        """Resolve once the stream has parked at ``block_at_token`` (deterministic rendezvous for tests)."""
+        import asyncio
+
+        while self._blocked is None:
+            await asyncio.sleep(0)
+        await self._blocked.wait()
+
+    def release(self) -> None:
+        if self._release is not None:
+            self._release.set()
 
     async def generate(self, prompt: Any, sampling_params: Any, request_id: str, lora_request: Any = None,
                        trace_headers: Any = None, priority: int = 0, data_parallel_rank: Any = None):
@@ -457,6 +475,11 @@ class FakeAsyncLLM:
                     continue
                 yield RequestOutput(request_id, None, ids, None,
                                     [CompletionOutput(0, "", toks, finish_reason="length" if finished else None)], finished)
+                if self.block_at_token is not None and len(generated) == self.block_at_token and not finished:
+                    if self._blocked is None:
+                        self._blocked, self._release = asyncio.Event(), asyncio.Event()
+                    self._blocked.set()
+                    await self._release.wait()
         except (asyncio.CancelledError, GeneratorExit):
             await self.abort(request_id)
             raise

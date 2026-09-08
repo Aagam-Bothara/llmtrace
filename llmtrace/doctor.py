@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from llmtrace.data_plane.vllm_instrumentation import TARGET_VLLM_VERSION
+from llmtrace.health import assess_health
 from llmtrace.io import _PREFIXES as DATA_TYPES
 from llmtrace.manifest import RunManifest
 
@@ -221,15 +222,14 @@ def run_report(run_dir: str) -> DoctorReport:
         problems = m.extra.get("problems") or []
         for pr in problems:
             checks.append(Check(name="run problem", status="error", detail=str(pr)))
-        h = m.health or {}
-        inst = h.get("instrumentation", {}) if isinstance(h, dict) else {}
-        drops = {k: v for k, v in inst.items() if k.startswith("dropped_") and v}
-        if drops:
-            checks.append(Check(name="dropped records", status="error", detail=str(drops),
-                                consequence="incomplete traces or batches; increase max_buffered_events or lower the drain interval"))
-        if inst.get("instrumentation_errors"):
-            checks.append(Check(name="instrumentation errors", status="error",
-                                detail=f"{inst['instrumentation_errors']} ({inst.get('last_instrumentation_error')})"))
+        if m.health:
+            a = assess_health(m.health)
+            for pr in a.problems:
+                checks.append(Check(name="tracer health", status="error", detail=pr,
+                                    consequence="the request record is not trustworthy; decide treats this run as ineligible"))
+            for tp in a.telemetry_problems:
+                checks.append(Check(name="telemetry", status="warn", detail=tp,
+                                    consequence="metrics that depend on this signal are reported as unavailable"))
 
     reasons: Dict[str, Optional[str]] = {}
     if m is not None and isinstance(m.health, dict):

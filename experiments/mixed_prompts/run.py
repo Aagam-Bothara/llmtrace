@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from workload import RequestSpec, WorkloadConfig, build_workload  # noqa: E402
 
 from llmtrace.manifest import RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version, workload_hash  # noqa: E402
-from llmtrace.runner import drive  # noqa: E402  (the serving-loop driver moved into the library unchanged)
+from llmtrace.runner import drive, prepare_run_dir  # noqa: E402  (the serving-loop driver moved into the library unchanged)
 
 # The one scheduling change under test. Everything else stays at vLLM defaults.
 CONFIGS: Dict[str, Dict[str, Any]] = {
@@ -128,6 +128,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-ignore-eos", action="store_true", help="Let requests stop at EOS (work then differs across configs)")
     parser.add_argument("--enable-nvtx", action="store_true", help="Push an NVTX range per engine step (for nsys; see scripts/nsys_step_compare.py)")
+    parser.add_argument("--overwrite", action="store_true", help="Remove a previous run's files from --out instead of refusing it")
     parser.add_argument("--collection-interval", type=float, default=0.1,
                         help="llmtrace collector drain interval (s). Large drains serialize many batch records under "
                              "the GIL and stall the engine thread; GPU run 1 saw ~10 ms stalls at 1.0 s intervals.")
@@ -137,8 +138,11 @@ def main() -> int:
                         long_prompt_len=args.long_prompt_len, long_every_s=args.long_every,
                         short_max_tokens=args.short_tokens, seed=args.seed)
     specs = build_workload(wl)
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    try:
+        out = prepare_run_dir(args.out, overwrite=args.overwrite)
+    except FileExistsError as exc:
+        print(f"ERROR: {exc}")
+        return 2
     config = CONFIGS[args.config]
     engine_kwargs = json.loads(args.engine_kwargs)
     manifest = RunManifest(label=out.name, engine=args.engine, synthetic=args.engine == "fake", model=args.model,

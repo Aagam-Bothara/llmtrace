@@ -30,8 +30,39 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from llmtrace.health import assess_health
 from llmtrace.manifest import ArrivalRecord, RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version
 from llmtrace.workload import RequestSpec, WorkloadSpec, make_prompt
+
+RUN_FILES = ("manifest.json", "run_info.json", "workload.json")
+RUN_PREFIXES = ("traces", "batches", "gpu", "gpu_steps", "vllm_stats", "collector")
+
+
+def existing_run_files(run_dir: str) -> List[Path]:
+    """Files a previous llmtrace run left in ``run_dir`` (its manifest, run info, workload and data files)."""
+    d = Path(run_dir)
+    if not d.is_dir():
+        return []
+    found = [d / f for f in RUN_FILES if (d / f).exists()]
+    for p in d.iterdir():
+        if p.is_file() and p.suffix in (".jsonl", ".parquet") and any(p.name.startswith(pre + "_") for pre in RUN_PREFIXES):
+            found.append(p)
+    return sorted(set(found))
+
+
+def prepare_run_dir(run_dir: str, overwrite: bool = False) -> Path:
+    """Create ``run_dir`` for one run. A directory holding a previous run is refused (``FileExistsError``) unless
+    ``overwrite`` is set, in which case only the previous run's llmtrace files are removed: two runs written into one
+    directory would load as one run with twice the traces and a manifest that expects half of them."""
+    out = Path(run_dir)
+    old = existing_run_files(str(out))
+    if old and not overwrite:
+        raise FileExistsError(f"{out} already holds a run ({len(old)} llmtrace file(s), e.g. {old[0].name}); "
+                              "use a new directory or overwrite=True / --overwrite")
+    for p in old:
+        p.unlink()
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 def drive(engine: Any, specs: List[RequestSpec], make_params: Callable[[RequestSpec], Any],
@@ -83,6 +114,7 @@ class RunOptions:
     settle_requests: int = 4  # vllm only: traced settling requests (class "settle") before the measured replay
     fake_power_w: float = 150.0  # fake engine: constant synthetic GPU power
     repo_dir: Optional[str] = None  # for the git commit in the manifest
+    overwrite: bool = False  # remove a previous run's files from out_dir instead of refusing it
 
 
 _FAKE_DEFAULTS = {"step_seconds": 0.0015, "step_seconds_per_token": 8e-6, "max_num_batched_tokens": 8192}
@@ -90,10 +122,10 @@ _FAKE_DEFAULTS = {"step_seconds": 0.0015, "step_seconds_per_token": 8e-6, "max_n
 
 def run_workload(spec: WorkloadSpec, opts: RunOptions) -> RunManifest:
     """Replay ``spec`` under llmtrace and write ``opts.out_dir``. Never raises for engine failures:
-    a failed run leaves a manifest with ``status: failed`` and the error."""
+    a failed run leaves a manifest with ``status: failed`` and the error. Raises ``FileExistsError`` before
+    touching anything when ``out_dir`` already holds a run and ``opts.overwrite`` is false."""
     specs = spec.generate()
-    out = Path(opts.out_dir)
-    out.mkdir(parents=True, exist_ok=True)
+    out = prepare_run_dir(opts.out_dir, opts.overwrite)
     spec.save(str(out / "workload.json"))
     manifest = RunManifest(label=opts.label or out.name, engine=opts.engine, synthetic=opts.engine == "fake",
                            model=opts.model if opts.engine == "vllm" else "fake",
@@ -124,15 +156,12 @@ def run_workload(spec: WorkloadSpec, opts: RunOptions) -> RunManifest:
     manifest.model_revision = info.get("model_revision")
     manifest.steps, manifest.wall_s, manifest.finished, manifest.health = info["steps"], info["wall_s"], info["finished"], info["health"]
     manifest.expected_requests = len(specs) + int(info.get("settle_requests", 0))  # settle-* are traced too
-    problems: List[str] = []
-    h = info["health"]["instrumentation"]
-    if h.get("instrumentation_errors"):
-        problems.append(f"{h['instrumentation_errors']} instrumentation errors")
-    if h.get("active_requests"):
-        problems.append(f"{h['active_requests']} requests still active at stop")
+    assessment = assess_health(info["health"])
+    problems: List[str] = list(assessment.problems)
     if info["finished"] != len(specs):
         problems.append(f"{info['finished']} of {len(specs)} workload requests finished")
     info["problems"] = problems
+    info["telemetry_problems"] = list(assessment.telemetry_problems)
     manifest.extra = {k: v for k, v in info.items() if k not in ("health", "effective_engine_config")}
     manifest.write(str(out))
     (out / "run_info.json").write_text(json.dumps(info, indent=2, default=str), encoding="utf-8")
@@ -214,4 +243,4 @@ def _run_vllm(spec: WorkloadSpec, specs: List[RequestSpec], opts: RunOptions) ->
             "config_name": opts.config_name, "scheduling_change": dict(opts.scheduling_change)}
 
 
-__all__ = ["drive", "RunOptions", "run_workload"]
+__all__ = ["drive", "RunOptions", "run_workload", "prepare_run_dir", "existing_run_files"]

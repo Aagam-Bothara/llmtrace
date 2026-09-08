@@ -69,18 +69,18 @@ class TestWrapper:
         assert engine.aborted == ["r"] and instr.active_request_count() == 0
 
     def test_task_cancellation_is_recorded_as_aborted(self, clock):
-        engine, instr = make(clock)
+        engine, instr = make(clock, block_at_token=3)  # the stream parks after 3 tokens; no timing race
 
         async def run():
             task = asyncio.create_task(consume(engine, "r", max_tokens=1000))
-            await asyncio.sleep(0.01)
+            await engine.wait_blocked()
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
 
         asyncio.run(run())
         (t,) = instr.drain_completed_traces()
-        assert t.status == RequestStatus.ABORTED and t.finish_reason == "abort" and t.output_length > 0
+        assert t.status == RequestStatus.ABORTED and t.finish_reason == "abort" and t.output_length == 3
         assert t.metadata["abort_cause"] == "client_cancelled"  # engine abort ran first; cause annotated afterwards
         assert engine.aborted == ["r"]
 
@@ -93,11 +93,11 @@ class TestWrapper:
         assert instr.health()["instrumentation_errors"] == 0
 
     def test_explicit_abort_marks_aborted(self, clock):
-        engine, instr = make(clock)
+        engine, instr = make(clock, block_at_token=2)
 
         async def run():
             task = asyncio.create_task(consume(engine, "r", max_tokens=1000))
-            await asyncio.sleep(0.01)
+            await engine.wait_blocked()
             await engine.abort("r")  # engine-side abort; the fake's stream keeps running, so cancel the consumer
             task.cancel()
             try:

@@ -16,6 +16,15 @@ from llmtrace.data_plane.vllm_instrumentation import VLLMInstrumentation  # noqa
 from llmtrace.models.trace import GPUSample, ThrottleReason  # noqa: E402
 
 
+def comparison_manifest(n, **overrides):
+    from llmtrace.manifest import ArrivalRecord, RunManifest
+    fields = dict(engine="fake", model="m", seed=0, workload={"count": n, "prompt_len": 4},
+                  workload_hash=f"test-workload-{n}", health={"instrumentation_errors": 0},
+                  arrivals=[ArrivalRecord(request_id=f"short-{i}", scheduled_s=0) for i in range(n)])
+    fields.update(overrides)
+    return RunManifest(**fields)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()

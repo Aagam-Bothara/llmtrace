@@ -6,6 +6,7 @@ import copy
 import json
 
 import pytest
+from conftest import comparison_manifest
 from click.testing import CliRunner
 
 from llmtrace import io
@@ -87,7 +88,7 @@ class TestDecideUsesFullHealth:
         io.write_jsonl(d / "traces_x.jsonl", [RequestTrace(request_id=f"short-{i}", start_time=0, end_time=1, prompt_length=4,
                                                             output_length=4, model_name="m", ttft_ms=10.0) for i in range(3)])
         health = {**health, "session_id": name}  # distinct tracer sessions: a repeated session is a duplicate
-        RunManifest(engine="fake", health=health, expected_requests=3).write(str(d))
+        comparison_manifest(3, health=health, expected_requests=3).write(str(d))
         return str(d)
 
     def test_writer_and_collector_errors_make_a_repeat_ineligible(self, tmp_path):

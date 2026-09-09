@@ -14,6 +14,9 @@ across the sessions) are not in git. They are attached to the GitHub release
 manifests expect it, from the repository root:
 
 ```bash
+gh release download evidence-2026-09 --repo Aagam-Bothara/llmtrace \
+    --pattern '*-raw-traces.tar.gz' --pattern SHA256SUMS
+sha256sum -c SHA256SUMS
 tar xzf 2026-09-09-a100-qwen2.5-7b-clean-repeats-raw-traces.tar.gz   # restores docs/gpu_runs/<session>/**/*.jsonl
 llmtrace findings docs/gpu_runs/2026-09-09-a100-qwen2.5-7b-clean-repeats/queue/source
 ```
@@ -22,6 +25,12 @@ Every archive was produced from the committed tree with `git ls-files
 '<session>/**/*.jsonl' | tar czf ... -T -`, so the restored files are the
 ones the derived outputs were computed from. Commits before this split
 (up to `6840592`) still contain the raw files in history.
+
+Published and verified on September 9, 2026: all ten archives and `SHA256SUMS`
+were downloaded anonymously from the public release and checked against the
+[committed SHA-256 checksums](SHA256SUMS). All 588 archived JSONL files were
+also checked byte-for-byte against commit `6840592`. You can download assets
+directly from the release page if you do not use the GitHub CLI.
 
 | Session | What it established |
 |---------|---------------------|

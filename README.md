@@ -10,9 +10,10 @@ per token, across four independent repeats from a fingerprinted commit
 
 llmtrace sits inside a vLLM 0.11.0 process and records what the scheduler
 did to every request: which engine step it waited in, which requests it
-shared that step with, how many tokens each of them was scheduled, how long
-the GPU was busy, and what the card drew in power. From those records it
-answers three questions in order. What is the bottleneck, and what is the
+shared that step with, how many tokens each of them was scheduled, the
+CUDA-event span of each step (including gaps between kernel launches), and
+what the card drew in power. From those records it answers three questions
+in order. What is the bottleneck, and what is the
 evidence for it? Which configuration changes are worth trying? Did a change
 help the requests you care about without hurting the others, across
 independent repeats?
@@ -39,8 +40,9 @@ are long documents. The short ones have a bad tail: p95 time-to-first-token
 is several times the median, and nothing in the Prometheus metrics says why.
 llmtrace's traces show that the slow short requests all sat in engine steps
 that also carried a 1536-token prefill chunk from a long prompt, and that
-those steps took several times longer than the rest. The CUDA-event spans show
-the extra time is GPU compute, not host stalls. `llmtrace plan` proposes
+those steps took several times longer than the rest. The CUDA-event spans locate
+the extra elapsed time within the step; they include launch gaps and do not
+by themselves separate kernel execution from host stalls. `llmtrace plan` proposes
 capping the per-step prefill of long prompts, `llmtrace run --plan` replays
 the workload under each cap, and `llmtrace decide` reports that the 256-token
 cap cuts short-request p95 by about two thirds while making the long
@@ -144,8 +146,15 @@ budget under queue overload changed nothing, and `decide` said so.
 run: the same directory twice, a copied directory, or one run shared between
 configurations is reported as a duplicate and ignored. A configuration needs
 at least `--min-repeats` eligible repeats (two by default, three or more
-recommended) and a clean tracer health record to be a candidate. The
-run-to-run range across repeats is reported next to a bootstrap interval over
+recommended) and a clean tracer health record to be a candidate. Missing or
+unrecognized health records and missing/incomplete manifests remain exploratory:
+metrics are shown, but those runs cannot qualify for recommendations. Before
+ranking, manifests must agree on workload definition/hash, seed, model/revision,
+engine/version and intended arrivals, and traces must agree on per-request prompt
+and output lengths. A mismatch withholds ranking for the comparison. Actual
+arrival delays and scheduler settings may differ. Both `<` and `<=` retain
+their meaning in targets and SLOs. The run-to-run range across repeats is
+reported next to a bootstrap interval over
 requests, and the bootstrap is labelled as within-run, because requests in
 one run share engine steps and are not independent draws. Goodput under
 per-class SLOs, throughput and energy per token come alongside. It is

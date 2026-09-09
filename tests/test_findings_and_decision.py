@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import comparison_manifest
 from click.testing import CliRunner
 from fakes import FakeClock, FakeLLMEngine, FakeNVMLBackend, SamplingParams, run_to_completion
 
@@ -98,10 +99,74 @@ class TestFindings:
 
 
 class TestDecision:
+    @pytest.mark.parametrize("field,value", [
+        ("model", "other-model"), ("model_revision", "other-revision"),
+        ("workload", {"prompt_len": 4096}), ("workload_hash", "different"), ("seed", 42),
+        ("engine", "vllm"), ("engine_version", "different"),
+        ("arrivals", [ArrivalRecord(request_id="short-0", scheduled_s=1)]),
+    ])
+    def test_manifest_mismatch_withholds_ranking(self, tmp_path, field, value):
+        a = self._run(tmp_path, "a", [1])
+        b = self._run(tmp_path, "b", [1], manifest=comparison_manifest(1, **{field: value}))
+        dec = evaluate({"a": [a], "b": [b]}, Target.parse("short ttft_p95 < 5ms"), min_repeats=1)
+        assert not dec.candidates and dec.comparison_status == "exploratory"
+        assert any("mismatch" in n for n in dec.notes)
+
+    def test_prompt_lengths_cannot_hide_behind_matching_output_counts(self, tmp_path):
+        a = self._run(tmp_path, "a", [1])
+        b = self._run(tmp_path, "b", [1])
+        for d, length in ((a, 4096), (b, 8)):
+            traces = io.load_traces([Path(d)])
+            traces[0].prompt_length = length
+            io.write_jsonl(Path(d) / "traces_x.jsonl", traces)
+        dec = evaluate({"a": [a], "b": [b]}, Target.parse("short ttft_p95 < 5ms"), min_repeats=1)
+        assert not dec.candidates and any("mismatch" in n for n in dec.notes)
+
+    @pytest.mark.parametrize("health", [{}, {"session_id": "s"}, {"instrumentation": {}},
+                                         {"instrumentation_errors": "unknown"}])
+    def test_unknown_health_is_exploratory(self, tmp_path, health):
+        d = self._run(tmp_path, "a", [1], manifest=comparison_manifest(1, health=health))
+        dec = evaluate({"a": [d]}, Target.parse("short ttft_p95 < 5ms"), min_repeats=1)
+        r = dec.configs[0].repeats[0]
+        assert r.health_ok is None and not r.eligible and r.target_value_ms == 1
+        assert not dec.candidates and dec.comparison_status == "exploratory"
+
+    @pytest.mark.parametrize("contents", [None, "{broken", "{}"])
+    def test_missing_invalid_manifest_blocks_comparison(self, tmp_path, contents):
+        a = self._run(tmp_path, "a", [1])
+        b = self._run(tmp_path, "b", [1])
+        p = Path(b) / "manifest.json"
+        if contents is None:
+            p.unlink()
+        else:
+            p.write_text(contents)
+        dec = evaluate({"a": [a], "b": [b]}, Target.parse("short ttft_p95 < 5ms"), min_repeats=1)
+        assert not dec.candidates and dec.comparison_status == "exploratory"
+
+    def test_strict_boundary_and_slo(self, tmp_path):
+        from llmtrace.control_plane.decision import Slo
+        d = self._run(tmp_path, "a", [5, 5])
+        for op, expected in (("<", False), ("<=", True)):
+            dec = evaluate({"a": [d]}, Target.parse(f"short ttft_p95 {op} 5ms"), min_repeats=1,
+                           slos=[Slo.parse(f"short: ttft {op} 5ms")])
+            c = dec.configs[0]
+            assert c.meets_target_all_repeats is expected and c.meets_target_ci_upper is expected
+            assert c.repeats[0].attainment_fraction == float(expected)
+            assert c.goodput_median == float(expected)
+            assert dec.target == f"short ttft_p95 {op} 5 ms"
+            assert dec.slos == [f"short: ttft {op} 5 ms"]
+
+    def test_scheduler_settings_and_actual_delays_may_vary(self, tmp_path):
+        a = self._run(tmp_path, "a", [1])
+        b = self._run(tmp_path, "b", [2], manifest=comparison_manifest(1, engine_kwargs={"max_num_seqs": 16},
+                      arrivals=[ArrivalRecord(request_id="short-0", scheduled_s=0, actual_s=0.1, delay_ms=100)]))
+        dec = evaluate({"a": [a], "b": [b]}, Target.parse("short ttft_p95 < 5ms"), min_repeats=1)
+        assert dec.candidates == ["a", "b"] and dec.comparison_status == "verified"
+
     def test_target_parse(self):
         t = Target.parse("short ttft_p95 <= 300ms")
         assert (t.request_class, t.metric, t.stat, t.value_ms) == ("short", "ttft", "p95", 300.0)
-        assert Target.parse("* e2e_max < 2000").describe() == "* e2e_max <= 2000 ms"
+        assert Target.parse("* e2e_max < 2000").describe() == "* e2e_max < 2000 ms"
         with pytest.raises(ValueError):
             Target.parse("fast please")
 
@@ -114,8 +179,11 @@ class TestDecision:
         traces = [RequestTrace(request_id=f"short-{i}", start_time=0.0, end_time=1.0, prompt_length=4, output_length=tokens,
                                model_name="m", ttft_ms=v, status=status) for i, v in enumerate(ttfts)]
         io.write_jsonl(d / "traces_x.jsonl", traces)
-        if manifest is not None:
-            manifest.write(str(d))
+        if manifest is None:
+            manifest = comparison_manifest(len(ttfts))
+        else:
+            manifest = comparison_manifest(len(ttfts), **manifest.model_dump(exclude_unset=True))
+        manifest.write(str(d))
         return str(d)
 
     def test_evaluate_with_failed_config_and_work_check(self, tmp_path):
@@ -125,12 +193,12 @@ class TestDecision:
         uneven = [self._run(tmp_path, "u0", [50, 50, 50]), self._run(tmp_path, "u1", [50, 50, 50], tokens=8)]
         dec = evaluate({"baseline": base, "capped": capped, "big_batch": broken, "uneven": uneven}, Target.parse("short ttft_p95 <= 300ms"))
         by = {c.name: c for c in dec.configs}
-        assert by["baseline"].meets_target_all_repeats is False and by["capped"].meets_target_all_repeats is True
+        assert by["baseline"].meets_target_all_repeats is False and by["capped"].meets_target_all_repeats is False
         assert by["big_batch"].all_ok is False and by["big_batch"].repeats[0].status == "failed"
         assert by["uneven"].work_identical_across_repeats is False
-        assert "capped" in dec.candidates and "uneven" in dec.candidates
+        assert dec.candidates == []
         assert any("out of memory" in n for n in dec.notes) and any("not identical" in n for n in dec.notes)
-        assert "Advisory" in dec.recommendation
+        assert "verified recommendation" in dec.recommendation
         text = format_decision(dec)
         assert "big_batch" in text and "NO" in text and "candidates meeting the target" in text
 
@@ -171,7 +239,7 @@ class TestDecision:
         traces += [RequestTrace(request_id=f"settle-{i}", start_time=0.0, end_time=1.0, prompt_length=4, output_length=4,
                                 model_name="m", ttft_ms=10.0) for i in range(2)]
         io.write_jsonl(d / "traces_x.jsonl", traces)
-        RunManifest(expected_requests=3).write(str(d))  # old driver counted the workload only
+        comparison_manifest(3, expected_requests=3).write(str(d))  # old driver counted the workload only
         assert evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms")).candidates == []
         dec = evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms"), exclude_classes=["settle"], min_repeats=1)
         assert dec.candidates == ["c"] and dec.configs[0].repeats[0].requests == 3

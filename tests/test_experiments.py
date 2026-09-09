@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import comparison_manifest
 from click.testing import CliRunner
 
 from llmtrace import io
@@ -85,6 +86,7 @@ class TestGoodputAndBootstrap:
         d.mkdir()
         tpots = tpots or [1.0] * len(ttfts)
         io.write_jsonl(d / "traces_x.jsonl", [_trace(f"short-{i}", ttft=v, tpot=p) for i, (v, p) in enumerate(zip(ttfts, tpots))])
+        comparison_manifest(len(ttfts)).write(str(d))
         return str(d)
 
     def test_evaluate_reports_goodput_ci_and_marginal(self, tmp_path):

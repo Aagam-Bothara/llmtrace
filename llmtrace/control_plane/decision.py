@@ -30,11 +30,12 @@ reported alongside.
 from __future__ import annotations
 
 import json
+import hashlib
 import random
 import re
 import statistics
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +56,10 @@ class Target(BaseModel):
     metric: str  # ttft | ttft_sched (from intended arrival, needs manifest delays) | tpot | e2e
     stat: str  # p50 | p90 | p95 | p99 | max
     value_ms: float
+    operator: Literal["<", "<="] = "<="
+
+    def accepts(self, value: float) -> bool:
+        return value < self.value_ms if self.operator == "<" else value <= self.value_ms
 
     @classmethod
     def parse(cls, text: str) -> "Target":
@@ -62,14 +67,14 @@ class Target(BaseModel):
         if not m:
             raise ValueError(f"Cannot parse target {text!r}; expected e.g. 'short ttft_p95 <= 300ms' "
                              "(metrics: ttft, ttft_sched, tpot, e2e; stats: p50, p90, p95, p99, max)")
-        return cls(request_class=m["cls"], metric=m["metric"], stat=m["stat"], value_ms=float(m["value"]))
+        return cls(request_class=m["cls"], metric=m["metric"], stat=m["stat"], value_ms=float(m["value"]), operator=m["op"])
 
     def describe(self) -> str:
-        return f"{self.request_class} {self.metric}_{self.stat} <= {self.value_ms:g} ms"
+        return f"{self.request_class} {self.metric}_{self.stat} {self.operator} {self.value_ms:g} ms"
 
 
 _SLO_RE = re.compile(r"^\s*(?P<cls>[\w*]+)\s*:\s*(?P<bounds>.+?)\s*$")
-_BOUND_RE = re.compile(r"^\s*(?P<metric>ttft_sched|ttft|tpot|e2e)\s*(<=|<)\s*(?P<value>[\d.]+)\s*(ms)?\s*$")
+_BOUND_RE = re.compile(r"^\s*(?P<metric>ttft_sched|ttft|tpot|e2e)\s*(?P<op><=|<)\s*(?P<value>[\d.]+)\s*(ms)?\s*$")
 
 
 class Slo(BaseModel):
@@ -77,6 +82,10 @@ class Slo(BaseModel):
 
     request_class: str
     bounds: Dict[str, float]  # metric -> max ms
+    operators: Dict[str, Literal["<", "<="]] = Field(default_factory=dict)
+
+    def accepts(self, metric: str, value: float) -> bool:
+        return value < self.bounds[metric] if self.operators.get(metric, "<=") == "<" else value <= self.bounds[metric]
 
     @classmethod
     def parse(cls, text: str) -> "Slo":
@@ -84,17 +93,19 @@ class Slo(BaseModel):
         if not m:
             raise ValueError(f"Cannot parse SLO {text!r}; expected e.g. 'short: ttft <= 50ms, tpot <= 15ms'")
         bounds: Dict[str, float] = {}
+        operators = {}
         for part in m["bounds"].split(","):
             b = _BOUND_RE.match(part)
             if not b:
                 raise ValueError(f"Cannot parse SLO bound {part.strip()!r} in {text!r} (metrics: ttft, ttft_sched, tpot, e2e)")
             bounds[b["metric"]] = float(b["value"])
+            operators[b["metric"]] = b["op"]
         if not bounds:
             raise ValueError(f"SLO {text!r} has no bounds")
-        return cls(request_class=m["cls"], bounds=bounds)
+        return cls(request_class=m["cls"], bounds=bounds, operators=operators)
 
     def describe(self) -> str:
-        return f"{self.request_class}: " + ", ".join(f"{k} <= {v:g} ms" for k, v in self.bounds.items())
+        return f"{self.request_class}: " + ", ".join(f"{k} {self.operators.get(k, '<=')} {v:g} ms" for k, v in self.bounds.items())
 
 
 def _request_metric(t: RequestTrace, metric: str, delay_ms: Optional[float]) -> Optional[float]:
@@ -124,7 +135,7 @@ def goodput(traces: List[RequestTrace], slos: List[Slo], delays: Optional[Dict[s
         vals = {m: _request_metric(t, m, (delays or {}).get(t.request_id)) for s in applicable for m in s.bounds}
         has_all = all(v is not None for v in vals.values())
         complete += has_all
-        if has_all and all(vals[m] <= s.bounds[m] for s in applicable for m in s.bounds):
+        if has_all and all(s.accepts(m, vals[m]) for s in applicable for m in s.bounds):
             good += 1
     return (good / n if n else None), n, (complete / n if n else None)
 
@@ -174,7 +185,7 @@ class RepeatResult(BaseModel):
     device_joules: Optional[float] = None
     joules_per_output_token: Optional[float] = None
     telemetry_coverage: Optional[float] = None
-    work_signature: Optional[str] = None  # sorted output token counts, to check work-identical replay
+    work_signature: Optional[str] = None  # manifest identity and per-request work, including intended arrivals
 
 
 class ConfigResult(BaseModel):
@@ -202,6 +213,7 @@ class ConfigResult(BaseModel):
 
 class Decision(BaseModel):
     target: str
+    comparison_status: str = "exploratory"  # verified only when every measured repeat has compatible, healthy evidence
     slos: List[str] = Field(default_factory=list)
     configs: List[ConfigResult]
     marginal: List[str] = Field(default_factory=list)  # candidates whose bootstrap upper bound misses the target
@@ -229,6 +241,37 @@ def _stat(values: List[float], stat: str) -> Optional[float]:
     if not values:
         return None
     return max(values) if stat == "max" else percentile(values, int(stat[1:]))
+
+
+def _comparison_signature(manifest: Optional[RunManifest], traces: List[RequestTrace]) -> Tuple[Optional[str], List[str]]:
+    """Compare intended work, not actual arrival delays or tunable scheduler settings.
+
+    Keep the full workload in the identity even when analysis excludes a class:
+    excluded requests can still interfere with the measured requests.
+    """
+    if manifest is None:
+        return None, ["comparison unverified: missing or invalid manifest"]
+    missing = []
+    for name in ("model", "workload", "workload_hash"):
+        if not getattr(manifest, name):
+            missing.append(name)
+    if manifest.engine == "unknown":
+        missing.append("engine")
+    if manifest.seed is None:
+        missing.append("seed")
+    arrivals = {a.request_id: a.scheduled_s for a in manifest.arrivals}
+    if len(arrivals) != len(manifest.arrivals) or any(t.request_id not in arrivals for t in traces):
+        missing.append("complete, unique scheduled arrivals")
+    if missing:
+        return None, ["comparison unverified: manifest missing " + ", ".join(missing)]
+    identity = {
+        "engine": manifest.engine, "engine_version": manifest.engine_version,
+        "synthetic": manifest.synthetic, "model": manifest.model, "model_revision": manifest.model_revision,
+        "workload": manifest.workload, "workload_hash": manifest.workload_hash, "seed": manifest.seed,
+        "arrivals": arrivals,
+        "requests": sorted((t.request_id, t.model_name, t.prompt_length, t.output_length) for t in traces),
+    }
+    return "sha256:" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(), []
 
 
 def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_share",
@@ -286,6 +329,9 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     if isinstance(health, dict) and health:
         a = assess_health(health)
         health_ok, hp, tele, gpu_ok = a.ok, a.problems, a.telemetry_problems, a.gpu_telemetry_ok
+        inst = health.get("instrumentation", health)
+        if health_ok and (not isinstance(inst, dict) or type(inst.get("instrumentation_errors")) is not int):
+            health_ok = None
 
     problems: List[str] = []
     if n_sel == 0:
@@ -300,15 +346,19 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         problems.append(f"{len(res.traces)} traced requests but {expected} expected")
     if health_ok is False:
         problems.append("tracer health not clean: " + "; ".join(hp))
+    elif health_ok is None:
+        problems.append("tracer health unknown: no usable health record; exploratory analysis only")
+    signature, compatibility_problems = _comparison_signature(manifest, res.traces)
+    problems.extend(compatibility_problems)
     eligible = not problems
     # Energy figures need trustworthy GPU telemetry; a lossy or unavailable sampler makes them unavailable, not wrong.
     energy_ok = gpu_ok is not False
     gp, gp_n, gp_cov = goodput(res.traces, slos or [], delays)
     return RepeatResult(
         run_dir=str(d), status="ok" if eligible else "ineligible", problems=problems, eligible=eligible, session_id=session,
-        target_value_ms=tv, meets_target=(tv <= target.value_ms) if (tv is not None and eligible) else None,
+        target_value_ms=tv, meets_target=target.accepts(tv) if (tv is not None and eligible) else None,
         metric_coverage=coverage,
-        attainment_fraction=(sum(1 for v in vals if v <= target.value_ms) / len(vals)) if vals else None,
+        attainment_fraction=(sum(1 for v in vals if target.accepts(v)) / len(vals)) if vals else None,
         target_values_ms=list(vals), goodput=gp, goodput_requests=gp_n, slo_metric_coverage=gp_cov,
         requests=len(res.traces), expected_requests=expected, completed=completed, aborted=aborted, incomplete=incomplete,
         health_ok=health_ok, health_problems=hp, telemetry_problems=tele, energy_withheld=not energy_ok,
@@ -317,7 +367,7 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         device_joules=L.device_joules if energy_ok else None,
         joules_per_output_token=(L.attributed_joules / out_tokens) if energy_ok and L.device_joules is not None and out_tokens else None,
         telemetry_coverage=(L.coverage.coverage_fraction if L.coverage else None) if energy_ok else None,
-        work_signature=",".join(str(x) for x in sorted(t.output_length for t in res.traces)),
+        work_signature=signature,
     )
 
 
@@ -331,10 +381,22 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
     seen_paths: Dict[str, str] = {}
     seen_sessions: Dict[str, str] = {}
     dup_notes: List[str] = []
-    for name, dirs in configs.items():
+    measured = {name: [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos)
+                       for dd in dirs] for name, dirs in configs.items()}
+    signatures = {r.work_signature for reps in measured.values() for r in reps if r.work_signature is not None}
+    unknown_compatibility = any(r.work_signature is None for reps in measured.values() for r in reps
+                                if r.status in ("ok", "ineligible"))
+    if len(signatures) > 1 or unknown_compatibility:
+        for reps in measured.values():
+            for r in reps:
+                if r.status in ("ok", "ineligible"):
+                    r.problems.append("workload/model/arrival mismatch across comparison; work not identical, ranking withheld"
+                                      if len(signatures) > 1 else "comparison compatibility unknown; ranking withheld")
+                    r.eligible, r.meets_target, r.status = False, None, "ineligible"
+    for name, measured_repeats in measured.items():
         reps = []
-        for dd in dirs:
-            r = evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos)
+        for r in measured_repeats:
+            dd = r.run_dir
             key = str(Path(dd).resolve())
             first = seen_paths.get(key) or (seen_sessions.get(r.session_id) if r.session_id else None)
             if first is not None:
@@ -366,13 +428,13 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
             target_min_ms=min(tvals) if tvals else None, target_max_ms=max(tvals) if tvals else None,
             target_ci95_ms=ci, pooled_requests=len(pooled), eligible_repeats=len(ok),
             target_repeat_spread_ms=(max(ok_vals) - min(ok_vals)) if len(ok_vals) >= 2 else None,
-            meets_target_ci_upper=(ci[1] <= target.value_ms) if ci else None,
+            meets_target_ci_upper=target.accepts(ci[1]) if ci else None,
             goodput_median=statistics.median(gps) if gps else None,
             goodput_min=min(gps) if gps else None, goodput_max=max(gps) if gps else None,
             tokens_per_s_median=statistics.median(tps) if tps else None,
             joules_per_output_token_median=statistics.median(jpt) if jpt else None,
             coverage_min=min(cov) if cov else None,
-            work_identical_across_repeats=(len(sigs) == 1) if ran else None,
+            work_identical_across_repeats=(len(sigs) == 1) if ran and None not in sigs else None,
         ))
     candidates = [c.name for c in results if c.all_eligible and c.meets_target_all_repeats and c.eligible_repeats >= min_repeats]
     marginal = [c.name for c in results if c.name in candidates and c.meets_target_ci_upper is False]
@@ -412,13 +474,13 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
                 what = "telemetry incomplete, energy not compared" if r.energy_withheld else "telemetry incomplete"
                 notes.append(f"{c.name} ({Path(r.run_dir).name}): {what}: " + "; ".join(r.telemetry_problems))
         if c.work_identical_across_repeats is False:
-            notes.append(f"{c.name}: output token counts differ across repeats (work not identical; use ignore_eos / fixed max_tokens)")
+            notes.append(f"{c.name}: workload, model, scheduled arrivals or per-request token counts differ across repeats (work not identical)")
     notes.append("throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it "
                  "reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and "
                  "use a saturating workload to compare capacity")
     all_sigs = {r.work_signature for c in results for r in c.repeats if r.status in ("ok", "ineligible")}
     if len(all_sigs) > 1:
-        notes.append("output token counts differ across configurations; throughput and energy per token are not like-for-like")
+        notes.append("comparison compatibility differs or is unknown; throughput and energy per token are not verified like-for-like")
     rec = None
     if candidates:
         pool = [c for c in results if c.name in candidates]
@@ -433,8 +495,9 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
         if best.name in marginal:
             rec += " The bootstrap interval makes this marginal (see notes)."
     elif results:
-        rec = "No configuration met the target in every repeat; see per-repeat values and notes."
+        rec = "No configuration qualified for a verified recommendation; see per-repeat values and notes."
     return Decision(target=target.describe(), slos=[s.describe() for s in (slos or [])], configs=results, candidates=candidates,
+                    comparison_status="verified" if results and all(c.all_eligible for c in results) else "exploratory",
                     marginal=marginal, recommendation=rec, notes=notes)
 
 
@@ -443,7 +506,7 @@ def _f(v: Optional[float], d: int = 1) -> str:
 
 
 def format_decision(dec: Decision) -> str:
-    lines = [f"target: {dec.target}"]
+    lines = [f"target: {dec.target}", f"comparison: {dec.comparison_status}"]
     for s in dec.slos:
         lines.append(f"slo: {s}")
     lines += ["", f"{'config':14} {'ran':>3} {'elig':>4} {'meets':>6} {'target ms (median [min..max over runs])':>40} {'req-bootstrap 95%':>18} "

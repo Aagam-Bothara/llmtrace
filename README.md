@@ -1,285 +1,235 @@
 # llmtrace
 
-**Flight recorder, attribution, and autopsy for vLLM inference.**
+**Find out why your vLLM workload is slow, try the fix that the evidence points to, and check that it actually helped.**
 
-llmtrace instruments a vLLM `LLMEngine`, samples GPU telemetry alongside it,
-and turns the two into per-request lifecycle traces, an energy ledger, and
-rule-based diagnoses.
+llmtrace sits inside a vLLM 0.11.0 process and records what the scheduler
+did to every request: which engine step it waited in, which requests it
+shared that step with, how many tokens each of them was scheduled, how long
+the GPU was busy, and what the card drew in power. From those records it
+answers three questions in order. What is the bottleneck, and what is the
+evidence for it? Which configuration changes are worth trying? Did a change
+help the requests you care about without hurting the others, across
+independent repeats?
 
-## Status: smoke-tested on one GPU
+It is not a dashboard, not a metrics exporter, and not an AI that guesses. It
+is a measurement tool with a diagnosis layer that shows its work and a small
+experiment runner that replays the same workload under one change at a time.
 
-Validated on real vLLM 0.11.0 with `facebook/opt-125m` (RTX A5000, A4500, 4000 Ada)
-and `Qwen/Qwen2.5-7B` on A100 at TP=1 and TP=2 (2026-09-08); see
-[docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md) for the exact results.
-Preemption, speculative decoding, the OpenAI server process itself (only `AsyncLLM` used directly) and models above 7B are untested.
-llmtrace does not measure GPU busy time; its per-step GPU span was cross-checked against Nsight Systems on opt-125m (span = busy time plus launch gaps, never below Nsight's busy time; see [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md)).
+## The problem it was built for
 
-Status labels: **validated** = exercised on real vLLM 0.11.0 on a GPU with
-committed evidence; **implemented** = CPU-tested against fakes shaped like the
-verified vLLM interfaces; **not implemented** = absent.
+Picture a serving deployment where most requests are short chats and a few
+are long documents. The short ones have a bad tail: p95 time-to-first-token
+is several times the median, and nothing in the Prometheus metrics says why.
+llmtrace's traces show that the slow short requests all sat in engine steps
+that also carried a 1536-token prefill chunk from a long prompt, and that
+those steps took several times longer than the rest. The CUDA-event spans show
+the extra time is GPU compute, not host stalls. `llmtrace plan` proposes
+capping the per-step prefill of long prompts, `llmtrace run --plan` replays
+the workload under each cap, and `llmtrace decide` reports that the 256-token
+cap cuts short-request p95 by about two thirds while making the long
+requests' first token up to twice as slow. Now you know the trade-off and
+can pick a side.
 
-| Area | Status |
-|------|--------|
-| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Validated: patched, traced 8/8 and 64/64 requests, restored cleanly |
-| Scheduler batch metadata | Validated in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
-| GPU telemetry (NVML, background thread) | Validated: all fields populated on an A5000, samples taken while `generate()` blocks |
-| Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; on the GPU run, device energy matched a separately collected `nvidia-smi` stream of the same NVML sensor within 0.15% over identical boundaries |
-| Timing (TTFT/TPOT) | Validated through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
-| Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps). First session (no GPU step timing): +4% (`generate()`) and +9% (cumulative engine loop), 0.13 to 0.29 ms per step. Second session (RTX A5000, GPU step timing on): +7.7% and +14.4%, 0.25 to 0.47 ms per step, of which the CUDA-event recording itself is 0.11 ms per step (+3.0%). Qwen2.5-7B on A100 80GB (same matrix): +1.2% (`generate()`) and +1.7% (engine loop), 0.16 to 0.23 ms per step, CUDA events 0.08 ms per step (+0.6%) |
-| Evidence-based findings (`llmtrace findings`) with assumptions, competing explanations and confidence limits | Three of five findings validated end to end on real vLLM (each induced, found, planned, replayed, decided): long-prompt interference (opt-125m, 7B), queue overload (opt-125m, 7B: `max_num_seqs=8` under bursts; 72 and 88 requests waited over 100 ms), KV-cache pressure (opt-125m: 100% usage in 1547 steps with 56 preemptions from vLLM's stats; Qwen2.5-7B: 22 preemptions, and raising memory utilization removed them and cut e2e p95 by 21% across three independent repeats from a clean commit). `host_overhead` and `tracer_observer_effect` report not supported on every recorded run, which is consistent but not a validation |
-| Experiment planner (`llmtrace plan`, `llmtrace run --plan`) | Validated (RTX A5000, opt-125m): the plan from a real baseline run proposed `long_prefill_token_threshold` 1024 and 512; six engines ran one process each; `decide` selected the 512 cap (short TTFT p95 4.8 ms vs 8.3 ms baseline, goodput 98% vs 89%, long TTFT +62%); the effect grows monotonically with the cap (1024: -24%, 512: -41%, 256: -64% short TTFT p95). Session 3: for queue overload the plan's `max_num_seqs` doubling cut burst TTFT p95 from 379 to 166 ms on opt-125m and from 6.4 to 2.1 s on the 7B model while its `max_num_batched_tokens` doubling changed nothing (a negative control); for KV pressure `gpu_memory_utilization` 0.06 to 0.16 removed all preemptions and cut e2e p95 by 28%. Candidates are ranked by the affected-request count of their finding (`--finding` restricts them) after the cap crowded out the KV candidates on the first attempt |
-| Goodput under per-class SLOs and bootstrap intervals in `decide` | Implemented and CPU-tested |
-| vLLM engine stats via `stat_loggers` hook | Validated on `AsyncLLM` (34 per-step records over the multiprocess core) and, post-hoc, on the sync engine (RTX A5000: 1714 per-step records with KV usage and 136 finished-request stats with queue time). `vllm.LLM` disables stats logging unless `disable_log_stats=False` is passed; the runner passes it |
-| GPU span per step (CUDA events around `execute_model`), `host_overhead` finding | Validated (RTX 4000 Ada, A100 with Qwen2.5-7B): one span per step, never above host time, timer clean; long-prefill interference is GPU compute (7.9 vs 1.7 ms on opt-125m, 103 vs 11 ms on the 7B model); host share 9 to 13% on opt-125m, 2% on the 7B model; refused for TP>1 executors |
-| NVTX ranges per step, Nsight Systems cross-check (`scripts/nsys_step_compare.py`) | Validated (RTX A5000, opt-125m, Nsight Systems 2026.1): all 626 and 654 step ranges of two runs matched to llmtrace's spans; the span was never below Nsight's GPU busy time (kernels plus CUDA-graph executions); busy/span 0.58 on decode steps of this launch-bound 125M model, 0.84 on 1536-token prefill steps |
-| Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
-| Diagnosis experiment (short requests mixed with long prompts) | Run on opt-125m (RTX A4500, RTX 4000 Ada) and on Qwen2.5-7B (A100, TP=1 and TP=2): traces attribute the short-request tail to steps carrying 1536-token prefill chunks, CUDA spans show that cost is GPU prefill compute (103 vs 11 ms steps on the 7B model); `long_prefill_token_threshold=256` cut short TTFT p95 by 62 to 72% and the worst stall by 45 to 72%, raising long-request TTFT by 64 to 116% (`experiments/mixed_prompts/README.md`) |
-| Configuration-driven workloads and runs (`llmtrace workload`, `llmtrace run`) | Validated (RTX A5000, opt-125m): the generic runner reproduces the experiment driver on the same workload and GPU (short TTFT p95 -64 / -65% vs the driver's -61% under the 256 cap; `decide` accepts runner and driver runs as repeats of one configuration, work-identical); one spawned process per real engine so consecutive engines do not fight over GPU memory |
-| `llmtrace doctor` (which signals this environment or a recorded run can provide, and why not) | Implemented; CPU-tested with injected probes |
-| `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
-| `AsyncLLM` (the OpenAI-server engine) via `instrument_async_engine()` | Validated (RTX 4000 Ada, opt-125m): 6 concurrent streams traced with TTFT and engine token counts, a client-cancelled stream recorded as aborted after 4 tokens, `generate`/`abort` restored, vLLM per-step stats via `stat_loggers` over the multiprocess core; no batch membership, queue/prefill boundary or GPU spans there, reported as unavailable with the reason |
-| Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
+That story is not hypothetical. It was run on four GPU models and two model
+sizes, and every number is in [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md).
+Two more bottlenecks, queue overload and KV-cache pressure, went through the
+same loop on a 7B model with three and four independent repeats.
 
-[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) lists precisely what
-is and is not verified.
+## Try it without a GPU
 
-## What it records
-
-**Per request** (`traces_*.jsonl`): arrival, completion, status
-(completed/aborted/incomplete), prompt and output token counts from engine
-token ids, spans at engine-step granularity, TTFT and TPOT with explicit
-"unavailable" reasons, batch ids, and an energy allocation with its policy and
-telemetry coverage. Durations come from the monotonic clock; wall-clock
-timestamps are kept as metadata.
-
-**Per scheduler step** (`batches_*.jsonl`, in-process scheduler only): real
-request ids scheduled, tokens scheduled per request, prefill/decode counts,
-KV-cache usage fraction.
-
-**GPU telemetry** (`gpu_*.jsonl`): power, utilization, memory, clocks,
-throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
-
-**Run manifest** (`manifest.json`, written by `llmtrace run` and the experiment driver): workload
-and its hash, seed, model and revision, engine and llmtrace versions, a
-content fingerprint of the llmtrace source plus the git commit, whether the
-tree was dirty, the dirty diff as `source.patch` and untracked files as
-`source_untracked.tar.gz` with a flag saying whether that snapshot is
-complete, effective engine config,
-GPU and driver, tracer config, per-request scheduled versus actual arrival,
-and `status: failed` with the error when a configuration could not run.
-
-**GPU span per step** (`gpu_steps_*.jsonl`, in-process engine core with
-`torch.cuda`): CUDA events recorded before and after each
-`model_executor.execute_model` call give the step's GPU span (an upper bound
-on GPU busy time; launch gaps included, other streams excluded) and the host
-overhead `host_step_ms - gpu_span_ms`. Read lazily, never by synchronizing.
-`enable_nvtx` adds an NVTX range per step for Nsight Systems, and
-`scripts/nsys_step_compare.py` joins an `nsys` profile with the spans per
-step (on opt-125m the span held as an upper bound on every step and was 58%
-busy on decode steps, 84% on long prefill steps; the rest is launch gaps).
-
-**Collector self-events** (`collector_*.jsonl`): when llmtrace's own drains
-ran and how long they took, so `findings` can flag engine steps the tracer
-itself may have stalled.
-
-**vLLM's own engine stats** (`vllm_stats_*.jsonl`): per step, via vLLM's
-supported `stat_loggers` hook (works with the default multiprocess engine
-core): KV-cache usage, running/waiting counts, preemptions, prefix-cache
-stats, vLLM's own TTFT and inter-token latency samples, and finished-request
-timings (queued/prefill/decode/e2e; vLLM attaches no request ids to these).
-Enable at construction with `LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])`,
-or let `instrument_engine()` attach post-hoc when log stats are on.
-
-## Energy accounting, precisely
-
-Per-request energy on a shared GPU is an allocation, not a measurement.
-Integrating power over a request's lifetime double-counts everything that ran
-alongside it, so llmtrace never reports that number as consumption. The model:
-
-```
-E_r = sum over elementary intervals t of  E_t * w_{r,t} / sum_{j in A_t} w_{j,t}
-```
-
-* `E_t` is the device energy in interval `t`: each GPU's NVML power integrated
-  by trapezoid on that GPU's own timestamps, then summed over GPUs. Gaps
-  longer than `max_sample_gap_s` are not integrated (uncovered time).
-* `A_t` is the set of requests active in `t`. Membership comes from scheduler
-  batch records (which requests were scheduled in the step spanning `t`) when
-  the in-process scheduler is visible; otherwise from request windows, which
-  include queue wait, and the ledger says so.
-* `w_{r,t}` is the weight: 1 for `equal_share`, prompt+output tokens for
-  `proportional_tokens`. `window_only` sets no weights and reports only the
-  shared device energy over each request's window, labeled as shared.
-* Elementary intervals are cut at every request/span boundary, so phase energy
-  (queue/prefill/decode) integrates the power curve within each phase rather
-  than splitting a total by elapsed time.
-* Conservation, checked to floating-point tolerance on every run:
-  `device = attributed + idle + unattributable`, where idle is energy in
-  intervals with no active request (reported, never attributed) and
-  unattributable is energy in intervals whose requests lacked enough telemetry
-  coverage for a figure. Energy outside the run window is not counted.
-* Insufficient telemetry yields `null` with a reason, never zero. Telemetry
-  coverage is reported with every figure.
-
-Validated only in the sense that llmtrace's integrated device energy matched a
-separately collected `nvidia-smi` stream of the same sensor within 0.15%
-(`docs/GPU_VALIDATION.md`); the allocation weights are a stated policy, not a
-physical measurement, and the docs say so wherever a per-request figure appears.
-
-## Install
+The synthetic engine has an invented cost model, so its numbers mean nothing
+about hardware, but the whole pipeline runs on a laptop in a minute or two:
 
 ```bash
-pip install -e .                 # offline analysis + CLI, no GPU deps
-pip install -e ".[nvml]"         # + NVML telemetry
-pip install -e ".[parquet]"      # + parquet output
-pip install -e ".[vllm]"         # + vllm==0.11.0 (Linux, NVIDIA GPU)
-pip install -e ".[dev]"          # + pytest, ruff
+pip install -e ".[dev]"
+llmtrace doctor                                   # what this machine can and cannot record
+llmtrace workload template --output w.json        # short requests at 40/s plus long prompts every 0.2 s
+llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 2
+llmtrace findings ./runs/base/r0 --verbose        # what the traces support, and what they cannot rule out
+llmtrace plan ./runs/base/r0 --repeats 2 --json plan.json
+llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp
+llmtrace decide --target "short ttft_p95 <= 20ms" --slo "short: ttft <= 20ms" \
+    --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
 ```
 
-## Use with vLLM 0.11.0 (offline `LLM` API)
+`findings` will tell you that short requests shared steps with long prefill
+chunks, `plan` will propose two caps, and `decide` will show which cap meets
+the target in every repeat and what it costs the long requests.
+
+## On a real GPU
+
+```bash
+pip install -e ".[vllm]"          # vllm==0.11.0, transformers<5, nvidia-ml-py; Linux + NVIDIA
+export VLLM_ENABLE_V1_MULTIPROCESSING=0
+llmtrace run --workload w.json --engine vllm --model facebook/opt-125m --out ./runs/gpu --repeat 3
+llmtrace doctor ./runs/gpu/r0
+```
+
+The environment variable keeps vLLM's engine core in the same process. That
+is the only way llmtrace can see the scheduler, and the scheduler is where
+the interesting evidence lives: batch membership, chunk sizes, queue and
+prefill boundaries, and the CUDA-event span of each step. With the default
+multiprocess core (and always with `AsyncLLM`) you still get request-level
+traces, GPU telemetry and vLLM's own per-step stats, and `doctor` tells you
+exactly which signals are missing and why.
+
+Each real engine runs in its own spawned process, because a second vLLM
+engine started in the same process fails on free GPU memory. A directory that
+already holds a run is refused unless you pass `--overwrite`, so two runs
+never get mixed into one.
+
+## In your own code
 
 ```python
 from vllm import LLM, SamplingParams
 from llmtrace import LLMTracer
 
 tracer = LLMTracer(output_dir="./traces", gpu_sample_interval_ms=100)
-llm = LLM(model="facebook/opt-125m")
-tracer.instrument_engine(llm.llm_engine)     # patches the engine, starts collection threads
+llm = LLM(model="facebook/opt-125m", disable_log_stats=False)
+tracer.instrument_engine(llm.llm_engine)     # patches the engine, starts the collection threads
 
 outputs = llm.generate(["Hello, world!"], SamplingParams(max_tokens=32))
 
 tracer.stop()                                # restores the engine, drains, flushes
-print(tracer.health())                       # errors, drops, telemetry availability
-tracer.print_analysis(tracer.analyze())
+print(tracer.health())                       # errors, drops, which signals were available
 ```
 
-Set `VLLM_ENABLE_V1_MULTIPROCESSING=0` before creating the `LLM` to keep the
-engine core in-process; that is the only configuration in which the scheduler
-is reachable and batch metadata plus queue/prefill spans are recorded.
-
-**`LLM.generate()` cannot expose first-token timing.** In vLLM 0.11.0 it
-forces `SamplingParams.output_kind = FINAL_ONLY`, so each request produces one
-output at completion. Under `generate()` llmtrace records completion, token
-counts, batches and energy, and reports `ttft_ms`/`tpot_ms` as unavailable
-with that reason. To measure TTFT/TPOT, drive the engine directly with
-cumulative outputs:
+One thing to know about `LLM.generate()`: in vLLM 0.11.0 it forces every
+request to emit a single output at completion, so nobody can observe the
+first token through it. llmtrace records completion, token counts, batches
+and energy under `generate()` and marks TTFT and TPOT as unavailable with
+that reason. To time tokens, drive the engine with cumulative outputs:
 
 ```python
 from llmtrace.vllm_helpers import run_engine_with_timing
 
-tracer.instrument_engine(llm.llm_engine)
 outputs = run_engine_with_timing(llm.llm_engine, prompts, SamplingParams(max_tokens=32))
-tracer.stop()
 ```
 
-## CPU-only synthetic example
+`AsyncLLM`, the engine behind the OpenAI-compatible server, works through
+`tracer.instrument_async_engine(engine)` with request-level traces and vLLM's
+per-step stats; see `examples/vllm_async_smoke_test.py`.
 
-```bash
-python examples/synthetic_replay.py
-```
+## How the diagnosis stays honest
 
-Everything in it is fabricated (fake engine, fake NVML). It demonstrates the
-pipeline and the `compare` exit codes; its numbers mean nothing about hardware.
-
-## CLI
-
-```bash
-llmtrace doctor                                 # which signals this environment can produce, and why not
-llmtrace workload template --output w.json      # request classes, length distributions, arrival processes, seed
-llmtrace workload preview w.json                # generated request list summary and workload hash
-llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 3          # synthetic engine (CPU)
-llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 3 \
-    --config-name capped --set long_prefill_token_threshold=256
-VLLM_ENABLE_V1_MULTIPROCESSING=0 llmtrace run --workload w.json --engine vllm --model facebook/opt-125m --out ./runs/gpu
-llmtrace doctor ./runs/base/r0                  # which signals the recorded run has, and why the others are missing
-```
-
-```bash
-llmtrace analyze ./traces                       # analyze a run directory
-llmtrace analyze ./traces --output report.json  # machine-readable report
-llmtrace compare --baseline ./traces/baseline --current ./traces/current \
-    --ttft-threshold 5 --energy-threshold 10 --fail-on-regression
-llmtrace init-config --output llmtrace_config.json
-llmtrace visualize ./traces/run --compare ./traces/other --html-out report.html --trace-out run.perfetto.json
-```
-
-```bash
-llmtrace findings ./runs/base/r0 --verbose         # hypotheses: evidence, missing evidence, assumptions, competing explanations, limits
-llmtrace plan ./runs/base/r0 --json plan.json      # bounded configuration experiments derived from the supported findings
-llmtrace run --workload w.json --plan plan.json --out ./exp   # baseline (source config) + candidates, <out>/<config>/r<i>
-llmtrace decide --target "short ttft_p95 <= 300ms" --slo "short: ttft <= 300ms, tpot <= 20ms" \
-    --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
-```
-
-`findings` evaluates five hypotheses on a run (queue overload, long-prompt
-interference, KV-cache pressure with preemption, host overhead, and
-llmtrace's own observer effect) and reports each as supported, not supported,
-or insufficient evidence with the missing evidence named. Every finding also
-carries the check's assumptions, the competing explanations the recorded data
-cannot rule out, and its confidence limits (`--verbose` prints them); a
-supported finding is a consistent pattern in the events, never a root cause,
-and names the replay experiment that would establish one.
-
-`plan` turns a run's supported findings into a bounded, reviewable list of
-configuration experiments (for example a `long_prefill_token_threshold` sweep
+Every finding names its evidence down to the file and field it came from,
+lists what evidence is missing, states the assumptions the check rests on,
+lists the competing explanations the recorded data cannot rule out, and says
+where its confidence stops. A supported finding is a consistent pattern in
+the events, never a root cause. The suggested experiment is the causal test,
+and `plan` turns it into concrete, bounded configuration candidates: a cap
 below the largest observed chunk, `max_num_seqs` doubled when the running
-count hit it, `gpu_memory_utilization` raised by 0.1 under KV pressure), each
-with the effect expected if the finding is the cause and the class expected
-to pay for it. `llmtrace run --plan` executes the baseline and every
-candidate as fresh engines with the same workload and repeat count, starting
-from the source run's engine, model, revision, parallelism and engine
-kwargs; no running server is touched. A run directory that already holds a
-run is refused unless `--overwrite` is given.
+count hit it, memory utilization raised by a tenth under KV pressure. Not
+every candidate helps, and that is fine: on the GPU runs, doubling the token
+budget under queue overload changed nothing, and `decide` said so.
 
-`decide` compares configurations (each a set of repeats) against a stated
-target: which meet it in every one of at least `--min-repeats` eligible
-repeats (default 2; three or more recommended; the same run given twice, a
-copied run directory or a run shared between configurations counts once and
-is reported as a duplicate), the run-to-run range of the
-target statistic across repeats, a seeded 95% bootstrap interval over the
-pooled requests (labelled as within-run, since requests share engine steps
-and are not independent; a candidate whose interval's upper bound misses the
-target is flagged marginal), goodput under per-class SLOs
-(`--slo "short: ttft <= 50ms, tpot <= 15ms"`), throughput, energy per output
-token with telemetry coverage, run-to-run range, failed repeats, and whether
-the work was identical. A repeat counts toward a candidate only if every
-selected request has the target metric, every expected request completed (no
-aborted or incomplete ones), and the tracer's full health record was clean
-(instrumentation, writer and collector); lossy or missing GPU telemetry keeps
-the latency comparison but makes energy unavailable for that repeat.
-Ineligible repeats are listed with reasons. It is advisory and changes
-nothing.
+`decide` is equally careful about what counts. A repeat is an independent
+run: the same directory twice, a copied directory, or one run shared between
+configurations is reported as a duplicate and ignored. A configuration needs
+at least `--min-repeats` eligible repeats (two by default, three or more
+recommended) and a clean tracer health record to be a candidate. The
+run-to-run range across repeats is reported next to a bootstrap interval over
+requests, and the bootstrap is labelled as within-run, because requests in
+one run share engine steps and are not independent draws. Goodput under
+per-class SLOs, throughput and energy per token come alongside. It is
+advisory and changes nothing on any server.
 
-`visualize` writes a self-contained HTML report (request timeline with
-queue/prefill/decode phases, step durations over time and versus scheduled
-tokens, GPU power, latency tables, optional side-by-side comparison) and a
-Chrome/Perfetto trace JSON: open it at https://ui.perfetto.dev to scrub any
-slow request against the scheduler steps it shared and the GPU power counter.
-Step-level views need batch metadata (in-process scheduler).
+Every run manifest records the workload and its hash, the seed, the effective
+engine configuration, the GPU, per-request scheduled versus actual arrival,
+and which llmtrace code ran it: a content fingerprint of the source, the git
+commit, whether the tree was dirty, and if so the diff and any untracked files
+archived next to the manifest, with a flag saying whether that snapshot is
+complete.
 
-`compare` sign convention: change = (current - baseline) / baseline. All
-compared metrics are higher-is-worse, so only a positive change above the
-threshold is a regression; improvements never fail. Missing metrics and zero
-baselines are reported as unavailable (`--fail-on-missing` makes them fail).
+## What has actually been checked
 
-## Tests
+Everything below was run on real vLLM 0.11.0 with committed evidence under
+`docs/gpu_runs/`. The full table with every number is in
+[docs/STATUS.md](docs/STATUS.md); the caveats are in
+[docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md).
+
+* **Instrumentation and restoration** of the real engine, batch metadata with
+  real request ids, NVML telemetry, and an energy integral that matched a
+  separately collected `nvidia-smi` stream within 0.15%.
+* **Three of the five findings, end to end**: long-prompt interference on
+  opt-125m and Qwen2.5-7B, queue overload on both, KV-cache pressure on both.
+  Each one was induced, found, planned, replayed and decided. The other two
+  (host overhead, the tracer's own observer effect) report not supported on
+  every run so far, which is consistent but not a validation.
+* **Independent repeats from a clean commit**: the 7B queue and KV loops ran
+  with four and three repeats from a fingerprinted commit, with run-to-run
+  spreads well below the effects.
+* **The GPU span per step** is an upper bound on busy time, and Nsight
+  Systems confirmed it never fell below the kernels' busy time on any of 1280
+  steps. On a 125M model the span is about 58% busy on decode steps, so the
+  bound is loose there and tight on prefill steps.
+* **Overhead**: on Qwen2.5-7B the tracer adds 1.2% to `generate()` and 1.7%
+  to the engine loop, with CUDA-event recording at 0.08 ms per step. On
+  opt-125m, where a step is only a couple of milliseconds, it is 7.7% and
+  14.4%.
+
+Not checked: speculative decoding, `n > 1`, models above 7B, the OpenAI
+server process itself, and more than four repeats per configuration. llmtrace
+does not measure GPU busy time; it measures a span and says so.
+
+## How it relates to what vLLM already gives you
+
+vLLM 0.11.0 already exports per-request queue, prefill and decode times as
+OpenTelemetry spans and Prometheus histograms, and `vllm bench serve` already
+generates bursty arrivals and computes goodput. llmtrace uses vLLM's own
+per-step stats where they exist. What vLLM does not export is which requests
+shared an engine step and how many tokens each was scheduled, per-step GPU
+time cheap enough to leave on, energy, or any link from those measurements to
+a testable configuration change. That link is the part llmtrace adds, and
+[docs/AUDIT.md](docs/AUDIT.md) spells out the overlap without flattering it.
+
+## What it writes
+
+A run directory holds raw data and nothing derived: per-request traces
+(`traces_*.jsonl`), per-step batch records (`batches_*.jsonl`), GPU samples
+(`gpu_*.jsonl`), CUDA-event step spans (`gpu_steps_*.jsonl`), vLLM's own
+stats (`vllm_stats_*.jsonl`), the tracer's own drain timings
+(`collector_*.jsonl`), the workload, and the manifest. Fields the driver
+cannot report are `null`, never zero. `analyze`, `findings`, `visualize` and
+`decide` read those files offline and need neither a GPU nor vLLM.
+`visualize` writes an HTML report and a Perfetto trace you can scrub at
+https://ui.perfetto.dev.
+
+## A word on energy
+
+Per-request energy on a shared GPU is an allocation, not a measurement, and
+llmtrace never pretends otherwise. Device power is integrated per GPU by
+trapezoid over its own timestamps; each elementary interval's energy is split
+among the requests active in it by a stated policy (`equal_share`,
+`proportional_tokens`, or `window_only` which allocates nothing); idle energy
+and energy with insufficient telemetry are reported separately and never
+assigned to anyone; and the ledger checks that attributed plus idle plus
+unattributable equals the device total on every run. The formula and the edge
+cases are in [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Install and test
 
 ```bash
-pip install -e ".[dev]"
-python -m pytest
+pip install -e .                 # offline analysis and the CLI, no GPU dependencies
+pip install -e ".[nvml]"         # GPU telemetry
+pip install -e ".[parquet]"      # parquet output
+pip install -e ".[vllm]"         # vllm==0.11.0 (Linux, NVIDIA GPU)
+pip install -e ".[dev]"          # pytest and ruff
+python -m pytest                 # 252 tests, all CPU, against fakes shaped like the verified vLLM interfaces
 ```
 
-The suite runs without a GPU, NVML or vLLM. It validates llmtrace's own logic
-against fakes shaped like the vLLM 0.11.0 interfaces; it does not prove
-compatibility with real vLLM.
+The test suite proves llmtrace's own logic, not vLLM compatibility; that is
+what the GPU evidence is for.
 
-## Documentation
+## More reading
 
-* [docs/AUDIT.md](docs/AUDIT.md): architecture, capabilities, risks, hardware-backed claims, upstream overlap, roadmap
-* [QUICKSTART.md](QUICKSTART.md)
-* [DEVELOPMENT.md](DEVELOPMENT.md): architecture, verified interfaces, semantics
-* [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md): first GPU run checklist
-* [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md): implementation status
+* [QUICKSTART.md](QUICKSTART.md): the shortest path on CPU and on a GPU
+* [docs/STATUS.md](docs/STATUS.md): the detailed validated / implemented / not implemented table
+* [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md): every GPU session, its numbers and its caveats
+* [docs/AUDIT.md](docs/AUDIT.md): architecture, risks, overlap with upstream tooling, roadmap
+* [DEVELOPMENT.md](DEVELOPMENT.md): how the pieces work and which vLLM interfaces were verified from source
+* [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md): what is and is not verified, in one list
+* [experiments/mixed_prompts/README.md](experiments/mixed_prompts/README.md): the original interference experiment
 
 ## License
 

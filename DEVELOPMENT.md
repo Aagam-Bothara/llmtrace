@@ -313,6 +313,22 @@ share a domain, otherwise wall clock, and records which (`ledger.clock`).
 
 ## Energy ledger (`control_plane/correlator.py`)
 
+Per-request energy is an allocation of measured device energy, never a
+measurement of the request itself:
+
+```
+E_r = sum over elementary intervals t of  E_t * w_{r,t} / sum_{j in A_t} w_{j,t}
+```
+
+`E_t` is the device energy in interval `t` (NVML power integrated by
+trapezoid per GPU on its own timestamps, summed over GPUs); `A_t` the requests
+active in `t` (batch membership when the in-process scheduler is visible,
+request windows otherwise, and the ledger says which); `w_{r,t}` the weight
+(1 for `equal_share`, prompt plus output tokens for `proportional_tokens`;
+`window_only` allocates nothing and reports only the shared window energy).
+Insufficient telemetry yields `null` with a reason, never zero, and coverage
+is reported with every figure. Step by step:
+
 1. Group samples by `gpu_id`; drop samples with `power_draw_watts == null`
    (counted); dedupe identical timestamps (last wins); sort.
 2. Build a cumulative trapezoid curve per GPU. Segments longer than

@@ -40,3 +40,5 @@ executions vLLM uses for decode steps (Nsight records those in
 `CUPTI_ACTIVITY_KIND_GRAPH_TRACE` with the default `--cuda-graph-trace=graph`),
 and reported a busy/span ratio of about 0.10 on decode steps. See
 `docs/GPU_VALIDATION.md` for the numbers.
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-08-rtx-a5000-nsys-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

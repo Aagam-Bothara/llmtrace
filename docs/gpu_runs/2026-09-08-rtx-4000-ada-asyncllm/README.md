@@ -10,3 +10,5 @@ and `tracer.instrument_async_engine(engine)`).
 `async_smoke.log`: ALL CHECKS PASSED. `traces/`: the recorded `traces_*`,
 `gpu_*`, `vllm_stats_*`, `collector_*` files (no `batches_*`: the engine core
 is out of process). `install.log`, `environment.txt`.
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-08-rtx-4000-ada-asyncllm-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

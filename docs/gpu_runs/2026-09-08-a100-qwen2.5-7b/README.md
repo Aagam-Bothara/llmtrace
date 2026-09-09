@@ -27,3 +27,5 @@ phase, collector interval 0.1 s).
 * `install.log`, `dl.log`: note that installing `hf_transfer` for the download
   pulled huggingface_hub 1.30, which transformers 4.57 rejects; pinned back to
   0.36 before the runs (first attempt's failed manifests were discarded).
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-08-a100-qwen2.5-7b-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

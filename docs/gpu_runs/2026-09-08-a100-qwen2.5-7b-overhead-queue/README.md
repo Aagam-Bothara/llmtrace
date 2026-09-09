@@ -26,3 +26,5 @@ manifests). `VLLM_ENABLE_V1_MULTIPROCESSING=0`, model `Qwen/Qwen2.5-7B`
 Numbers are in `docs/GPU_VALIDATION.md`. Model download log omitted.
 
 Provenance: this session ran on a tarball upload without `.git`, with fixes that were uploaded before being committed, so its manifests carry no commit or fingerprint. The exact code is commit 9d13003 plus the fixes committed together with this evidence (the commit that added this directory). Runs made after that commit record `llmtrace_source_fingerprint`, the full commit, and `source.patch` when dirty.
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-08-a100-qwen2.5-7b-overhead-queue-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

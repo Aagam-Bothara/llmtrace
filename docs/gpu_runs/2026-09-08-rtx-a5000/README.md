@@ -24,3 +24,5 @@ Code tested: `llmtrace/`, `examples/`, `scripts/gpu_smoke_run.sh` as in commit
 `long/overhead.py` is the exact overhead script that ran (`/root/overhead.py`).
 `smoke/cpu_tests.log` shows 83 tests because `tests/test_collection.py` was
 skipped as a module on the pod (no pyarrow there); see `docs/GPU_VALIDATION.md`.
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-08-rtx-a5000-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

@@ -2,6 +2,12 @@
 
 **Find out why your vLLM workload is slow, try the fix that the evidence points to, and check that it actually helped.**
 
+On Qwen2.5-7B under bursty load, llmtrace's traces showed requests queueing
+behind a sequence cap, its planner proposed doubling the cap, and the replay
+cut burst time-to-first-token p95 from 6.4 s to 2.2 s at 47% lower energy
+per token, across four independent repeats from a fingerprinted commit
+([the evidence](docs/GPU_VALIDATION.md)).
+
 llmtrace sits inside a vLLM 0.11.0 process and records what the scheduler
 did to every request: which engine step it waited in, which requests it
 shared that step with, how many tokens each of them was scheduled, how long
@@ -14,6 +20,17 @@ independent repeats?
 It is not a dashboard, not a metrics exporter, and not an AI that guesses. It
 is a measurement tool with a diagnosis layer that shows its work and a small
 experiment runner that replays the same workload under one change at a time.
+
+**Read this before anything else.** The scheduler-level signals that make the
+diagnosis work (batch membership, chunk sizes, queue and prefill boundaries,
+GPU time per step) exist only with vLLM's engine core running in the same
+process, `VLLM_ENABLE_V1_MULTIPROCESSING=0`, which production deployments do
+not use. llmtrace is a research and pre-production tool: you reproduce a
+workload on a scratch engine, diagnose it there, and take the configuration
+decision back to production. With the default multiprocess core, or the
+OpenAI server's `AsyncLLM`, you get request-level traces, GPU telemetry and
+vLLM's own per-step stats, and `llmtrace doctor` tells you exactly what is
+missing. It is pinned to vLLM 0.11.0 and verified against that source.
 
 ## The problem it was built for
 
@@ -225,6 +242,7 @@ what the GPU evidence is for.
 
 * [QUICKSTART.md](QUICKSTART.md): the shortest path on CPU and on a GPU
 * [docs/STATUS.md](docs/STATUS.md): the detailed validated / implemented / not implemented table
+* [docs/gpu_runs/README.md](docs/gpu_runs/README.md): the evidence directories; raw trace files are release assets, summaries and manifests are in git
 * [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md): every GPU session, its numbers and its caveats
 * [docs/AUDIT.md](docs/AUDIT.md): architecture, risks, overlap with upstream tooling, roadmap
 * [DEVELOPMENT.md](DEVELOPMENT.md): how the pieces work and which vLLM interfaces were verified from source

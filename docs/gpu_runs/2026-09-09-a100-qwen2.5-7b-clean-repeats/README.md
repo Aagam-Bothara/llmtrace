@@ -30,3 +30,5 @@ its log. Every engine ran in its own spawned process; `decide` was run with
   is the result); `findings_*`.
 
 Numbers are in `docs/GPU_VALIDATION.md`.
+
+Raw trace files (`*.jsonl`) for this session are not in git: they are the `2026-09-09-a100-qwen2.5-7b-clean-repeats-raw-traces.tar.gz` asset of the GitHub release [`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09); extract it at the repository root to restore them under this directory. Manifests, summaries and every derived output are here.

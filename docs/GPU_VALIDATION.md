@@ -1,5 +1,10 @@
 # GPU Validation
 
+Evidence layout: each session under `docs/gpu_runs/` keeps its README, driver
+script, manifests and every derived output in git; the raw JSONL trace files
+are release assets ([`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09), one archive per session,
+see `docs/gpu_runs/README.md` to restore them).
+
 The first GPU run happened on 2026-09-08 (results below). The checklist that
 follows is the procedure for repeating it; record results with exact commands
 and outputs, never from memory.

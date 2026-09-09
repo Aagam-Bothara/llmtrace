@@ -1,4 +1,0 @@
-{"timestamp":1788894611.4583826,"monotonic":8221568.161204436,"clock_domain":"f32016ab1cd2","duration_ms":0.05654711276292801,"traces":0,"batches":8,"samples":4,"stats":0}
-{"timestamp":1788894611.5585458,"monotonic":8221568.261369376,"clock_domain":"f32016ab1cd2","duration_ms":0.03749039024114609,"traces":0,"batches":9,"samples":4,"stats":0}
-{"timestamp":1788894611.6586783,"monotonic":8221568.361501645,"clock_domain":"f32016ab1cd2","duration_ms":0.03316253423690796,"traces":0,"batches":9,"samples":4,"stats":0}
-{"timestamp":1788894611.720596,"monotonic":8221568.423420102,"clock_domain":"f32016ab1cd2","duration_ms":0.0346451997756958,"traces":8,"batches":6,"samples":4,"stats":0}

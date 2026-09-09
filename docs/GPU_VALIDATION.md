@@ -253,7 +253,14 @@ Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-bottlenecks/` (opt-125m) and
 `docs/gpu_runs/2026-09-08-a100-qwen2.5-7b-overhead-queue/` (Qwen2.5-7B).
 Each bottleneck was induced with a workload spec and one engine setting, then
 taken through `findings`, `plan --max-candidates 2 --repeats 2`, `run --plan`
-(one spawned process per engine) and `decide`.
+(one spawned process per engine) and `decide`. Two repeats per configuration
+is the minimum `decide` accepts, not a good estimate of run-to-run variation;
+the min..max ranges below rest on two runs each, and the bootstrap intervals
+are within-run statements over requests that share engine steps. Provenance:
+these sessions ran the session-2 and session-3 fixes uploaded before they
+were committed (the pods had no `.git`); the READMEs name the base commit,
+and the fixes are in the commit that adds this evidence. Runs made from now
+on carry a source fingerprint and, when dirty, `source.patch`.
 
 | Check | Result |
 |-------|--------|

@@ -31,7 +31,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from llmtrace.health import assess_health
-from llmtrace.manifest import ArrivalRecord, RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version
+from llmtrace.manifest import ArrivalRecord, RunManifest, engine_effective_config, gpu_info, llmtrace_version
+from llmtrace.provenance import record_provenance
 from llmtrace.workload import RequestSpec, WorkloadSpec, make_prompt
 
 RUN_FILES = ("manifest.json", "run_info.json", "workload.json")
@@ -113,7 +114,7 @@ class RunOptions:
     warmup: bool = True  # vllm only: untraced full-workload replay first
     settle_requests: int = 4  # vllm only: traced settling requests (class "settle") before the measured replay
     fake_power_w: float = 150.0  # fake engine: constant synthetic GPU power
-    repo_dir: Optional[str] = None  # for the git commit in the manifest
+    repo_dir: Optional[str] = None  # git tree to record; default: the one containing the installed package
     overwrite: bool = False  # remove a previous run's files from out_dir instead of refusing it
 
 
@@ -129,7 +130,7 @@ def run_workload(spec: WorkloadSpec, opts: RunOptions) -> RunManifest:
     spec.save(str(out / "workload.json"))
     manifest = RunManifest(label=opts.label or out.name, engine=opts.engine, synthetic=opts.engine == "fake",
                            model=opts.model if opts.engine == "vllm" else "fake",
-                           llmtrace_version=llmtrace_version(), llmtrace_git_commit=git_commit(opts.repo_dir),
+                           llmtrace_version=llmtrace_version(), **record_provenance(str(out), opts.repo_dir),
                            gpu=gpu_info() if opts.engine == "vllm" else None,
                            workload=spec.model_dump(exclude_none=True), workload_hash=spec.hash(), seed=spec.seed,
                            config_name=opts.config_name, scheduling_change=dict(opts.scheduling_change),

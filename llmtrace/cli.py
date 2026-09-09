@@ -254,9 +254,11 @@ def plan(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_thres
 @click.option("--min-metric-coverage", type=float, default=1.0, help="Share of selected requests that must carry the target metric")
 @click.option("--slo", "slos", multiple=True,
               help="Per-class request SLOs for goodput, e.g. 'short: ttft <= 50ms, tpot <= 15ms' ('*' for all classes); repeatable")
+@click.option("--min-repeats", type=int, default=2, show_default=True,
+              help="Eligible repeats a configuration needs to be a candidate (three or more recommended)")
 @click.option("--json", "json_out", type=click.Path(), help="Write the decision JSON here")
 def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_classes: Tuple[str, ...], min_metric_coverage: float,
-           slos: Tuple[str, ...], json_out: Optional[str]) -> None:
+           slos: Tuple[str, ...], min_repeats: int, json_out: Optional[str]) -> None:
     """Compare configurations against a latency target, with goodput under SLOs and bootstrap intervals (advisory; changes nothing)."""
     from llmtrace.control_plane.decision import Slo, Target, evaluate, format_decision
 
@@ -273,7 +275,8 @@ def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_clas
             sys.exit(EXIT_USAGE)
         name, dirs = c.split("=", 1)
         parsed[name.strip()] = [d.strip() for d in dirs.split(",") if d.strip()]
-    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None, slos=parsed_slos or None)
+    dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None, slos=parsed_slos or None,
+                   min_repeats=min_repeats)
     click.echo(format_decision(dec))
     if json_out:
         Path(json_out).write_text(dec.model_dump_json(indent=2), encoding="utf-8")

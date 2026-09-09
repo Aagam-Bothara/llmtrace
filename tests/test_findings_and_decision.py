@@ -143,7 +143,7 @@ class TestDecision:
         assert "present for only 67%" in c.repeats[1].problems[0]
         assert c.meets_target_all_repeats is False and dec.candidates == []
         assert any("ineligible" in n for n in dec.notes)
-        dec2 = evaluate({"cfg": [good, partial]}, Target.parse("short ttft_p95 <= 100ms"), min_metric_coverage=0.5)
+        dec2 = evaluate({"cfg": [good, partial]}, Target.parse("short ttft_p95 <= 100ms"), min_metric_coverage=0.5, min_repeats=1)
         assert dec2.candidates == ["cfg"]  # only when the user explicitly relaxes coverage
 
     def test_aborted_requests_make_a_repeat_ineligible(self, tmp_path):
@@ -157,7 +157,7 @@ class TestDecision:
         short = self._run(tmp_path, "s", [1.0, 2.0], manifest=RunManifest(expected_requests=3, health={"instrumentation_errors": 0}))
         sick = self._run(tmp_path, "h", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation": {"instrumentation_errors": 2}}))
         fine = self._run(tmp_path, "f", [1.0, 2.0], manifest=RunManifest(expected_requests=2, health={"instrumentation_errors": 0}))
-        dec = evaluate({"short": [short], "sick": [sick], "fine": [fine]}, Target.parse("short ttft_p95 <= 100ms"))
+        dec = evaluate({"short": [short], "sick": [sick], "fine": [fine]}, Target.parse("short ttft_p95 <= 100ms"), min_repeats=1)
         by = {c.name: c for c in dec.configs}
         assert "2 traced requests but 3 expected" in by["short"].repeats[0].problems[0]
         assert "health not clean" in by["sick"].repeats[0].problems[0]
@@ -173,18 +173,18 @@ class TestDecision:
         io.write_jsonl(d / "traces_x.jsonl", traces)
         RunManifest(expected_requests=3).write(str(d))  # old driver counted the workload only
         assert evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms")).candidates == []
-        dec = evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms"), exclude_classes=["settle"])
+        dec = evaluate({"c": [str(d)]}, Target.parse("short ttft_p95 <= 20ms"), exclude_classes=["settle"], min_repeats=1)
         assert dec.candidates == ["c"] and dec.configs[0].repeats[0].requests == 3
         assert any("open-loop" in n for n in dec.notes)
-        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 20ms", "--config", f"c={d}", "--exclude-class", "settle"])
+        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 20ms", "--config", f"c={d}", "--exclude-class", "settle", "--min-repeats", "1"])
         assert r.exit_code == 0 and "candidates meeting the target in every repeat: c" in r.output
 
     def test_ttft_sched_target_uses_manifest_delays(self, tmp_path):
         m = RunManifest(expected_requests=2, arrivals=[ArrivalRecord(request_id="short-0", scheduled_s=0, actual_s=0.05, delay_ms=50.0),
                                                        ArrivalRecord(request_id="short-1", scheduled_s=0, actual_s=0.0, delay_ms=0.0)])
         d = self._run(tmp_path, "d", [10.0, 10.0], manifest=m)
-        eng = evaluate({"c": [d]}, Target.parse("short ttft_p95 <= 20ms"))
-        sched = evaluate({"c": [d]}, Target.parse("short ttft_sched_p95 <= 20ms"))
+        eng = evaluate({"c": [d]}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=1)
+        sched = evaluate({"c": [d]}, Target.parse("short ttft_sched_p95 <= 20ms"), min_repeats=1)
         assert eng.candidates == ["c"] and sched.candidates == []  # 60 ms from intended arrival
         assert sched.configs[0].repeats[0].target_value_ms == pytest.approx(60.0)
         assert sched.configs[0].repeats[0].arrival_delay_ms_max == pytest.approx(50.0)
@@ -192,7 +192,7 @@ class TestDecision:
     def test_cli_decide_and_findings(self, tmp_path):
         a = self._run(tmp_path, "a0", [10, 20])
         b = self._run(tmp_path, "b0", [5, 6])
-        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 15ms", "--config", f"A={a}", "--config", f"B={b}",
+        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 15ms", "--config", f"A={a}", "--config", f"B={b}", "--min-repeats", "1",
                                       "--json", str(tmp_path / "d.json")])
         assert r.exit_code == 0, r.output
         assert "candidates meeting the target in every repeat: B" in r.output

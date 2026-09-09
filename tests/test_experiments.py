@@ -98,7 +98,7 @@ class TestGoodputAndBootstrap:
         assert by["loose"].meets_target_all_repeats is False
         assert dec.candidates == ["tight"] and "goodput" in dec.recommendation
         text = format_decision(dec)
-        assert "95% CI" in text and "goodput" in text and "slo: short: ttft <= 20 ms, tpot <= 5 ms" in text
+        assert "req-bootstrap 95%" in text and "goodput" in text and "slo: short: ttft <= 20 ms, tpot <= 5 ms" in text
         # marginal: every repeat's p95 is 30/31 ms (< 35) but the pooled bootstrap upper bound can reach 31 -> not marginal here;
         # build a case where the upper bound exceeds the target
         edge = [self._run(tmp_path, "e0", [10.0] * 18 + [34.0, 36.0]), self._run(tmp_path, "e1", [10.0] * 18 + [34.0, 36.0])]
@@ -107,6 +107,25 @@ class TestGoodputAndBootstrap:
         # per-repeat p95 (nearest rank of 20 values) = 34 -> meets; pooled bootstrap p95 reaches 36 -> marginal
         assert c.meets_target_all_repeats is True and c.target_ci95_ms[1] >= 36.0 and dec2.marginal == ["edge"]
         assert any("marginal" in n for n in dec2.notes) and "marginal" in dec2.recommendation
+
+    def test_min_repeats_and_uncertainty_notes(self, tmp_path):
+        one = [self._run(tmp_path, "o0", [10.0] * 20)]
+        two = [self._run(tmp_path, "t0", [10.0] * 18 + [12.0, 12.0]), self._run(tmp_path, "t1", [10.0] * 18 + [14.0, 14.0])]
+        dec = evaluate({"one": one, "two": two}, Target.parse("short ttft_p95 <= 20ms"))
+        by = {c.name: c for c in dec.configs}
+        assert by["one"].meets_target_all_repeats is True and by["one"].eligible_repeats == 1
+        assert dec.candidates == ["two"]  # one repeat is not enough by default
+        assert any("one" in n and "1 eligible repeat" in n and "--min-repeats" in n for n in dec.notes)
+        assert by["two"].target_repeat_spread_ms == pytest.approx(2.0)
+        assert any("bootstrap over requests" in n and "understates" in n for n in dec.notes)
+        assert any("two" in n and "2.0 ms spread" in n and "three or more" in n for n in dec.notes)
+        relaxed = evaluate({"one": one, "two": two}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=1)
+        assert set(relaxed.candidates) == {"one", "two"}
+        strict = evaluate({"one": one, "two": two}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=3)
+        assert strict.candidates == []
+        assert "min..max over runs" in format_decision(dec) and "req-bootstrap" in format_decision(dec)
+        r = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 20ms", "--config", f"one={one[0]}", "--min-repeats", "1"])
+        assert r.exit_code == 0 and "candidates meeting the target in every repeat: one" in r.output
 
     def test_cli_decide_with_slo(self, tmp_path):
         a = self._run(tmp_path, "a0", [10, 20])

@@ -60,10 +60,11 @@ KV-cache usage fraction.
 throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 
 **Run manifest** (`manifest.json`, written by `llmtrace run` and the experiment driver): workload
-and its hash, seed, model and revision, engine and llmtrace versions and git
-commit, effective engine config, GPU and driver, tracer config, per-request
-scheduled versus actual arrival, and `status: failed` with the error when a
-configuration could not run.
+and its hash, seed, model and revision, engine and llmtrace versions, a
+content fingerprint of the llmtrace source plus the git commit, whether the
+tree was dirty and the dirty diff as `source.patch`, effective engine config,
+GPU and driver, tracer config, per-request scheduled versus actual arrival,
+and `status: failed` with the error when a configuration could not run.
 
 **GPU span per step** (`gpu_steps_*.jsonl`, in-process engine core with
 `torch.cuda`): CUDA events recorded before and after each
@@ -229,9 +230,12 @@ kwargs; no running server is touched. A run directory that already holds a
 run is refused unless `--overwrite` is given.
 
 `decide` compares configurations (each a set of repeats) against a stated
-target: which meet it in every repeat, a seeded 95% bootstrap interval of the
-target statistic over the pooled requests (a candidate whose interval's upper
-bound misses the target is flagged marginal), goodput under per-class SLOs
+target: which meet it in every one of at least `--min-repeats` eligible
+repeats (default 2; three or more recommended), the run-to-run range of the
+target statistic across repeats, a seeded 95% bootstrap interval over the
+pooled requests (labelled as within-run, since requests share engine steps
+and are not independent; a candidate whose interval's upper bound misses the
+target is flagged marginal), goodput under per-class SLOs
 (`--slo "short: ttft <= 50ms, tpot <= 15ms"`), throughput, energy per output
 token with telemetry coverage, run-to-run range, failed repeats, and whether
 the work was identical. A repeat counts toward a candidate only if every

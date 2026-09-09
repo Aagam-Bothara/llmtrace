@@ -39,3 +39,5 @@ Every run directory holds `traces_*`, `batches_*`, `gpu_*`, `gpu_steps_*`,
 (`vllm_stats_*` only from `runner/baseline_2` and `planned/` onward). The
 `.log` files next to them are the drivers' stdout/stderr. Numbers are in
 `docs/GPU_VALIDATION.md`.
+
+Provenance: this session ran on a tarball upload without `.git`, with fixes that were uploaded before being committed, so its manifests carry no commit or fingerprint. The exact code is commit 9d13003 plus the fixes committed together with this evidence (the commit that added this directory). Runs made after that commit record `llmtrace_source_fingerprint`, the full commit, and `source.patch` when dirty.

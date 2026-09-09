@@ -51,6 +51,21 @@ already holds a run is refused (`FileExistsError`; `--overwrite` removes the pre
 files first): two runs written into one directory would load as one run with
 twice the traces and a manifest expecting half of them.
 
+## Provenance (`provenance.py`)
+
+Every manifest records which code produced the run: `llmtrace_source_fingerprint`
+(sha256 over the installed package's `.py` files, path-sorted, line endings
+normalized), `llmtrace_git_commit` and `llmtrace_git_commit_full`,
+`llmtrace_git_dirty`, and when the tree is dirty the `git diff HEAD` saved
+next to the manifest as `source.patch` (`llmtrace_source_patch`) plus the
+names of untracked `.py` files. A fingerprint equal to a clean commit's
+fingerprint proves the evidence came from that commit; a dirty run is
+reproducible from the commit plus the patch. `llmtrace doctor` prints the
+fingerprint and git state of the installed code and, for a run directory,
+whether the run's fingerprint matches the code installed now. GPU sessions 2
+and 3 predate this and are described in their READMEs as a commit plus the
+fixes committed together with the evidence.
+
 ## Health assessment (`health.py`)
 
 `assess_health()` is the one reading of `LLMTracer.health()` used by the
@@ -198,10 +213,18 @@ absent (then with no request ids).
 
 `decision.evaluate()` scores configurations against a parsed `Target`
 (`<class|*> <ttft|ttft_sched|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and
-only reports. Uncertainty: per-repeat median/min/max plus a seeded percentile
-bootstrap (default 1000 resamples) of the target statistic over the
-per-request values pooled across eligible repeats; a candidate whose interval
-upper bound misses the target is listed as `marginal`. Optional `Slo`s
+only reports. Uncertainty comes in two kinds that are never merged. The
+run-to-run range is the min..max (and spread) of the target statistic across
+eligible repeats; it is the only estimate of between-run variation, so a
+configuration needs `min_repeats` eligible repeats (default 2, `--min-repeats`;
+three or more recommended, and the notes say how many each configuration
+had) to be a candidate. The 95% interval is a seeded percentile bootstrap
+(default 1000 resamples) over the per-request values pooled across eligible
+repeats: a within-run statement that treats requests as independent draws,
+which they are not (requests in one run share engine steps and the arrival
+schedule), so it understates the true uncertainty and the table labels it
+`req-bootstrap`; a candidate whose interval upper bound misses the target is
+listed as `marginal`. Optional `Slo`s
 (`<class|*>: <metric> <= <ms>, ...`) give goodput: the share of selected
 requests meeting every bound, with a request lacking a bounded metric counted
 as not meeting it and the coverage reported. The recommendation prefers the

@@ -28,7 +28,8 @@ from typing import Any, Dict, List
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from workload import RequestSpec, WorkloadConfig, build_workload  # noqa: E402
 
-from llmtrace.manifest import RunManifest, engine_effective_config, git_commit, gpu_info, llmtrace_version, workload_hash  # noqa: E402
+from llmtrace.manifest import RunManifest, engine_effective_config, gpu_info, llmtrace_version, workload_hash  # noqa: E402
+from llmtrace.provenance import record_provenance  # noqa: E402
 from llmtrace.runner import drive, prepare_run_dir  # noqa: E402  (the serving-loop driver moved into the library unchanged)
 
 # The one scheduling change under test. Everything else stays at vLLM defaults.
@@ -146,7 +147,7 @@ def main() -> int:
     config = CONFIGS[args.config]
     engine_kwargs = json.loads(args.engine_kwargs)
     manifest = RunManifest(label=out.name, engine=args.engine, synthetic=args.engine == "fake", model=args.model,
-                           llmtrace_version=llmtrace_version(), llmtrace_git_commit=git_commit(str(Path(__file__).resolve().parents[2])),
+                           llmtrace_version=llmtrace_version(), **record_provenance(str(out), str(Path(__file__).resolve().parents[2])),
                            gpu=gpu_info(), workload=wl.to_dict(), workload_hash=workload_hash(specs), seed=wl.seed,
                            config_name=args.config, scheduling_change=config, engine_kwargs=engine_kwargs)
     try:

@@ -120,6 +120,16 @@ def environment_report(probes: Optional[Probes] = None) -> DoctorReport:
     p = probes or Probes()
     checks: List[Check] = []
 
+    from llmtrace.provenance import git_state, source_fingerprint
+
+    st = git_state()
+    prov = f"fingerprint {source_fingerprint()}"
+    if st["commit"]:
+        prov += f", commit {st['commit_short']}" + (" DIRTY (uncommitted changes; runs will save source.patch)" if st["dirty"] else " clean")
+    else:
+        prov += ", no git tree (the fingerprint is the only identity of this code)"
+    checks.append(Check(name="llmtrace source", status="warn" if st["dirty"] else "ok", detail=prov,
+                        consequence="evidence from a dirty tree is reproducible only with its source.patch" if st["dirty"] else None))
     pv = p.python_version
     checks.append(Check(name="python", status="ok" if (3, 9) <= pv[:2] <= (3, 12) else "warn",
                         detail=f"{pv[0]}.{pv[1]}.{pv[2]}",
@@ -214,6 +224,15 @@ def run_report(run_dir: str) -> DoctorReport:
             checks.append(Check(name="requests finished", status="ok" if ok else "error",
                                 detail=f"{m.finished} finished, {m.expected_requests} expected (incl. settle requests)",
                                 consequence=None if ok else "decide treats this run as ineligible"))
+        fp = m.llmtrace_source_fingerprint
+        if fp:
+            same = fp == __import__("llmtrace.provenance", fromlist=["source_fingerprint"]).source_fingerprint()
+            checks.append(Check(name="source", status="ok" if not m.llmtrace_git_dirty else "warn",
+                                detail=f"{fp}, commit {m.llmtrace_git_commit or 'n/a'}"
+                                       + (" dirty" if m.llmtrace_git_dirty else "") + (", same code as installed now" if same else ", differs from the installed code"),
+                                consequence=(f"reproduce from commit {m.llmtrace_git_commit} plus {m.llmtrace_source_patch}" if m.llmtrace_git_dirty else None)))
+        else:
+            checks.append(Check(name="source", status="warn", detail="no source fingerprint in the manifest (recorded before provenance existed)"))
         if m.arrival_delay_ms_max is not None:
             late = m.arrival_delay_ms_max > 50.0
             checks.append(Check(name="load generator", status="warn" if late else "ok",

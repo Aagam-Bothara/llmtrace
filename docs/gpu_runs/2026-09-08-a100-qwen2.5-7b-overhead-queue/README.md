@@ -24,3 +24,5 @@ manifests). `VLLM_ENABLE_V1_MULTIPROCESSING=0`, model `Qwen/Qwen2.5-7B`
   `bn_driver.log` is that script's stdout.
 
 Numbers are in `docs/GPU_VALIDATION.md`. Model download log omitted.
+
+Provenance: this session ran on a tarball upload without `.git`, with fixes that were uploaded before being committed, so its manifests carry no commit or fingerprint. The exact code is commit 9d13003 plus the fixes committed together with this evidence (the commit that added this directory). Runs made after that commit record `llmtrace_source_fingerprint`, the full commit, and `source.patch` when dirty.

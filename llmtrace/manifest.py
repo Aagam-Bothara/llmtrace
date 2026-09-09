@@ -43,6 +43,11 @@ class RunManifest(BaseModel):
     engine_version: Optional[str] = None
     llmtrace_version: Optional[str] = None
     llmtrace_git_commit: Optional[str] = None
+    llmtrace_git_commit_full: Optional[str] = None
+    llmtrace_git_dirty: Optional[bool] = None  # tracked changes or untracked .py files at run time
+    llmtrace_source_patch: Optional[str] = None  # file next to the manifest holding `git diff HEAD` when dirty
+    llmtrace_untracked_py: List[str] = Field(default_factory=list)
+    llmtrace_source_fingerprint: Optional[str] = None  # sha256 over the installed package's .py files
     python: str = Field(default_factory=lambda: sys.version.split()[0])
     platform: str = Field(default_factory=platform.platform)
     gpu: Optional[Dict[str, Any]] = None

@@ -7,11 +7,18 @@ output token with telemetry coverage, run-to-run variability, and whether any
 repeat failed (a ``run_info.json`` / ``manifest.json`` with ``status: failed``,
 or no traces). No setting is changed anywhere; the table is the deliverable.
 
-Uncertainty: besides the per-repeat values (median, min, max across repeats),
-the target statistic gets a 95% bootstrap percentile interval computed over
-the per-request values pooled across the eligible repeats (seeded, so the
-interval is reproducible). A configuration whose every repeat meets the
-target but whose interval's upper bound does not is flagged as marginal.
+Uncertainty: two kinds, reported separately and never merged. The run-to-run
+range is the min..max of the target statistic across eligible repeats; it is
+the only estimate of between-run variation, so a configuration needs at
+least ``min_repeats`` eligible repeats (default 2; three or more recommended)
+to be a candidate, and a note says how many it had. The 95% interval is a
+seeded percentile bootstrap over the per-request values pooled across
+eligible repeats: a within-run statement that treats requests as independent
+draws, which they are not (requests in one run share engine steps and the
+same arrival schedule), so it understates the true uncertainty and must not
+be read as a confidence interval over runs. A configuration whose every
+repeat meets the target but whose interval's upper bound does not is
+flagged as marginal.
 
 Goodput: optional SLOs per request class (``--slo "short: ttft <= 50ms, tpot
 <= 15ms"``) give the share of selected requests that meet every bound of
@@ -184,6 +191,8 @@ class ConfigResult(BaseModel):
     goodput_median: Optional[float] = None
     goodput_min: Optional[float] = None
     goodput_max: Optional[float] = None
+    eligible_repeats: int = 0
+    target_repeat_spread_ms: Optional[float] = None  # max - min of the target statistic across eligible repeats
     tokens_per_s_median: Optional[float] = None
     joules_per_output_token_median: Optional[float] = None
     coverage_min: Optional[float] = None
@@ -308,13 +317,15 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
 
 def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "equal_share",
              min_metric_coverage: float = 1.0, exclude_classes: Optional[List[str]] = None,
-             slos: Optional[List[Slo]] = None, bootstrap_resamples: int = 1000, seed: int = 0) -> Decision:
+             slos: Optional[List[Slo]] = None, bootstrap_resamples: int = 1000, seed: int = 0,
+             min_repeats: int = 2) -> Decision:
     results: List[ConfigResult] = []
     for name, dirs in configs.items():
         reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos) for dd in dirs]
         ran = [r for r in reps if r.status in ("ok", "ineligible")]
         ok = [r for r in reps if r.eligible]
         tvals = [r.target_value_ms for r in ran if r.target_value_ms is not None]
+        ok_vals = [r.target_value_ms for r in ok if r.target_value_ms is not None]
         pooled = [v for r in ok for v in r.target_values_ms]
         ci = bootstrap_interval(pooled, target.stat, bootstrap_resamples, seed) if pooled else None
         gps = [r.goodput for r in ran if r.goodput is not None]
@@ -329,7 +340,8 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
             meets_target_all_repeats=(all(r.meets_target is True for r in ok) if all_eligible else (False if reps else None)),
             target_median_ms=statistics.median(tvals) if tvals else None,
             target_min_ms=min(tvals) if tvals else None, target_max_ms=max(tvals) if tvals else None,
-            target_ci95_ms=ci, pooled_requests=len(pooled),
+            target_ci95_ms=ci, pooled_requests=len(pooled), eligible_repeats=len(ok),
+            target_repeat_spread_ms=(max(ok_vals) - min(ok_vals)) if len(ok_vals) >= 2 else None,
             meets_target_ci_upper=(ci[1] <= target.value_ms) if ci else None,
             goodput_median=statistics.median(gps) if gps else None,
             goodput_min=min(gps) if gps else None, goodput_max=max(gps) if gps else None,
@@ -338,16 +350,24 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
             coverage_min=min(cov) if cov else None,
             work_identical_across_repeats=(len(sigs) == 1) if ran else None,
         ))
-    candidates = [c.name for c in results if c.all_eligible and c.meets_target_all_repeats]
+    candidates = [c.name for c in results if c.all_eligible and c.meets_target_all_repeats and c.eligible_repeats >= min_repeats]
     marginal = [c.name for c in results if c.name in candidates and c.meets_target_ci_upper is False]
     notes = []
+    for c in results:
+        if c.all_eligible and c.meets_target_all_repeats and c.eligible_repeats < min_repeats:
+            notes.append(f"{c.name}: meets the target but has only {c.eligible_repeats} eligible repeat(s); "
+                         f"{min_repeats} needed to be a candidate (--min-repeats)")
     for c in results:
         if c.name in marginal and c.target_ci95_ms:
             notes.append(f"{c.name}: meets the target in every repeat but the 95% bootstrap interval of {target.metric}_{target.stat} "
                          f"over {c.pooled_requests} pooled requests is [{c.target_ci95_ms[0]:.1f}, {c.target_ci95_ms[1]:.1f}] ms, "
                          f"above {target.value_ms:g} ms at the upper end: marginal, add repeats or requests")
-        if c.repeats and len([r for r in c.repeats if r.eligible]) < 2:
-            notes.append(f"{c.name}: only {len([r for r in c.repeats if r.eligible])} eligible repeat; run-to-run variation is unknown")
+        if c.repeats and c.eligible_repeats < 3:
+            notes.append(f"{c.name}: {c.eligible_repeats} eligible repeat(s); the run-to-run range "
+                         + (f"({c.target_repeat_spread_ms:.1f} ms spread) rests on {c.eligible_repeats} runs" if c.target_repeat_spread_ms is not None
+                            else "is unknown") + "; three or more repeats are recommended")
+    notes.append("the 95% interval is a bootstrap over requests pooled across repeats (within-run; requests share engine steps and "
+                 "are not independent), so it understates run-to-run uncertainty; the [min..max] over repeats is the run-to-run range")
     if slos:
         for c in results:
             low_cov = [r for r in c.repeats if r.slo_metric_coverage is not None and r.slo_metric_coverage < 1.0]
@@ -399,7 +419,7 @@ def format_decision(dec: Decision) -> str:
     lines = [f"target: {dec.target}"]
     for s in dec.slos:
         lines.append(f"slo: {s}")
-    lines += ["", f"{'config':14} {'ran':>3} {'elig':>4} {'meets':>6} {'target ms (median [min..max])':>32} {'95% CI':>16} "
+    lines += ["", f"{'config':14} {'ran':>3} {'elig':>4} {'meets':>6} {'target ms (median [min..max over runs])':>40} {'req-bootstrap 95%':>18} "
               f"{'goodput':>8} {'tok/s':>8} {'J/tok':>8} {'cov':>5} {'same work':>9}"]
     for c in dec.configs:
         meets = "n/a" if c.meets_target_all_repeats is None else ("yes" if c.meets_target_all_repeats else "no")
@@ -408,7 +428,7 @@ def format_decision(dec: Decision) -> str:
         gp = "n/a" if c.goodput_median is None else f"{c.goodput_median:.0%}"
         same = "n/a" if c.work_identical_across_repeats is None else ("yes" if c.work_identical_across_repeats else "NO")
         elig = f"{sum(1 for r in c.repeats if r.eligible)}/{len(c.repeats)}"
-        lines.append(f"{c.name:14} {('yes' if c.all_ok else 'NO'):>3} {elig:>4} {meets:>6} {rng:>32} {ci:>16} {gp:>8} "
+        lines.append(f"{c.name:14} {('yes' if c.all_ok else 'NO'):>3} {elig:>4} {meets:>6} {rng:>40} {ci:>18} {gp:>8} "
                      f"{_f(c.tokens_per_s_median, 0):>8} {_f(c.joules_per_output_token_median, 4):>8} {_f(c.coverage_min, 2):>5} {same:>9}")
     lines.append("")
     for n in dec.notes:

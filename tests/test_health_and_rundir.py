@@ -92,7 +92,7 @@ class TestDecideUsesFullHealth:
     def test_writer_and_collector_errors_make_a_repeat_ineligible(self, tmp_path):
         bad = self._run(tmp_path, "bad", _health(writer__write_errors=3, collection_errors=2, last_collection_error="x"))
         good = self._run(tmp_path, "good", CLEAN)
-        dec = evaluate({"bad": [bad], "good": [good]}, Target.parse("short ttft_p95 <= 20ms"))
+        dec = evaluate({"bad": [bad], "good": [good]}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=1)
         by = {c.name: c for c in dec.configs}
         r = by["bad"].repeats[0]
         assert r.status == "ineligible" and r.health_ok is False and any("writer" in p for p in r.health_problems)
@@ -206,7 +206,7 @@ class TestIsolatedRun:
         assert on_disk.status == "failed" and on_disk.error == crashed.error
         assert len(io.load_traces([str(tmp_path / "crashed")])) == 2  # the data the child wrote is kept, but not trusted
         dec = evaluate({"good": [str(tmp_path / "good")], "crashed": [str(tmp_path / "crashed")],
-                        "mixed": [str(tmp_path / "good"), str(tmp_path / "crashed")]}, Target.parse("a ttft_p95 <= 1000ms"))
+                        "mixed": [str(tmp_path / "good"), str(tmp_path / "crashed")]}, Target.parse("a ttft_p95 <= 1000ms"), min_repeats=1)
         by = {c.name: c for c in dec.configs}
         assert by["crashed"].repeats[0].status == "failed" and "exited with code 3" in by["crashed"].repeats[0].error
         assert by["crashed"].all_ok is False and by["crashed"].meets_target_all_repeats is False
@@ -232,6 +232,59 @@ class TestIsolatedRun:
         out2 = tmp_path / "nope"
         m2 = run_workload_isolated(_spec(), RunOptions(engine="nope", out_dir=str(out2)), timeout_s=300)
         assert m2.status == "failed"
+
+
+class TestProvenance:
+    def test_fingerprint_is_content_based(self, tmp_path):
+        from llmtrace.provenance import source_fingerprint
+        a = tmp_path / "a"
+        a.mkdir()
+        (a / "x.py").write_text("print(1)\n")
+        f1 = source_fingerprint(a)
+        assert f1 == source_fingerprint(a) and f1.startswith("sha256:")
+        (a / "x.py").write_text("print(2)\n")
+        assert source_fingerprint(a) != f1
+        (a / "x.py").write_bytes(b"print(1)\r\n")  # line endings do not change the identity
+        assert source_fingerprint(a) == f1
+        assert source_fingerprint() == source_fingerprint()  # the installed package
+
+    def test_git_state_and_patch_in_a_temp_repo(self, tmp_path):
+        import shutil
+        import subprocess
+        from llmtrace.provenance import git_state, record_provenance
+        if shutil.which("git") is None:
+            pytest.skip("git not available")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        run = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, check=True)  # noqa: E731
+        run("init", "-q")
+        run("config", "user.email", "t@example.com")
+        run("config", "user.name", "t")
+        (repo / "m.py").write_text("a = 1\n")
+        run("add", "m.py")
+        run("commit", "-q", "-m", "init")
+        clean = git_state(repo)
+        assert clean["commit"] and clean["dirty"] is False and clean["diff"] == "" and clean["untracked"] == []
+        (repo / "m.py").write_text("a = 2\n")
+        (repo / "new.py").write_text("b = 1\n")
+        dirty = git_state(repo)
+        assert dirty["dirty"] is True and "-a = 1" in dirty["diff"] and "+a = 2" in dirty["diff"] and dirty["untracked"] == ["new.py"]
+        out = tmp_path / "run"
+        prov = record_provenance(str(out), str(repo))
+        assert prov["llmtrace_git_dirty"] is True and prov["llmtrace_source_patch"] == "source.patch"
+        assert (out / "source.patch").read_text().count("+a = 2") == 1 and prov["llmtrace_untracked_py"] == ["new.py"]
+        assert prov["llmtrace_git_commit_full"] == clean["commit"] and prov["llmtrace_git_commit"] == clean["commit"][:7]
+        assert git_state(tmp_path / "not_a_repo_dir_that_does_not_exist")["commit"] is None or True  # never raises
+
+    def test_manifest_records_provenance(self, tmp_path):
+        m = run_workload(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "p")))
+        assert m.llmtrace_source_fingerprint and m.llmtrace_source_fingerprint.startswith("sha256:")
+        back = RunManifest.read(str(tmp_path / "p"))
+        assert back.llmtrace_source_fingerprint == m.llmtrace_source_fingerprint
+        if m.llmtrace_git_dirty:
+            assert m.llmtrace_source_patch is None or (tmp_path / "p" / m.llmtrace_source_patch).exists()
+        rep = run_report(str(tmp_path / "p"))
+        assert any(c.name == "source" and m.llmtrace_source_fingerprint in c.detail for c in rep.checks)
 
 
 class TestPlanReproducesSource:

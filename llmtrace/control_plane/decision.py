@@ -144,7 +144,8 @@ def bootstrap_interval(values: List[float], stat: str, resamples: int = 1000, se
 
 class RepeatResult(BaseModel):
     run_dir: str
-    status: str  # ok | ineligible | failed | empty
+    status: str  # ok | ineligible | failed | empty | duplicate
+    session_id: Optional[str] = None  # the tracer session that produced the run (from the manifest health or the traces)
     error: Optional[str] = None
     problems: List[str] = Field(default_factory=list)  # why a repeat is ineligible
     eligible: bool = False
@@ -249,6 +250,11 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         err = manifest.error if manifest is not None else info.get("error")
         return RepeatResult(run_dir=str(d), status="failed", error=str(err)[:300])
     traces = io.load_traces([d])
+    session = None
+    if manifest is not None and isinstance(manifest.health, dict):
+        session = manifest.health.get("session_id")
+    if not session and traces:
+        session = traces[0].clock_domain
     excluded = 0
     if exclude_classes:
         keep = [t for t in traces if t.request_id.split("-")[0] not in exclude_classes]
@@ -299,7 +305,7 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     energy_ok = gpu_ok is not False
     gp, gp_n, gp_cov = goodput(res.traces, slos or [], delays)
     return RepeatResult(
-        run_dir=str(d), status="ok" if eligible else "ineligible", problems=problems, eligible=eligible,
+        run_dir=str(d), status="ok" if eligible else "ineligible", problems=problems, eligible=eligible, session_id=session,
         target_value_ms=tv, meets_target=(tv <= target.value_ms) if (tv is not None and eligible) else None,
         metric_coverage=coverage,
         attainment_fraction=(sum(1 for v in vals if v <= target.value_ms) / len(vals)) if vals else None,
@@ -320,8 +326,26 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
              slos: Optional[List[Slo]] = None, bootstrap_resamples: int = 1000, seed: int = 0,
              min_repeats: int = 2) -> Decision:
     results: List[ConfigResult] = []
+    # A repeat is an independent run. The same directory given twice, a copy of a run directory (same tracer
+    # session id) or one run listed under two configurations must not count twice: the later mention is a duplicate.
+    seen_paths: Dict[str, str] = {}
+    seen_sessions: Dict[str, str] = {}
+    dup_notes: List[str] = []
     for name, dirs in configs.items():
-        reps = [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos) for dd in dirs]
+        reps = []
+        for dd in dirs:
+            r = evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos)
+            key = str(Path(dd).resolve())
+            first = seen_paths.get(key) or (seen_sessions.get(r.session_id) if r.session_id else None)
+            if first is not None:
+                where = "same directory" if key in seen_paths else f"same tracer session {r.session_id} (a copied run directory)"
+                r = RepeatResult(run_dir=str(dd), status="duplicate", error=f"duplicate of {first}: {where}", session_id=r.session_id)
+                dup_notes.append(f"{name} ({Path(dd).name}): not an independent repeat, {r.error}")
+            else:
+                seen_paths[key] = f"{name}/{Path(dd).name}"
+                if r.session_id:
+                    seen_sessions[r.session_id] = f"{name}/{Path(dd).name}"
+            reps.append(r)
         ran = [r for r in reps if r.status in ("ok", "ineligible")]
         ok = [r for r in reps if r.eligible]
         tvals = [r.target_value_ms for r in ran if r.target_value_ms is not None]
@@ -352,7 +376,7 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
         ))
     candidates = [c.name for c in results if c.all_eligible and c.meets_target_all_repeats and c.eligible_repeats >= min_repeats]
     marginal = [c.name for c in results if c.name in candidates and c.meets_target_ci_upper is False]
-    notes = []
+    notes = list(dup_notes)
     for c in results:
         if c.all_eligible and c.meets_target_all_repeats and c.eligible_repeats < min_repeats:
             notes.append(f"{c.name}: meets the target but has only {c.eligible_repeats} eligible repeat(s); "
@@ -378,6 +402,9 @@ def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "
         failed = [r for r in c.repeats if r.status in ("failed", "empty")]
         if failed:
             notes.append(f"{c.name}: {len(failed)} repeat(s) failed or empty ({failed[0].error})")
+        dups = [r for r in c.repeats if r.status == "duplicate"]
+        if dups:
+            notes.append(f"{c.name}: {len(dups)} duplicate repeat(s) ignored; the configuration is not a candidate until they are replaced by independent runs")
         for r in c.repeats:
             if r.status == "ineligible":
                 notes.append(f"{c.name} ({Path(r.run_dir).name}): ineligible: " + "; ".join(r.problems))

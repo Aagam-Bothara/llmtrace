@@ -86,6 +86,7 @@ class TestDecideUsesFullHealth:
         d.mkdir()
         io.write_jsonl(d / "traces_x.jsonl", [RequestTrace(request_id=f"short-{i}", start_time=0, end_time=1, prompt_length=4,
                                                             output_length=4, model_name="m", ttft_ms=10.0) for i in range(3)])
+        health = {**health, "session_id": name}  # distinct tracer sessions: a repeated session is a duplicate
         RunManifest(engine="fake", health=health, expected_requests=3).write(str(d))
         return str(d)
 
@@ -272,9 +273,25 @@ class TestProvenance:
         out = tmp_path / "run"
         prov = record_provenance(str(out), str(repo))
         assert prov["llmtrace_git_dirty"] is True and prov["llmtrace_source_patch"] == "source.patch"
-        assert (out / "source.patch").read_text().count("+a = 2") == 1 and prov["llmtrace_untracked_py"] == ["new.py"]
+        assert (out / "source.patch").read_text().count("+a = 2") == 1 and prov["llmtrace_untracked_files"] == ["new.py"]
         assert prov["llmtrace_git_commit_full"] == clean["commit"] and prov["llmtrace_git_commit"] == clean["commit"][:7]
-        assert git_state(tmp_path / "not_a_repo_dir_that_does_not_exist")["commit"] is None or True  # never raises
+        # the untracked file's contents are archived, so commit + patch + archive restore the tree
+        import tarfile
+        assert prov["llmtrace_untracked_archive"] == "source_untracked.tar.gz" and prov["llmtrace_snapshot_complete"] is True
+        with tarfile.open(out / "source_untracked.tar.gz") as tar:
+            assert tar.getnames() == ["new.py"] and tar.extractfile("new.py").read().replace(b"\r\n", b"\n") == b"b = 1\n"
+        # an untracked file above the cap makes the snapshot incomplete, and says so
+        from llmtrace import provenance as prov_mod
+        old_cap = prov_mod.UNTRACKED_MAX_BYTES
+        prov_mod.UNTRACKED_MAX_BYTES = 3
+        try:
+            p2 = record_provenance(str(tmp_path / "run2"), str(repo))
+        finally:
+            prov_mod.UNTRACKED_MAX_BYTES = old_cap
+        assert p2["llmtrace_snapshot_complete"] is False and any("exceeds" in g for g in p2["llmtrace_snapshot_gaps"])
+        # no git tree: identified, not restorable
+        p3 = record_provenance(str(tmp_path / "run3"), str(tmp_path / "plain_dir_without_git"))
+        assert p3["llmtrace_git_commit"] is None and p3["llmtrace_snapshot_complete"] is False
 
     def test_manifest_records_provenance(self, tmp_path):
         m = run_workload(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "p")))
@@ -283,8 +300,50 @@ class TestProvenance:
         assert back.llmtrace_source_fingerprint == m.llmtrace_source_fingerprint
         if m.llmtrace_git_dirty:
             assert m.llmtrace_source_patch is None or (tmp_path / "p" / m.llmtrace_source_patch).exists()
+            assert m.llmtrace_untracked_archive is None or (tmp_path / "p" / m.llmtrace_untracked_archive).exists()
+        assert m.llmtrace_snapshot_complete is not None
         rep = run_report(str(tmp_path / "p"))
         assert any(c.name == "source" and m.llmtrace_source_fingerprint in c.detail for c in rep.checks)
+
+
+class TestDuplicateRepeats:
+    def _one_run(self, tmp_path, name="src"):
+        spec = WorkloadSpec(name="dup", classes=[RequestClass(name="a", count=3, prompt_len=LengthSpec(value=8), max_tokens=LengthSpec(value=2))])
+        run_workload(spec, RunOptions(engine="fake", out_dir=str(tmp_path / name)))
+        return str(tmp_path / name)
+
+    def test_same_directory_twice_is_one_repeat(self, tmp_path):
+        d = self._one_run(tmp_path)
+        alone = evaluate({"c": [d]}, Target.parse("a ttft_p95 <= 1000ms"))
+        assert alone.candidates == []  # one repeat is below --min-repeats
+        twice = evaluate({"c": [d, d]}, Target.parse("a ttft_p95 <= 1000ms"))
+        assert twice.candidates == [] and twice.configs[0].eligible_repeats == 1
+        assert twice.configs[0].repeats[1].status == "duplicate" and "same directory" in twice.configs[0].repeats[1].error
+        assert any("not an independent repeat" in n for n in twice.notes)
+        # a relative and an absolute spelling of the same path are the same run
+        import os
+        rel = os.path.relpath(d, os.getcwd())
+        assert evaluate({"c": [d, rel]}, Target.parse("a ttft_p95 <= 1000ms")).configs[0].eligible_repeats == 1
+
+    def test_copied_directory_is_a_duplicate_by_session(self, tmp_path):
+        import shutil
+        d = self._one_run(tmp_path)
+        shutil.copytree(d, tmp_path / "copy")
+        dec = evaluate({"c": [d, str(tmp_path / "copy")]}, Target.parse("a ttft_p95 <= 1000ms"))
+        assert dec.candidates == [] and dec.configs[0].repeats[1].status == "duplicate"
+        assert "same tracer session" in dec.configs[0].repeats[1].error
+        # two genuinely separate runs are two repeats
+        d2 = self._one_run(tmp_path, "src2")
+        ok = evaluate({"c": [d, d2]}, Target.parse("a ttft_p95 <= 1000ms"))
+        assert ok.configs[0].eligible_repeats == 2 and ok.candidates == ["c"]
+
+    def test_same_run_under_two_configurations(self, tmp_path):
+        d = self._one_run(tmp_path)
+        d2 = self._one_run(tmp_path, "src2")
+        dec = evaluate({"base": [d, d2], "cand": [d2, d]}, Target.parse("a ttft_p95 <= 1000ms"))
+        by = {c.name: c for c in dec.configs}
+        assert by["base"].eligible_repeats == 2 and by["cand"].eligible_repeats == 0
+        assert all(r.status == "duplicate" for r in by["cand"].repeats) and dec.candidates == ["base"]
 
 
 class TestPlanReproducesSource:

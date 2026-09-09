@@ -127,7 +127,7 @@ def environment_report(probes: Optional[Probes] = None) -> DoctorReport:
     if st["commit"]:
         prov += f", commit {st['commit_short']}" + (" DIRTY (uncommitted changes; runs will save source.patch)" if st["dirty"] else " clean")
     else:
-        prov += ", no git tree (the fingerprint is the only identity of this code)"
+        prov += ", no git tree (the fingerprint identifies this code but cannot restore it)"
     checks.append(Check(name="llmtrace source", status="warn" if st["dirty"] else "ok", detail=prov,
                         consequence="evidence from a dirty tree is reproducible only with its source.patch" if st["dirty"] else None))
     pv = p.python_version
@@ -230,7 +230,11 @@ def run_report(run_dir: str) -> DoctorReport:
             checks.append(Check(name="source", status="ok" if not m.llmtrace_git_dirty else "warn",
                                 detail=f"{fp}, commit {m.llmtrace_git_commit or 'n/a'}"
                                        + (" dirty" if m.llmtrace_git_dirty else "") + (", same code as installed now" if same else ", differs from the installed code"),
-                                consequence=(f"reproduce from commit {m.llmtrace_git_commit} plus {m.llmtrace_source_patch}" if m.llmtrace_git_dirty else None)))
+                                consequence=((f"reproduce from commit {m.llmtrace_git_commit} plus {m.llmtrace_source_patch or 'no patch'}"
+                                              + (f" and {m.llmtrace_untracked_archive}" if m.llmtrace_untracked_archive else ""))
+                                             if m.llmtrace_git_dirty and m.llmtrace_snapshot_complete else
+                                             ("source snapshot INCOMPLETE: " + "; ".join(m.llmtrace_snapshot_gaps) if m.llmtrace_snapshot_complete is False
+                                              else None))))
         else:
             checks.append(Check(name="source", status="warn", detail="no source fingerprint in the manifest (recorded before provenance existed)"))
         if m.arrival_delay_ms_max is not None:

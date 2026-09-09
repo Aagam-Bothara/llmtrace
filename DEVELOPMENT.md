@@ -57,12 +57,19 @@ Every manifest records which code produced the run: `llmtrace_source_fingerprint
 (sha256 over the installed package's `.py` files, path-sorted, line endings
 normalized), `llmtrace_git_commit` and `llmtrace_git_commit_full`,
 `llmtrace_git_dirty`, and when the tree is dirty the `git diff HEAD` saved
-next to the manifest as `source.patch` (`llmtrace_source_patch`) plus the
-names of untracked `.py` files. A fingerprint equal to a clean commit's
-fingerprint proves the evidence came from that commit; a dirty run is
-reproducible from the commit plus the patch. `llmtrace doctor` prints the
-fingerprint and git state of the installed code and, for a run directory,
-whether the run's fingerprint matches the code installed now. GPU sessions 2
+next to the manifest as `source.patch` (`llmtrace_source_patch`) plus
+`source_untracked.tar.gz` with the contents of every untracked, non-ignored
+file (`llmtrace_untracked_archive`; files above 1 MB are listed but not
+archived). `llmtrace_snapshot_complete` is false, with the gaps listed in
+`llmtrace_snapshot_gaps`, whenever something could not be captured: a binary
+tracked change, an oversized untracked file, a failed archive, or no git tree
+at all. A fingerprint equal to a clean commit's fingerprint proves the
+evidence came from that commit; a dirty run is reproducible from the commit,
+the patch and the archive only when the snapshot is complete, and a
+fingerprint alone identifies code without restoring it. `llmtrace doctor`
+prints the fingerprint and git state of the installed code and, for a run
+directory, whether the run's fingerprint matches the code installed now and
+whether its snapshot is complete. GPU sessions 2
 and 3 predate this and are described in their READMEs as a commit plus the
 fixes committed together with the evidence.
 
@@ -213,7 +220,12 @@ absent (then with no request ids).
 
 `decision.evaluate()` scores configurations against a parsed `Target`
 (`<class|*> <ttft|ttft_sched|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and
-only reports. Uncertainty comes in two kinds that are never merged. The
+only reports. A repeat is an independent run: the same directory listed
+twice (under any spelling of the path), a copied run directory (same tracer
+session id, taken from the manifest health or the traces' clock domain), or
+one run listed under two configurations counts once; later mentions get
+status `duplicate`, are excluded from eligibility, and are named in the
+notes. Uncertainty comes in two kinds that are never merged. The
 run-to-run range is the min..max (and spread) of the target statistic across
 eligible repeats; it is the only estimate of between-run variation, so a
 configuration needs `min_repeats` eligible repeats (default 2, `--min-repeats`;

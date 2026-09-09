@@ -62,7 +62,9 @@ throttle reasons per GPU. Fields the driver does not report are `null`, never 0.
 **Run manifest** (`manifest.json`, written by `llmtrace run` and the experiment driver): workload
 and its hash, seed, model and revision, engine and llmtrace versions, a
 content fingerprint of the llmtrace source plus the git commit, whether the
-tree was dirty and the dirty diff as `source.patch`, effective engine config,
+tree was dirty, the dirty diff as `source.patch` and untracked files as
+`source_untracked.tar.gz` with a flag saying whether that snapshot is
+complete, effective engine config,
 GPU and driver, tracer config, per-request scheduled versus actual arrival,
 and `status: failed` with the error when a configuration could not run.
 
@@ -231,7 +233,9 @@ run is refused unless `--overwrite` is given.
 
 `decide` compares configurations (each a set of repeats) against a stated
 target: which meet it in every one of at least `--min-repeats` eligible
-repeats (default 2; three or more recommended), the run-to-run range of the
+repeats (default 2; three or more recommended; the same run given twice, a
+copied run directory or a run shared between configurations counts once and
+is reported as a duplicate), the run-to-run range of the
 target statistic across repeats, a seeded 95% bootstrap interval over the
 pooled requests (labelled as within-run, since requests share engine steps
 and are not independent; a candidate whose interval's upper bound misses the

@@ -1,0 +1,15 @@
+llmtrace doctor (run)
+
+  [     ok] manifest: vllm, model Qwen/Qwen2.5-7B, config mem25, workload sha256:cb632fc41271ee3f
+  [     ok] requests finished: 64 finished, 68 expected (incl. settle requests)
+  [     ok] source: sha256:bd5774b11fa83b41598d, commit n/a, same code as installed now
+            -> source snapshot INCOMPLETE: no git tree: the fingerprint identifies the code but nothing here can restore it
+  [     ok] load generator: arrival delay p50 10.13 ms, max 19.89 ms
+
+  signals:
+    yes  request traces (traces_*)
+    yes  batch membership and chunk sizes (batches_*)
+    yes  GPU telemetry and energy (gpu_*)
+    yes  vLLM per-step stats (vllm_stats_*)
+    yes  collector self-events (collector_*)
+    yes  GPU step spans (gpu_steps_*)

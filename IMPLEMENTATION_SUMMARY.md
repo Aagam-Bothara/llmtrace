@@ -92,6 +92,10 @@ The `tests/` suite (no GPU, NVML or vLLM required) covers:
 * Overhead matrix with GPU step timing on/off on opt-125m (RTX A5000): CUDA
   events cost 0.11 ms per step (+3.0%); on Qwen2.5-7B (A100 80GB) the whole
   tracer is +1.2% / +1.7% and CUDA events 0.08 ms per step (+0.6%).
+* Clean-commit validation set on Qwen2.5-7B (A100, session 4): queue overload
+  with four independent repeats and KV-cache pressure with three, every
+  manifest carrying the source fingerprint of commit b3973ed; run-to-run
+  spreads under 40 ms (queue) and under 0.4 s (KV, on 30 to 38 s tails).
 * Queue overload and KV-cache pressure induced on real vLLM (RTX A5000;
   queue also on the 7B model on A100): found by `findings`, candidates from
   `plan`, replayed by `run --plan`, compared by `decide`; a planner ranking

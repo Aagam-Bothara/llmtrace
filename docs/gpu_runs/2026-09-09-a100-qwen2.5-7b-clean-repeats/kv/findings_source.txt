@@ -1,0 +1,55 @@
+[supported] queue_overload: 32 request(s) waited >= 100 ms before first being scheduled.
+    affected (32): kv-0032, kv-0033, kv-0034, kv-0035, kv-0036, kv-0037, kv-0038, kv-0039 ...
+    evidence: queue wait p95 across requests with a queue span = 526 ms  [traces_*.jsonl:spans[phase=queue]]
+    evidence: max requests waiting in vLLM's queue per step = 32 requests  [vllm_stats_*.jsonl:num_waiting_reqs]
+    evidence: vLLM's own queued time p95 = 525 ms  [vllm_stats_*.jsonl:finished_requests.queued_time]
+    assumes: queue wait is the time from add_request to the first engine step that scheduled the request (in-process scheduler), or vLLM's own queued_time for finished requests
+    assumes: the threshold separates ordinary scheduling delay from overload for this workload
+    also consistent with: load-generator lateness rather than scheduler queueing (compare manifest arrival delays with the queue spans)
+    also consistent with: requests waited for KV-cache blocks rather than for step capacity (see kv_cache_pressure)
+    also consistent with: one large prefill chunk consumed the step's token budget (see long_prompt_interference)
+    limit: queue wait is step-granular (resolved to the end of the step that first scheduled the request)
+    limit: vLLM's queued_time carries no request ids, so affected requests come only from in-process queue spans
+    experiment: Replay the same workload at a lower arrival rate, or with a higher max_num_seqs / max_num_batched_tokens, and compare queue wait p95 and throughput.
+[supported] long_prompt_interference: 61 request(s) decoded or waited in 7 step(s) that also prefilled a chunk > 128 tokens; those steps took 526.2 ms vs 16.5 ms for the rest. They waited while the scheduler spent its token budget on other work.
+    affected (61): settle-1, settle-2, settle-3, kv-0001, kv-0002, kv-0003, kv-0004, kv-0005 ...
+    evidence: engine steps carrying a prefill chunk above the threshold = 7 steps  [batches_*.jsonl:scheduled_tokens]
+    evidence: median duration of those steps = 526 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: median duration of all other steps = 16.5 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: requests that shared such a step without owning the chunk = 61 requests  [traces_*.jsonl:batch_ids]
+    assumes: an engine step's duration is set mainly by the largest prefill chunk it carries
+    assumes: every request scheduled in a step waits for the whole step, so sharing a long step delays its tokens
+    also consistent with: the long steps were slow for another reason: first-time batch shapes or CUDA-graph capture (see warm-up in the manifest), host stalls (see host_overhead), or the tracer's own drains (see tracer_observer_effect)
+    also consistent with: the sharing requests' TTFT came from queue wait before they were scheduled, not from the step they shared (compare their queue spans)
+    limit: this is co-occurrence of step membership and step duration; cause is established only by the replay with long_prefill_token_threshold changed
+    limit: GPU step spans, when present, show the step was GPU compute but not whose tokens consumed it
+    experiment: Replay with long_prefill_token_threshold set to a smaller per-step chunk (e.g. 256) and compare the sharing requests' TTFT p95 and worst inter-token stall against the long requests' TTFT cost.
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 733 step(s) with 22 preemption(s) reported by vLLM.
+    affected (64): kv-0000, kv-0001, kv-0002, kv-0003, kv-0004, kv-0005, kv-0006, kv-0007 ...
+    evidence: max KV-cache usage = 1 fraction  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: steps with usage >= 90% = 733 steps  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: preemptions reported by vLLM = 22 requests  [vllm_stats_*.jsonl:num_preempted_reqs]
+    missing: which requests were preempted (vLLM stats carry no request ids)
+    assumes: KV-cache usage at or above the threshold means block allocation can fail for new tokens
+    assumes: preemptions reported by vLLM in the same run are caused by that shortage
+    also consistent with: high usage without preemptions is ordinary steady state for a full batch (not a problem by itself)
+    also consistent with: preemptions can also follow priority scheduling or a request longer than max_model_len allows
+    limit: vLLM stats carry no request ids: the requests alive during high-usage steps are known only with batch metadata
+    limit: usage is sampled once per step; a shortage inside a step is not visible
+    experiment: Replay with a lower max_num_seqs or a higher gpu_memory_utilization and compare preemptions, KV usage max and the affected requests' TPOT.
+[not_supported] host_overhead: Host-side time is 9% of a typical step; steps are GPU-bound.
+    evidence: median GPU span per step = 15.4 ms  [gpu_steps_*.jsonl:gpu_span_ms]
+    evidence: median host step time = 16.9 ms  [gpu_steps_*.jsonl:host_step_ms]
+    evidence: median share of step time not spanned by the GPU = 0.0872 fraction  [gpu_steps_*.jsonl:host_overhead_ms/host_step_ms]
+    evidence: steps with a resolved GPU span = 2.15e+03 steps  [gpu_steps_*.jsonl]
+    missing: GPU busy time (CUPTI); the CUDA-event span includes launch gaps
+    assumes: host_step_ms - gpu_span_ms is time the GPU stream was not spanned by the model forward (scheduling, input preparation, output processing, tracing)
+    also consistent with: the span excludes work on vLLM's other streams and includes launch gaps inside the span, so a high host share on a tiny model can be launch-bound GPU idle time rather than host work (Nsight cross-check: decode steps of a 125M model were 58% busy inside the span)
+    limit: measured only with UniProcExecutor on the blocking execute path; the tracer's own per-step cost is inside the host share
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 385 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.114 ms  [collector_*.jsonl:duration_ms]
+    assumes: a collector drain that overlaps an engine step and is a material part of that step's excess over the median delayed it
+    also consistent with: the overlapping step was long for its own reasons (a large prefill chunk, a first-time shape)
+    limit: the drain's duration is measured by the collector thread; GIL contention it caused inside the step is inferred, not measured
+Findings written to /workspace/s4/kv/findings_source.json

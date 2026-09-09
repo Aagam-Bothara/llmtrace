@@ -1,0 +1,115 @@
+2026-09-09T00:35:14Z
+NVIDIA A100 80GB PCIe, 570.172.08, 81920 MiB
+3.11.11 torch 2.8.0+cu128 vllm 0.11.0 transformers 4.57.6 llmtrace 0.2.0
+commit b3973edff61c9da3ff32065baaccda24f1cbbe9c (git archive HEAD, clean tree)
+expected fingerprint sha256:bd5774b11fa83b41598d
+fingerprint sha256:bd5774b11fa83b41598d
+pytest exit=0 251 passed, 1 skipped in 52.83s
+=== download model
+download exit=0
+=== queue: source run (seqs8: --set max_num_seqs=8), 4 repeats per configuration
+source exit=0 :: [/workspace/s4/queue/source] vllm config=seqs8 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.168s arrival delay p50/max 6.710214540362358 / 12.341211549937725 ms
+[supported] queue_overload: 88 request(s) waited >= 100 ms before first being scheduled.
+[not_supported] long_prompt_interference: No engine step carried a prefill chunk larger than 128 tokens.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+[not_supported] host_overhead: Host-side time is 3% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+plan exit=0
+source: vllm, Qwen/Qwen2.5-7B
+[seqs16] --set max_num_seqs=16
+[budget16384] --set max_num_batched_tokens=16384
+skipped: long_prompt_interference: not_supported
+skipped: kv_cache_pressure: not_supported
+skipped: host_overhead: not_supported
+run --plan exit=0
+[/workspace/s4/queue/planned/baseline/r0] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.172s arrival delay p50/max 5.698856897652149 / 10.2962246164
+[/workspace/s4/queue/planned/baseline/r1] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.173s arrival delay p50/max 5.607403814792633 / 16.5044656023
+[/workspace/s4/queue/planned/baseline/r2] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.193s arrival delay p50/max 4.817002452909946 / 9.33944899588
+[/workspace/s4/queue/planned/baseline/r3] vllm config=baseline workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.156s arrival delay p50/max 10.213775560259819 / 16.049953177
+[/workspace/s4/queue/planned/seqs16/r0] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=4.969s arrival delay p50/max 9.90214478224516 / 17.19643734395504 
+[/workspace/s4/queue/planned/seqs16/r1] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=4.918s arrival delay p50/max 4.41938079893589 / 8.400719612836838 
+[/workspace/s4/queue/planned/seqs16/r2] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=4.931s arrival delay p50/max 5.642028525471687 / 11.76670193672180
+[/workspace/s4/queue/planned/seqs16/r3] vllm config=seqs16 workload=sha256:c2afe1bcfd8d9888 steps=384 finished=96/96 (+4 settle) wall=4.955s arrival delay p50/max 12.091416865587234 / 18.3590603992342
+[/workspace/s4/queue/planned/budget16384/r0] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.239s arrival delay p50/max 8.313013240695 / 14.2314145
+[/workspace/s4/queue/planned/budget16384/r1] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.211s arrival delay p50/max 7.023856975138187 / 17.7523
+[/workspace/s4/queue/planned/budget16384/r2] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.214s arrival delay p50/max 9.575127623975277 / 17.6775
+[/workspace/s4/queue/planned/budget16384/r3] vllm config=budget16384 workload=sha256:c2afe1bcfd8d9888 steps=768 finished=96/96 (+4 settle) wall=9.228s arrival delay p50/max 7.2220442816615105 / 16.531
+decide exit=0
+target: burst ttft_p95 <= 3000 ms
+slo: burst: ttft <= 3000 ms, tpot <= 40 ms
+
+config         ran elig  meets  target ms (median [min..max over runs])  req-bootstrap 95%  goodput    tok/s    J/tok   cov same work
+baseline       yes  4/4     no                  6434.8 [6418.8..6456.4]   [6418.6..6439.0]      50%      670   0.4342  1.00       yes
+seqs16         yes  4/4    yes                  2180.1 [2164.3..2200.3]   [2186.4..2198.7]     100%     1243   0.2308  0.99       yes
+budget16384    yes  4/4     no                  6483.5 [6465.1..6498.1]   [6464.9..6489.6]      50%      666   0.4383  1.00       yes
+
+note: the 95% interval is a bootstrap over requests pooled across repeats (within-run; requests share engine steps and are not independent), so it understates run-to-run uncertainty; the [min..max] over repeats is the run-to-run range
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: seqs16
+recommendation (advisory): seqs16 meets 'burst ttft_p95 <= 3000 ms' in every repeat with the highest median goodput (100% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/s4/queue/decision.json
+--- findings on seqs16 r0
+[supported] queue_overload: 80 request(s) waited >= 100 ms before first being scheduled.
+[not_supported] long_prompt_interference: No engine step carried a prefill chunk larger than 128 tokens.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+[not_supported] host_overhead: Host-side time is 4% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+--- findings on budget16384 r0
+[supported] queue_overload: 88 request(s) waited >= 100 ms before first being scheduled.
+[not_supported] long_prompt_interference: No engine step carried a prefill chunk larger than 128 tokens.
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 0%).
+[not_supported] host_overhead: Host-side time is 3% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+=== kv: source run (mem25: --set gpu_memory_utilization=0.25), 3 repeats per configuration
+source exit=0 :: [/workspace/s4/kv/source] vllm config=mem25 workload=sha256:cb632fc41271ee3f steps=2148 finished=64/64 (+4 settle) wall=38.474s arrival delay p50/max 10.133792646229267 / 19.8935866355896 ms
+[supported] queue_overload: 32 request(s) waited >= 100 ms before first being scheduled.
+[supported] long_prompt_interference: 61 request(s) decoded or waited in 7 step(s) that also prefilled a chunk > 128 tokens; those steps took 526.2 ms vs 16.5 ms for the rest. They waited while the scheduler spent its token budget
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 733 step(s) with 22 preemption(s) reported by vLLM.
+[not_supported] host_overhead: Host-side time is 9% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+plan exit=0
+source: vllm, Qwen/Qwen2.5-7B
+[mem35] --set gpu_memory_utilization=0.35
+[seqs128] --set max_num_seqs=128
+skipped: host_overhead: not_supported
+skipped: cap1024: beyond --max-candidates 2
+skipped: cap512: beyond --max-candidates 2
+skipped: budget16384: beyond --max-candidates 2
+run --plan exit=0
+[/workspace/s4/kv/planned/baseline/r0] vllm config=baseline workload=sha256:cb632fc41271ee3f steps=2148 finished=64/64 (+4 settle) wall=38.527s arrival delay p50/max 10.627370327711105 / 22.4252585321
+[/workspace/s4/kv/planned/baseline/r1] vllm config=baseline workload=sha256:cb632fc41271ee3f steps=2148 finished=64/64 (+4 settle) wall=38.609s arrival delay p50/max 10.309116914868355 / 20.3297035768
+[/workspace/s4/kv/planned/baseline/r2] vllm config=baseline workload=sha256:cb632fc41271ee3f steps=2148 finished=64/64 (+4 settle) wall=38.676s arrival delay p50/max 10.506528429687023 / 21.0631648078
+[/workspace/s4/kv/planned/mem35/r0] vllm config=mem35 workload=sha256:cb632fc41271ee3f steps=1538 finished=64/64 (+4 settle) wall=30.105s arrival delay p50/max 9.845427237451077 / 19.596523605287075 m
+[/workspace/s4/kv/planned/mem35/r1] vllm config=mem35 workload=sha256:cb632fc41271ee3f steps=1538 finished=64/64 (+4 settle) wall=29.917s arrival delay p50/max 10.495640337467194 / 21.203712560236454 
+[/workspace/s4/kv/planned/mem35/r2] vllm config=mem35 workload=sha256:cb632fc41271ee3f steps=1538 finished=64/64 (+4 settle) wall=29.972s arrival delay p50/max 10.190471075475216 / 20.478648133575916 
+[/workspace/s4/kv/planned/seqs128/r0] vllm config=seqs128 workload=sha256:cb632fc41271ee3f steps=2051 finished=64/64 (+4 settle) wall=37.498s arrival delay p50/max 10.400008410215378 / 20.775440149009
+[/workspace/s4/kv/planned/seqs128/r1] vllm config=seqs128 workload=sha256:cb632fc41271ee3f steps=2051 finished=64/64 (+4 settle) wall=37.342s arrival delay p50/max 11.681728065013885 / 21.814670413732
+[/workspace/s4/kv/planned/seqs128/r2] vllm config=seqs128 workload=sha256:cb632fc41271ee3f steps=2051 finished=64/64 (+4 settle) wall=37.113s arrival delay p50/max 11.410344392061234 / 21.687821485102
+decide exit=0
+target: kv e2e_p95 <= 60000 ms
+slo: kv: e2e <= 60000 ms
+
+config         ran elig  meets  target ms (median [min..max over runs])  req-bootstrap 95%  goodput    tok/s    J/tok   cov same work
+baseline       yes  3/3    yes               38023.7 [37941.0..38092.3] [37392.3..38397.3]     100%     2546   0.1112  1.00       yes
+mem35          yes  3/3    yes               29948.7 [29892.6..30082.1] [30078.1..30081.8]     100%     3280   0.0851  1.00       yes
+seqs128        yes  3/3    yes               36573.3 [36347.4..36728.8] [35991.1..37091.6]     100%     2633   0.1071  1.00       yes
+
+note: the 95% interval is a bootstrap over requests pooled across repeats (within-run; requests share engine steps and are not independent), so it understates run-to-run uncertainty; the [min..max] over repeats is the run-to-run range
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: baseline, mem35, seqs128
+recommendation (advisory): mem35 meets 'kv e2e_p95 <= 60000 ms' in every repeat with the highest median goodput (100% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/s4/kv/decision.json
+--- findings on mem35 r0
+[supported] queue_overload: 32 request(s) waited >= 100 ms before first being scheduled.
+[supported] long_prompt_interference: 65 request(s) decoded or waited in 3 step(s) that also prefilled a chunk > 128 tokens; those steps took 513.6 ms vs 17.9 ms for the rest. They waited while the sc
+[not_supported] kv_cache_pressure: KV-cache usage stayed below 90% (max 51%).
+[not_supported] host_overhead: Host-side time is 10% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+--- findings on seqs128 r0
+[supported] queue_overload: 32 request(s) waited >= 100 ms before first being scheduled.
+[supported] long_prompt_interference: 61 request(s) decoded or waited in 7 step(s) that also prefilled a chunk > 128 tokens; those steps took 524.0 ms vs 16.9 ms for the rest. They waited while the sc
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 637 step(s) with 18 preemption(s) reported by vLLM.
+[not_supported] host_overhead: Host-side time is 9% of a typical step; steps are GPU-bound.
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+0 MiB
+ALL_DONE

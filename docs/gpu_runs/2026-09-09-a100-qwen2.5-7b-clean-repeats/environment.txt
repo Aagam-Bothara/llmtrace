@@ -1,0 +1,6 @@
+2026-09-09T00:35:14Z
+NVIDIA A100 80GB PCIe, 570.172.08, 81920 MiB
+3.11.11 torch 2.8.0+cu128 vllm 0.11.0 transformers 4.57.6 llmtrace 0.2.0
+commit b3973edff61c9da3ff32065baaccda24f1cbbe9c (git archive HEAD, clean tree)
+expected fingerprint sha256:bd5774b11fa83b41598d
+fingerprint sha256:bd5774b11fa83b41598d

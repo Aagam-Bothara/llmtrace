@@ -1,0 +1,85 @@
+{
+  "kind": "environment",
+  "checks": [
+    {
+      "name": "llmtrace source",
+      "status": "ok",
+      "detail": "fingerprint sha256:bd5774b11fa83b41598d, no git tree (the fingerprint identifies this code but cannot restore it)",
+      "consequence": null
+    },
+    {
+      "name": "python",
+      "status": "ok",
+      "detail": "3.11.11",
+      "consequence": null
+    },
+    {
+      "name": "vllm",
+      "status": "ok",
+      "detail": "0.11.0 (verified target)",
+      "consequence": null
+    },
+    {
+      "name": "engine core process",
+      "status": "ok",
+      "detail": "in-process (VLLM_ENABLE_V1_MULTIPROCESSING=0)",
+      "consequence": null
+    },
+    {
+      "name": "torch.cuda",
+      "status": "ok",
+      "detail": "torch 2.8.0+cu128, 1 CUDA device(s)",
+      "consequence": null
+    },
+    {
+      "name": "nvml",
+      "status": "ok",
+      "detail": "driver 570.172.08, 1 device(s)",
+      "consequence": null
+    },
+    {
+      "name": "pyarrow",
+      "status": "warn",
+      "detail": "not importable; pip install llmtrace[parquet]",
+      "consequence": "no output_format=parquet"
+    },
+    {
+      "name": "rich",
+      "status": "ok",
+      "detail": "importable",
+      "consequence": null
+    }
+  ],
+  "signals": [
+    {
+      "name": "request traces (traces_*)",
+      "available": true,
+      "reason": null
+    },
+    {
+      "name": "batch membership and chunk sizes (batches_*)",
+      "available": true,
+      "reason": null
+    },
+    {
+      "name": "queue/prefill spans per request",
+      "available": true,
+      "reason": null
+    },
+    {
+      "name": "vLLM per-step stats (vllm_stats_*)",
+      "available": true,
+      "reason": null
+    },
+    {
+      "name": "GPU step spans (gpu_steps_*)",
+      "available": true,
+      "reason": null
+    },
+    {
+      "name": "GPU telemetry and energy (gpu_*)",
+      "available": true,
+      "reason": null
+    }
+  ]
+}

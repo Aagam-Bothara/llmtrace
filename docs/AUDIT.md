@@ -141,12 +141,13 @@ All from 2026-09-08 sessions, evidence under `docs/gpu_runs/`:
 | Same queue loop on Qwen2.5-7B: 88 waited; `seqs16` 6.4 to 2.1 s TTFT p95 (no candidate met a 300 ms target set for the small model) | A100 (`2026-09-08-a100-qwen2.5-7b-overhead-queue`) |
 | KV-cache pressure induced (`gpu_memory_utilization=0.06`, 48 x 1024-token outputs): 100% usage in 1547 steps, 56 preemptions; `mem16` removed preemptions and cut e2e p95 7.43 to 5.39 s, `seqs128` halved preemptions; first attempt's interference candidates changed nothing (planner ranking fixed) | RTX A5000 session 3 (`.../kv`, `.../kv_rerun`) |
 | Tracer overhead on Qwen2.5-7B: +1.2% `generate()`, +1.7% engine loop, CUDA events 0.08 ms per step | A100 |
+| Clean-commit validation set on Qwen2.5-7B: queue overload with 4 independent repeats (`seqs16` 2.18 s vs 6.43 s TTFT p95, run-to-run spread under 40 ms); KV pressure with 3 repeats (`mem35` 29.9 s vs 38.0 s e2e p95, preemptions 22 to 0); fingerprint in every manifest | A100 session 4 (`2026-09-09-a100-qwen2.5-7b-clean-repeats`) |
 
 Not supported by any run: speculative decoding, `n > 1`, models above 7B,
 the OpenAI server process, the `host_overhead` and `tracer_observer_effect`
 findings as positives (they report not_supported on every recorded run, which
-is consistent behaviour, not validation), KV pressure on a model larger than
-opt-125m.
+is consistent behaviour, not validation), anything above 7B, more than four
+independent repeats per configuration.
 
 ## 6. Overlap with upstream and adjacent tooling
 
@@ -219,6 +220,7 @@ Next, in order (files named):
 | 4 | Done (second phase): goodput under SLOs, bootstrap intervals, marginal candidates | `control_plane/decision.py`, `cli.py` | |
 | 5 | Done (second phase): experiment planner and `run --plan` | `control_plane/experiments.py`, `cli.py` | Validated on the synthetic engine only; the candidates' effects on real vLLM are what the GPU session must show |
 | 5b | Done (GPU session 3): queue overload and KV pressure validated end to end; planner candidates ranked by affected requests, `--finding` filter | `control_plane/experiments.py` | Found because the cap crowded out the relevant candidates on the first KV attempt |
+| 5c | Done (GPU session 4): queue overload (4 repeats) and KV pressure (3 repeats) on Qwen2.5-7B from a clean commit with fingerprints in every manifest | evidence `2026-09-09-a100-qwen2.5-7b-clean-repeats` | Addresses the two-repeat and uncommitted-fix weaknesses of sessions 2 and 3 |
 | 6 | Benchmark suite: synthetic scenarios with planted bottlenecks (queueing, prefill interference, KV pressure with preemption, host overhead) and expected findings; accuracy table produced by a test | new `benchmarks/`, `tests/test_benchmark_suite.py` | Phase 5; makes diagnostic accuracy a measured number |
 | 7 | Machine-readable + human report combining findings, tested configs, deltas, regressions per class, limitations | `control_plane/report.py` (new), `cli.py` (`report`) | Phase 5 |
 | 8 | GPU integration tests behind a `gpu` marker, runnable on a self-hosted runner | `tests/gpu/`, `pyproject.toml`, workflow | Turns the manual smoke tests into repeatable checks |

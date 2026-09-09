@@ -1,0 +1,30 @@
+[supported] queue_overload: 32 request(s) waited >= 100 ms before first being scheduled.
+    affected (32): kv-0032, kv-0033, kv-0034, kv-0035, kv-0036, kv-0037, kv-0038, kv-0039 ...
+    evidence: queue wait p95 across requests with a queue span = 530 ms  [traces_*.jsonl:spans[phase=queue]]
+    evidence: max requests waiting in vLLM's queue per step = 32 requests  [vllm_stats_*.jsonl:num_waiting_reqs]
+    evidence: vLLM's own queued time p95 = 529 ms  [vllm_stats_*.jsonl:finished_requests.queued_time]
+    experiment: Replay the same workload at a lower arrival rate, or with a higher max_num_seqs / max_num_batched_tokens, and compare queue wait p95 and throughput.
+[supported] long_prompt_interference: 61 request(s) decoded or waited in 7 step(s) that also prefilled a chunk > 128 tokens; those steps took 524.0 ms vs 16.9 ms for the rest. They waited while the scheduler spent its token budget on other work.
+    affected (61): settle-1, settle-2, settle-3, kv-0001, kv-0002, kv-0003, kv-0004, kv-0005 ...
+    evidence: engine steps carrying a prefill chunk above the threshold = 7 steps  [batches_*.jsonl:scheduled_tokens]
+    evidence: median duration of those steps = 524 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: median duration of all other steps = 16.9 ms  [batches_*.jsonl:step_end_monotonic-monotonic]
+    evidence: requests that shared such a step without owning the chunk = 61 requests  [traces_*.jsonl:batch_ids]
+    experiment: Replay with long_prefill_token_threshold set to a smaller per-step chunk (e.g. 256) and compare the sharing requests' TTFT p95 and worst inter-token stall against the long requests' TTFT cost.
+[supported] kv_cache_pressure: KV-cache usage reached 100% in 637 step(s) with 18 preemption(s) reported by vLLM.
+    affected (64): kv-0000, kv-0001, kv-0002, kv-0003, kv-0004, kv-0005, kv-0006, kv-0007 ...
+    evidence: max KV-cache usage = 1 fraction  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: steps with usage >= 90% = 637 steps  [vllm_stats_*.jsonl:kv_cache_usage]
+    evidence: preemptions reported by vLLM = 18 requests  [vllm_stats_*.jsonl:num_preempted_reqs]
+    missing: which requests were preempted (vLLM stats carry no request ids)
+    experiment: Replay with a lower max_num_seqs or a higher gpu_memory_utilization and compare preemptions, KV usage max and the affected requests' TPOT.
+[not_supported] host_overhead: Host-side time is 9% of a typical step; steps are GPU-bound.
+    evidence: median GPU span per step = 15.7 ms  [gpu_steps_*.jsonl:gpu_span_ms]
+    evidence: median host step time = 17.4 ms  [gpu_steps_*.jsonl:host_step_ms]
+    evidence: median share of step time not spanned by the GPU = 0.0923 fraction  [gpu_steps_*.jsonl:host_overhead_ms/host_step_ms]
+    evidence: steps with a resolved GPU span = 2.06e+03 steps  [gpu_steps_*.jsonl]
+    missing: GPU busy time (CUPTI); the CUDA-event span includes launch gaps
+[not_supported] tracer_observer_effect: No engine step overlapping a tracer drain was unusually long.
+    evidence: collector drains recorded = 375 drains  [collector_*.jsonl]
+    evidence: longest drain = 0.13 ms  [collector_*.jsonl:duration_ms]
+Findings written to /workspace/s4/kv/findings_seqs128.json

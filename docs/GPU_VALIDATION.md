@@ -247,6 +247,27 @@ the smoke test and the mixed-prompt experiment.
 Not measured here: GPU busy time (see the Nsight cross-check below for how
 far the span is from it) and the event-recording overhead itself.
 
+## Validation set from a clean commit with independent repeats (2026-09-09, A100 80GB, Qwen2.5-7B, session 4)
+
+Evidence: `docs/gpu_runs/2026-09-09-a100-qwen2.5-7b-clean-repeats/`. Source:
+commit `b3973ed` uploaded as a clean `git archive`; every manifest carries the
+fingerprint `sha256:bd5774b11fa83b41598d`, equal to that commit's fingerprint
+computed locally (the pod had no `.git`, so the manifests say so rather than
+claiming a commit). CPU suite on the pod: 251 passed, 1 skipped. Each engine
+ran in its own process; `decide --min-repeats 3`; every repeat is a separate
+run directory with its own tracer session (duplicates would be rejected).
+
+| Check | Result |
+|-------|--------|
+| Queue overload, 4 independent repeats per configuration (bursts of 32 x 64/64 tokens every second, `max_num_seqs=8`) | `queue_overload` supported on the source run (88 of 96 waited over 100 ms). `decide`, target burst TTFT p95 <= 3000 ms, SLO ttft <= 3000 ms and tpot <= 40 ms: baseline 6435 ms, run-to-run range [6419..6456] (spread 38 ms), goodput 50%; `seqs16` 2180 ms [2164..2200] (spread 36 ms), goodput 100%, the only candidate; `budget16384` 6484 ms [6465..6498], goodput 50%, no effect. The request bootstrap intervals are narrower than or comparable to the run-to-run ranges, which is the point of reporting both. Steps 384 vs 768; J/token 0.23 vs 0.43 |
+| KV-cache pressure on the 7B model, 3 independent repeats (64 x 256/1536 tokens at once, `gpu_memory_utilization=0.25`) | `kv_cache_pressure` supported on the source run: usage 100% in 733 of 2148 steps, 22 preemptions from vLLM's stats; `long_prompt_interference` (7 prefill steps of 526 ms vs 16.5 ms) and `queue_overload` (32 requests waited: the 16k prompt tokens exceed one step's budget) also supported. Plan (ranked by affected requests): `mem35` (0.25 to 0.35) and `seqs128` |
+| Its `decide`, target kv e2e p95 <= 60000 ms (loose by design) | baseline 38.0 s [37.9..38.1] (spread 0.15 s); `mem35` 29.9 s [29.9..30.1] (-21%; 1538 steps vs 2148; J/token 0.085 vs 0.111; `findings` on it: usage max 51%, no preemptions, `kv_cache_pressure` not supported); `seqs128` 36.6 s [36.3..36.7] (18 preemptions, usage still 100% in 637 steps). All three meet the loose target; recommendation `mem35` on goodput then throughput |
+| Provenance in the manifests | `llmtrace_source_fingerprint` set on every run, `llmtrace_git_commit` null, `llmtrace_snapshot_complete` false with the gap "no git tree" (a fingerprint identifies code but cannot restore it); the README ties the fingerprint to commit `b3973ed` |
+| Memory after 23 engines | 0 MiB |
+
+Still not measured: anything above 7B; `host_overhead` and
+`tracer_observer_effect` as positive findings; more than four repeats.
+
 ## Two induced bottlenecks and the 7B overhead matrix (2026-09-08, RTX A5000 and A100 80GB, session 3)
 
 Evidence: `docs/gpu_runs/2026-09-08-rtx-a5000-bottlenecks/` (opt-125m) and

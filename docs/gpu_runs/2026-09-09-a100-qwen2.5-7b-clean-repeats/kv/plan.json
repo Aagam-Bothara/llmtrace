@@ -1,0 +1,71 @@
+{
+  "plan_version": 2,
+  "source_run": "/workspace/s4/kv/source",
+  "workload_hash": "sha256:cb632fc41271ee3f",
+  "source_engine": "vllm",
+  "source_model": "Qwen/Qwen2.5-7B",
+  "source_model_revision": null,
+  "source_engine_kwargs": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "max_model_len": 2048,
+    "enable_chunked_prefill": true,
+    "long_prefill_token_threshold": 0,
+    "max_num_partial_prefills": 1,
+    "max_long_partial_prefills": 1,
+    "scheduling_policy": "fcfs",
+    "block_size": 16,
+    "gpu_memory_utilization": 0.25,
+    "enable_prefix_caching": true,
+    "dtype": "bfloat16",
+    "seed": 0,
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1
+  },
+  "unreproduced": [],
+  "baseline_config": {
+    "long_prefill_token_threshold": 0,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "gpu_memory_utilization": 0.25,
+    "enable_prefix_caching": true,
+    "max_model_len": 2048
+  },
+  "baseline_name": "baseline",
+  "repeats": 3,
+  "candidates": [
+    {
+      "name": "mem35",
+      "scheduling_change": {
+        "gpu_memory_utilization": 0.35
+      },
+      "source_finding": "kv_cache_pressure",
+      "rationale": "KV-cache usage reached capacity with preemptions; gpu_memory_utilization 0.25 -> 0.35 adds cache blocks",
+      "expected_effect": "preemptions fall; TPOT of long-running requests stabilizes",
+      "expected_cost": "less free memory for activations/graphs; may fail to start (recorded as a failed run)",
+      "repeats": 3
+    },
+    {
+      "name": "seqs128",
+      "scheduling_change": {
+        "max_num_seqs": 128
+      },
+      "source_finding": "kv_cache_pressure",
+      "rationale": "fewer concurrent sequences (256 -> 128) keep the cache below capacity",
+      "expected_effect": "no preemptions; per-request TPOT falls",
+      "expected_cost": "queue wait and TTFT rise; throughput falls",
+      "repeats": 3
+    }
+  ],
+  "skipped": [
+    "host_overhead: not_supported",
+    "cap1024: beyond --max-candidates 2",
+    "cap512: beyond --max-candidates 2",
+    "budget16384: beyond --max-candidates 2"
+  ],
+  "notes": [
+    "queue_overload can also be a capacity problem: replaying at a lower arrival rate is a workload change, not a configuration change",
+    "every candidate is a fresh engine started by llmtrace run; no running server is modified"
+  ]
+}

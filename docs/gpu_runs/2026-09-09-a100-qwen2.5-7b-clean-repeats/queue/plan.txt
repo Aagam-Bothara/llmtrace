@@ -1,0 +1,19 @@
+experiment plan from /workspace/s4/queue/source (workload sha256:c2afe1bcfd8d9888), 4 repeats each
+source: vllm, Qwen/Qwen2.5-7B
+baseline engine kwargs (reproduced for every run): max_num_batched_tokens=8192, max_num_seqs=8, max_model_len=2048, enable_chunked_prefill=True, long_prefill_token_threshold=0, max_num_partial_prefills=1, max_long_partial_prefills=1, scheduling_policy=fcfs, block_size=16, gpu_memory_utilization=0.5, enable_prefix_caching=True, dtype=bfloat16, seed=0, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1
+baseline effective: long_prefill_token_threshold=0, max_num_batched_tokens=8192, max_num_seqs=8, gpu_memory_utilization=0.5, enable_prefix_caching=True, max_model_len=2048
+
+[seqs16] --set max_num_seqs=16
+    from: queue_overload. requests waited in the queue while the running count reached max_num_seqs=8
+    expect: queue wait p95 falls; throughput rises if the GPU has headroom
+    cost: per-token latency (TPOT) rises for every class as steps carry more sequences; KV-cache pressure rises
+[budget16384] --set max_num_batched_tokens=16384
+    from: queue_overload. a larger per-step token budget (8192 -> 16384) admits more prefill per step
+    expect: queue wait and TTFT fall when prefill is the bottleneck
+    cost: steps get longer: TPOT rises for decoding requests (the long_prompt_interference trade-off)
+skipped: long_prompt_interference: not_supported
+skipped: kv_cache_pressure: not_supported
+skipped: host_overhead: not_supported
+note: queue_overload can also be a capacity problem: replaying at a lower arrival rate is a workload change, not a configuration change
+note: every candidate is a fresh engine started by llmtrace run; no running server is modified
+Plan written to /workspace/s4/queue/plan.json; execute with: llmtrace run --plan /workspace/s4/queue/plan.json --workload <spec.json> --engine <fake|vllm> --out <dir>

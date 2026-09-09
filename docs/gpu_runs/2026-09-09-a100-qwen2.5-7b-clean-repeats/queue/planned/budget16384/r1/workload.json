@@ -1,0 +1,28 @@
+{
+  "name": "queue_burst",
+  "description": "Bursts of 32 requests every second onto an engine capped at 8 concurrent sequences: requests wait in the scheduler queue.",
+  "seed": 0,
+  "vocab_size": 50000,
+  "min_token_id": 100,
+  "classes": [
+    {
+      "name": "burst",
+      "count": 96,
+      "prompt_len": {
+        "kind": "fixed",
+        "value": 64
+      },
+      "max_tokens": {
+        "kind": "fixed",
+        "value": 64
+      },
+      "arrival": {
+        "kind": "burst",
+        "start_s": 0.0,
+        "burstiness": 1.0,
+        "burst_size": 32,
+        "burst_every_s": 1.0
+      }
+    }
+  ]
+}

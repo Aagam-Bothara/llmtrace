@@ -1,0 +1,13 @@
+target: kv e2e_p95 <= 60000 ms
+slo: kv: e2e <= 60000 ms
+
+config         ran elig  meets  target ms (median [min..max over runs])  req-bootstrap 95%  goodput    tok/s    J/tok   cov same work
+baseline       yes  3/3    yes               38023.7 [37941.0..38092.3] [37392.3..38397.3]     100%     2546   0.1112  1.00       yes
+mem35          yes  3/3    yes               29948.7 [29892.6..30082.1] [30078.1..30081.8]     100%     3280   0.0851  1.00       yes
+seqs128        yes  3/3    yes               36573.3 [36347.4..36728.8] [35991.1..37091.6]     100%     2633   0.1071  1.00       yes
+
+note: the 95% interval is a bootstrap over requests pooled across repeats (within-run; requests share engine steps and are not independent), so it understates run-to-run uncertainty; the [min..max] over repeats is the run-to-run range
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: baseline, mem35, seqs128
+recommendation (advisory): mem35 meets 'kv e2e_p95 <= 60000 ms' in every repeat with the highest median goodput (100% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/s4/kv/decision.json

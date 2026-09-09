@@ -1,0 +1,14 @@
+{
+  "name": "kv_pressure_7b",
+  "description": "64 long-output requests at once on a 7B engine given a quarter of an 80 GB card: the KV cache fills and vLLM preempts.",
+  "seed": 0,
+  "classes": [
+    {
+      "name": "kv",
+      "count": 64,
+      "prompt_len": {"kind": "fixed", "value": 256},
+      "max_tokens": {"kind": "fixed", "value": 1536},
+      "arrival": {"kind": "at_once"}
+    }
+  ]
+}

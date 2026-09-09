@@ -1,0 +1,13 @@
+target: burst ttft_p95 <= 3000 ms
+slo: burst: ttft <= 3000 ms, tpot <= 40 ms
+
+config         ran elig  meets  target ms (median [min..max over runs])  req-bootstrap 95%  goodput    tok/s    J/tok   cov same work
+baseline       yes  4/4     no                  6434.8 [6418.8..6456.4]   [6418.6..6439.0]      50%      670   0.4342  1.00       yes
+seqs16         yes  4/4    yes                  2180.1 [2164.3..2200.3]   [2186.4..2198.7]     100%     1243   0.2308  0.99       yes
+budget16384    yes  4/4     no                  6483.5 [6465.1..6498.1]   [6464.9..6489.6]      50%      666   0.4383  1.00       yes
+
+note: the 95% interval is a bootstrap over requests pooled across repeats (within-run; requests share engine steps and are not independent), so it understates run-to-run uncertainty; the [min..max] over repeats is the run-to-run range
+note: throughput (tok/s) is measured over each run's window; with an open-loop (arrival-paced) workload it reflects the arrival schedule unless the system saturates, so compare latency and energy per token, and use a saturating workload to compare capacity
+candidates meeting the target in every repeat: seqs16
+recommendation (advisory): seqs16 meets 'burst ttft_p95 <= 3000 ms' in every repeat with the highest median goodput (100% of SLO-selected requests). Advisory: verify on the production model and workload.
+Decision written to /workspace/s4/queue/decision.json

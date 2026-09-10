@@ -1,133 +1,162 @@
-# llmtrace Quickstart
+# Quickstart
 
-## 1. Without a GPU (synthetic)
+Start with the CPU example to learn the workflow. Real inference needs Linux,
+an NVIDIA GPU and vLLM 0.11.0. Run the commands from a local checkout.
+Multi-line shell commands below use Bash syntax. In PowerShell, put each
+command on one line instead of using `\` continuations.
+
+## Try a run on CPU
 
 ```bash
-pip install -e ".[dev]"
-python -m pytest                      # CPU-only regression tests
-llmtrace doctor                       # what this environment can and cannot record
+pip install -e .
+llmtrace doctor
 llmtrace workload template --output w.json
 llmtrace run --workload w.json --engine fake --out ./runs/base --repeat 2
-llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 2 --config-name capped --set long_prefill_token_threshold=256
 llmtrace findings ./runs/base/r0 --verbose
-llmtrace plan ./runs/base/r0 --repeats 2 --json plan.json          # experiments derived from the supported findings
-llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp
-llmtrace decide --target "short ttft_p95 <= 20ms" --slo "short: ttft <= 20ms" \
-    --config baseline=./exp/baseline/r0,./exp/baseline/r1 --config cap512=./exp/cap512/r0,./exp/cap512/r1
-python examples/synthetic_replay.py   # fake engine + fake NVML, writes ./traces_synthetic
-llmtrace analyze ./traces_synthetic/current --baseline ./traces_synthetic/baseline
+llmtrace visualize ./runs/base/r0 --html-out report.html
 ```
 
-Everything the synthetic engine produces is fabricated (an invented cost
-model); it shows the pipeline, the file formats and the decision logic only.
+Open `report.html` to explore the run. The fake engine uses invented timings
+and power values; this is a demo, not a hardware benchmark.
 
-## 2. With vLLM 0.11.0 on an NVIDIA GPU (Linux)
+## Test a configuration change
+
+This example caps long-prompt processing at 256 tokens per step. It uses the
+same workload and two fresh runs for each configuration.
+
+```bash
+llmtrace run --workload w.json --engine fake --out ./runs/capped --repeat 2 \
+    --config-name capped --set long_prefill_token_threshold=256
+llmtrace decide --target "short ttft_p95 <= 20ms" --slo "short: ttft <= 20ms" \
+    --config baseline=./runs/base/r0,./runs/base/r1 \
+    --config capped=./runs/capped/r0,./runs/capped/r1
+```
+
+The target asks whether short requests stay within 20 ms at the 95th
+percentile in every repeat. Goodput is the share meeting the per-request SLO.
+Read the long-request results too: helping short requests can slow long ones.
+
+To try changes suggested by the findings:
+
+```bash
+llmtrace plan ./runs/base/r0 --repeats 2 --json plan.json
+llmtrace run --workload w.json --plan plan.json --engine fake --out ./exp
+```
+
+Review the plan's candidate names. The runner prints a `decide` command with
+the actual run paths; replace its target placeholder with your latency limit.
+
+## Run on a GPU
 
 ```bash
 pip install -e ".[vllm]"
-export VLLM_ENABLE_V1_MULTIPROCESSING=0   # optional; exposes the scheduler for batch metadata
-python examples/vllm_smoke_test.py --model facebook/opt-125m --out ./traces_smoke
+export VLLM_ENABLE_V1_MULTIPROCESSING=0
+llmtrace run --workload w.json --engine vllm --model facebook/opt-125m \
+    --out ./runs/gpu --repeat 3
+llmtrace doctor ./runs/gpu/r0
 ```
 
-Then follow [docs/GPU_VALIDATION.md](docs/GPU_VALIDATION.md). The same
-workload spec runs on the real engine (in-process core for batch metadata and
-GPU spans; untraced warm-up replay first, then a traced settle phase, then
-the measured replay with `ignore_eos`):
+The environment setting exposes scheduler steps. Without it, request-level
+tracing and vLLM stats can still work, but batch membership, queue/prefill
+boundaries and CUDA-event step spans are unavailable.
 
-```bash
-VLLM_ENABLE_V1_MULTIPROCESSING=0 llmtrace run --workload w.json --engine vllm --model facebook/opt-125m --out ./runs/gpu_base --repeat 3
-llmtrace doctor ./runs/gpu_base/r0
-```
+If NVML sees multiple GPUs, add `--gpu-id 0` or, for an engine using two
+GPUs, `--gpu-id 0 --gpu-id 1`. Choose the **physical NVML indices** used by
+your engine; CUDA logical indices may differ. Without an explicit selection
+on a multi-GPU host, latency tracing continues without GPU telemetry.
 
-Each real engine runs in its own spawned process (a second vLLM engine in one
-process fails on free GPU memory); `--in-process` disables that for a single
-run. The runner was validated against the experiment driver on an RTX A5000
-(see `docs/GPU_VALIDATION.md`).
+The runner warms up the workload, records settling requests, then records
+the measured replay. Use `--exclude-class settle` when comparing real runs.
+Each real engine runs in a fresh process. Use a new output directory for each
+experiment; `--overwrite` replaces a previous run's llmtrace files.
 
-In your own code:
+## Use it in your code
+
+This example uses cumulative outputs so first-token timing is observable.
+Enable the in-process core before starting Python if you need scheduler data.
 
 ```python
 from vllm import LLM, SamplingParams
-from llmtrace import LLMTracer
-
-tracer = LLMTracer(output_dir="./traces")
-llm = LLM(model="facebook/opt-125m")
-tracer.instrument_engine(llm.llm_engine)
-outputs = llm.generate(prompts, SamplingParams(max_tokens=64))
-tracer.stop()
-analysis = tracer.analyze()
-tracer.print_analysis(analysis)
-```
-
-`LLMTracer` is synchronous. Its GPU sampler, collector and writer are
-background threads, so they keep running while `llm.generate()` blocks.
-
-`llm.generate()` forces FINAL_ONLY outputs in vLLM 0.11.0, so it yields
-completion, token and energy data but no TTFT/TPOT. For timing, drive the
-engine with cumulative outputs:
-
-```python
+from llmtrace import LLMTracer, TracerConfig
 from llmtrace.vllm_helpers import run_engine_with_timing
-outputs = run_engine_with_timing(llm.llm_engine, prompts, SamplingParams(max_tokens=64))
+
+llm = LLM(model="facebook/opt-125m", disable_log_stats=False)
+tracer = LLMTracer(TracerConfig(
+    output_dir="./traces",
+    gpu_sampler={"gpu_ids": [0]},  # physical NVML index used by this engine
+))
+tracer.instrument_engine(llm.llm_engine)
+try:
+    outputs = run_engine_with_timing(
+        llm.llm_engine, ["Hello, world!"], SamplingParams(max_tokens=64)
+    )
+finally:
+    tracer.stop()
+
+print(tracer.health())
+tracer.print_analysis(tracer.analyze())
 ```
 
-`AsyncLLM` (the OpenAI-server engine) is supported through
-`tracer.instrument_async_engine(engine)` with request-level traces and vLLM's
-per-step stats only; see `examples/vllm_async_smoke_test.py`.
+`LLM.generate()` can also be traced, but vLLM 0.11.0 forces final-only outputs
+there: completion and token counts remain available; TTFT and TPOT do not.
+Sampling, collection and writing run in background threads.
 
-## 3. Offline analysis
+For directly constructed `AsyncLLM` engines, use
+`tracer.instrument_async_engine(engine)`. See the
+[async example](examples/vllm_async_smoke_test.py). It records requests and
+vLLM stats, not scheduler membership or CUDA-event spans.
+
+## Read saved runs
+
+Offline analysis needs neither a GPU nor vLLM.
 
 ```bash
-llmtrace analyze ./traces                          # directory: traces_*, gpu_*, batches_* files
-llmtrace analyze ./traces/traces_x.jsonl --gpu-samples ./traces/gpu_x.jsonl
-llmtrace analyze ./traces --attribution window_only   # no per-request allocation
-llmtrace analyze ./traces --output report.json
+llmtrace analyze ./runs/base/r0 --output report.json
+llmtrace visualize ./runs/base/r0 --html-out report.html
+llmtrace visualize ./runs/base/r0 --trace-out run.perfetto.json
 ```
 
-## 3b. Visualize a run
+Open the Perfetto file at [ui.perfetto.dev](https://ui.perfetto.dev).
+Use `analyze --gpu-samples <file-or-directory>` for separately stored samples.
+`analyze --attribution window_only` shows shared device energy without
+allocating it to requests.
+
+`analyze` and `decide` read GPU selection from the manifest. For older
+multi-GPU traces, pass `--gpu-id` for every participating device. A missing
+energy value includes a reason; it does not mean zero consumption.
+
+## Check for regressions
 
 ```bash
-llmtrace visualize ./traces --html-out report.html            # self-contained HTML report
-llmtrace visualize ./traces --trace-out run.perfetto.json      # open at https://ui.perfetto.dev
-llmtrace visualize ./exp/baseline_0 --compare ./exp/capped_0 --html-out compare.html
-```
-
-## 4. Regression gate
-
-```bash
-llmtrace compare --baseline ./baseline --current ./current \
+llmtrace compare --baseline ./runs/base/r0 --current ./runs/capped/r0 \
     --ttft-threshold 5 --energy-threshold 10 --fail-on-regression
 ```
 
-Exit codes: 0 ok, 1 regression (or missing metric with `--fail-on-missing`),
-2 usage error, 3 not implemented (`monitor`).
+Only increases above the threshold count as regressions. Add
+`--fail-on-missing` if missing metrics should fail the check too.
 
-Only positive changes count as regressions. A run that is 50% faster passes.
+This check uses aggregate request metrics. Expect code 1 in this demo:
+the cap improves short requests but slows long ones enough to raise overall
+TTFT p95. Use the class-specific `decide` result to understand that trade-off.
 
-## 5. Configuration
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | Check passed, or reporting completed without a requested failure |
+| 1 | Regression with `--fail-on-regression`, or missing metric with `--fail-on-missing` |
+| 2 | Invalid arguments |
+| 3 | Command not implemented (`monitor`) |
+
+## Configure and test
 
 ```bash
 llmtrace init-config --output my_config.json
+pip install -e ".[dev]"
+python -m pytest
 ```
 
-Unknown keys are rejected (no silently ignored options). Load with
-`LLMTracer.from_config_file("my_config.json")`. Convenience keyword arguments
-on `LLMTracer(...)`: `output_dir`, `gpu_sample_interval_ms`,
-`enable_energy_attribution`, `attribution_method`, `energy_price_usd_per_kwh`,
-plus any top-level `TracerConfig` field.
+Load the file with `LLMTracer.from_config_file("my_config.json")`. Unknown
+configuration keys raise an error. Optional extras include `[nvml]` for GPU
+telemetry and `[parquet]` for Parquet files.
 
-## 6. Reading the numbers
-
-* `ttft_ms`: arrival at `add_request` to the end of the engine step in which
-  the first output token became visible. Includes queue wait. Step-granular.
-  `null` with `ttft_unavailable_reason` for zero-token, FINAL_ONLY (which is
-  what `LLM.generate()` uses) or pooling requests.
-* `tpot_ms`: (last token step end - first token step end) / (tokens after the
-  first observation). `null` when fewer than two token observations exist.
-* Spans `queue` and `prefill` exist only when the scheduler was in-process;
-  otherwise one `time_to_first_token` span is recorded and no boundary is
-  inferred.
-* Energy fields: `window_device_joules` is shared device energy during the
-  request; `attributed_joules` is the allocated share under `allocation_policy`
-  and `membership_source`; `is_allocated=false` plus `unavailable_reason`
-  means no per-request figure exists.
+See [status](docs/STATUS.md) for limitations and the
+[development guide](DEVELOPMENT.md) for metric definitions and configuration details.

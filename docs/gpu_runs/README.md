@@ -1,36 +1,42 @@
 # GPU evidence
 
-One directory per GPU session, each with its own README, the exact driver
-script, `environment.txt`, every manifest (`manifest.json`, `run_info.json`,
-`workload.json`), and every derived output (`analysis_*`, `findings_*`,
-`plan.*`, `decision.*`, `doctor_*`, summaries and logs). The numbers quoted in
-`docs/GPU_VALIDATION.md` come from those derived files.
+Each session has a directory containing its driver scripts, environment,
+manifests, summaries and reports. The measurements in
+[GPU validation](../GPU_VALIDATION.md) come from these records.
 
-The raw per-request, per-step and telemetry records (`traces_*`, `batches_*`,
-`gpu_*`, `gpu_steps_*`, `vllm_stats_*`, `collector_*` JSONL files, about 290 MB
-across the sessions) are not in git. They are attached to the GitHub release
-[`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09) as one archive per session, named
-`<session>-raw-traces.tar.gz`. To put a session's raw data back where the
-manifests expect it, from the repository root:
+## Download the raw traces
+
+Raw JSONL files are available in the
+[evidence-2026-09 release](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09):
+one `<session>-raw-traces.tar.gz` archive per session, plus `SHA256SUMS`.
+The ten archives contain about 290 MB of uncompressed data.
+
+From the repository root:
 
 ```bash
 gh release download evidence-2026-09 --repo Aagam-Bothara/llmtrace \
     --pattern '*-raw-traces.tar.gz' --pattern SHA256SUMS
 sha256sum -c SHA256SUMS
-tar xzf 2026-09-09-a100-qwen2.5-7b-clean-repeats-raw-traces.tar.gz   # restores docs/gpu_runs/<session>/**/*.jsonl
+tar xzf 2026-09-09-a100-qwen2.5-7b-clean-repeats-raw-traces.tar.gz
 llmtrace findings docs/gpu_runs/2026-09-09-a100-qwen2.5-7b-clean-repeats/queue/source
 ```
 
-Every archive was produced from the committed tree with `git ls-files
-'<session>/**/*.jsonl' | tar czf ... -T -`, so the restored files are the
-ones the derived outputs were computed from. Commits before this split
-(up to `6840592`) still contain the raw files in history.
+You can also download the assets from the release page. Extracting an archive
+restores `docs/gpu_runs/<session>/**/*.jsonl`.
 
-Published and verified on September 9, 2026: all ten archives and `SHA256SUMS`
-were downloaded anonymously from the public release and checked against the
-[committed SHA-256 checksums](SHA256SUMS). All 588 archived JSONL files were
-also checked byte-for-byte against commit `6840592`. You can download assets
-directly from the release page if you do not use the GitHub CLI.
+## Verification
+
+On September 9, 2026, all ten archives and `SHA256SUMS` were downloaded
+without authentication and matched the [committed checksums](SHA256SUMS).
+All 588 archived JSONL files also matched commit `6840592` byte-for-byte.
+The raw files remain in Git history up to that commit.
+
+The archives contain request traces, batch records, power samples, CUDA
+spans, vLLM stats and collector timings. Historical reports reflect the code
+used in each session. Current checks may require explicit GPU selection or
+withhold recommendations for older records with missing evidence.
+
+## Sessions
 
 | Session | What it established |
 |---------|---------------------|

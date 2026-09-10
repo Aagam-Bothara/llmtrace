@@ -1,156 +1,108 @@
 # Experiment: short requests mixed with long prompts
 
-Status: run on one GPU (results below). Everything before the results section
-is the design; the synthetic dry run at the end is not evidence.
+Can long prompts slow short requests that share their engine steps? This
+experiment records that interaction, caps long-prompt processing, and measures
+the benefit to short requests and the cost to long ones.
 
-## Question
+It was run on opt-125m and Qwen2.5-7B. Results are below; the fake-engine run
+only demonstrates the workflow. See the [GPU record](../../docs/GPU_VALIDATION.md)
+for session details and [raw evidence](../../docs/gpu_runs/README.md) for downloads.
 
-When a steady stream of short requests is interrupted by long-prompt requests,
-do llmtrace's traces explain the short-request slowdown, and does one
-scheduling change improve it?
+## The idea
 
-## Hypothesis (vLLM 0.11.0 V1 scheduler, verified from source)
+With chunked prefill enabled, a step can contain both short-request decode
+work and a large chunk of a long prompt. A larger step can delay short
+requests already running or arriving during it.
 
-Chunked prefill is on. Each step has a token budget (`max_num_batched_tokens`);
-running requests are scheduled first, then waiting ones. A long prompt is
-prefilled in chunks up to the remaining budget, so a decode step can carry a
-prefill chunk of a thousand-plus tokens. Such steps take much longer than
-decode-only steps. Short requests decoding in those steps see inflated TPOT;
-short requests arriving during them see inflated TTFT.
+`long_prefill_token_threshold=256` limits a long prompt to 256 prefill tokens
+per step. The prediction is shorter stalls for short requests, at the cost
+of more steps before a long request produces its first token.
 
-`long_prefill_token_threshold=N` caps the prefill tokens a prompt longer than N
-receives per step (`Scheduler.schedule()`: `num_new_tokens = min(..., threshold)`).
-Prediction: step time is bounded, the short-request TPOT/TTFT tail shrinks, and
-the long request's own TTFT grows (more steps to finish its prefill).
+## Workload and settings
 
-## Workload (`workload.py`)
+The default workload uses exact token-ID prompts and a fixed seed:
 
-Deterministic: 120 short requests (32-token prompt, 128 output tokens) at 40/s,
-plus 12 long requests (1536-token prompt, 8 output tokens) every 0.2 s from
-0.4 s. Prompts are token-id lists so lengths are exact. Adjustable via `run.py`
-flags (`--num-long`, `--long-every`, `--short-tokens`, ...); the workload config
-is saved in each run's `run_info.json`.
+| Class | Count | Prompt tokens | Output tokens | Arrival schedule |
+|-------|-------|---------------|---------------|------------------|
+| Short | 120 | 32 | 128 | 40 requests/s |
+| Long | 12 | 1,536 | 8 | Every 0.2 s, starting at 0.4 s |
 
-## Configurations (`run.py`)
+`baseline` enables chunked prefill with `max_model_len=2048`. `capped` adds
+`long_prefill_token_threshold=256`. The driver saves the effective scheduler
+settings so the machine's defaults are recorded. Flags such as `--num-long`
+and `--short-tokens` change the workload; the 7B runs below used a slower
+arrival schedule.
 
-| name | change vs vLLM defaults |
-|------|-------------------------|
-| `baseline` | none (`enable_chunked_prefill=True`, `max_model_len=2048`) |
-| `capped` | `long_prefill_token_threshold=256` |
+## Run the example
 
-The effective scheduler config (`max_num_batched_tokens`, `max_num_seqs`,
-threshold, policy) is printed and saved so the actual defaults on the machine
-are recorded, not assumed.
-
-## Diagnosis (`analyze.py`)
-
-From llmtrace's files only (`traces_*`, `batches_*`), no extra instrumentation:
-
-1. TTFT/TPOT percentiles per request class; TTFT from the *intended* arrival
-   (engine TTFT plus the load generator's recorded delay); `step_ms`, the
-   durations of the engine steps a request was scheduled in (a compute proxy);
-   and `itl_ms`, the real inter-token latency: intervals between the request's
-   successive step ends from its first-token step onward, including steps it
-   was not scheduled in. Average TPOT hides one slow interval; ITL max does not.
-2. Per-step duration and scheduled tokens from batch metadata; steps carrying a
-   prefill chunk above `--chunk-threshold` (default 128 tokens) are flagged.
-3. Short-request interference: share of each short request's step time spent in
-   flagged steps, and TPOT/TTFT of affected vs unaffected short requests.
-4. Step-time model: least-squares `duration = a + b * scheduled_tokens`.
-5. `--compare`: side-by-side change with an explicit verdict (threshold 20%)
-   on two stall metrics, short-request **TTFT p95** and **ITL max**: `improved`
-   only if both improve, `worse` if either regresses, else `no_meaningful_change`;
-   `unavailable` (with the missing metrics named) if either is missing in
-   either run. ITL p99, step max, TPOT, TTFT from intended arrival and the
-   long-request TTFT cost are reported alongside. Without batch metadata in
-   both runs the stall part falls back to TPOT p95.
-
-Why not ITL p99: the mechanism produces rare stalls (in the synthetic dry run
-the long-chunk steps are under 1% of steps), and capping spreads each stall
-over several milder steps, so an all-token p99 rises under the cap while the
-worst stall falls. p99 is still reported; it is the throughput-side cost.
-
-Items 2 to 4 are co-occurrence evidence from traces; the controlled comparison
-in item 5 is the causal test.
-
-## Run
-
-CPU, synthetic (fake engine with an invented step-cost model; demonstrates the
-pipeline, proves nothing about vLLM):
+CPU demo:
 
 ```bash
 python experiments/mixed_prompts/run.py --engine fake --config baseline --out ./exp/fake_baseline
-python experiments/mixed_prompts/run.py --engine fake --config capped   --out ./exp/fake_capped
+python experiments/mixed_prompts/run.py --engine fake --config capped --out ./exp/fake_capped
 python experiments/mixed_prompts/analyze.py ./exp/fake_baseline --compare ./exp/fake_capped
 ```
 
-GPU (Linux, NVIDIA, `pip install -e ".[vllm]"`), three repeats per config:
+On Linux with an NVIDIA GPU and `pip install -e ".[vllm]"`:
 
 ```bash
 bash experiments/mixed_prompts/run_gpu.sh facebook/opt-125m ./exp_gpu
 ```
 
-`VLLM_ENABLE_V1_MULTIPROCESSING=0` is required: the diagnosis needs batch
-metadata, which only exists with the in-process scheduler.
+This script runs three repeats per configuration. It needs
+`VLLM_ENABLE_V1_MULTIPROCESSING=0` for batch metadata. For explicit GPU
+selection on a multi-GPU host, use the generic runner's `--gpu-id` option
+or configure `gpu_sampler.gpu_ids` in the experiment driver.
 
-## Manifests and work-identical replay
+Real runs use `ignore_eos=True` to keep output counts fixed. The driver saves
+the workload, model, seed, settings, source information, intended and actual
+arrivals, and health in `manifest.json`. A failed start leaves a failed
+manifest with its error.
 
-Every run directory gets `manifest.json` (workload hash, seed, model revision,
-vLLM and llmtrace versions, git commit, effective engine config, GPU, tracer
-config, per-request scheduled vs actual arrival with delay p50/max, status).
-A configuration that fails to start (e.g. out of memory) leaves a manifest
-with `status: failed` and the error, and `llmtrace decide` lists it as failed.
-Real runs use `ignore_eos=True` so every request generates exactly
-`max_tokens`; otherwise batch composition moves where EOS lands and the work
-differs across configurations (`--no-ignore-eos` to disable).
-`--enable-nvtx` adds an NVTX range per engine step; run under
-`nsys profile -t cuda,nvtx`, export with `nsys export --type sqlite`, and
-`scripts/nsys_step_compare.py <sqlite> <run_dir>` compares Nsight's per-step
-GPU busy time with llmtrace's CUDA-event spans (see `docs/GPU_VALIDATION.md`).
+## Read the comparison
 
-Then: `llmtrace findings <run_dir>` and
-`llmtrace decide --target "short ttft_p95 <= 5ms" --config baseline=... --config capped=...`.
+`analyze.py` joins requests to scheduler steps and reports:
 
-## What built-in metrics would have shown
+- TTFT and TPOT by request class, plus TTFT from the intended arrival time.
+- Inter-token latency (ITL), including steps when a request was not scheduled.
+- Step duration and token counts, with large prefill chunks flagged.
+- Latency for affected versus unaffected short requests.
+- A fitted relationship between scheduled tokens and step duration.
 
-vLLM's own metrics (Prometheus / `LoggingStatLogger`, and the same numbers
-llmtrace records through the `stat_loggers` hook) give per-step aggregates:
-TTFT and inter-token latency histograms, queued/prefill/decode time per
-finished request without request ids, running and waiting counts, KV usage,
-preemptions. From those alone one can see that short-request TTFT p95 was
-8.4 ms and that nothing was queued for long. They cannot say *which* steps were
-slow, *what else* was in them, or *which* requests paid for it: there is no
-step-level record of scheduled tokens per request and no link from a request
-to the steps it shared. The trace-level evidence that identified the mechanism
-here was exactly that join (`batches_*.jsonl` request ids and scheduled
-tokens per step, joined to `traces_*.jsonl` batch ids), plus the TTFT
-decomposition into queue and prefill spans that `compare` prints. The
-`findings` command reports the same hypothesis as `insufficient_evidence`, with the
-missing evidence named, when only the aggregate stats are available.
+The comparison reports `improved` only when both short-request TTFT p95 and
+worst ITL improve by at least 20%. If either regresses by that threshold,
+it reports `worse`; otherwise `no_meaningful_change`. Missing metrics produce
+`unavailable`. Without batch metadata in both runs, the stall check uses
+TPOT p95 instead of worst ITL.
 
-## Visualize
+Read ITL p99 and long-request TTFT alongside the verdict. A cap can replace a
+few large stalls with more small ones: the worst stall improves while p99
+gets worse. Shared steps are supporting evidence; the controlled change tests
+the proposed explanation.
+
+## Visualize the evidence
 
 ```bash
-llmtrace visualize ./exp_gpu/baseline_0 --compare ./exp_gpu/capped_0 --html-out report.html --trace-out baseline.perfetto.json
+llmtrace visualize ./exp_gpu/baseline_0 --compare ./exp_gpu/capped_0 \
+    --html-out report.html --trace-out baseline.perfetto.json
 ```
 
-The HTML report shows the request Gantt (long prompts as wide bars, short
-requests stacking up behind the red long-chunk steps), the step-duration
-timeline with long-chunk steps in red, and the step-time-vs-tokens plot the
-diagnosis fits. The Perfetto trace lets you click a slow short request and see
-exactly which step it waited on and what else was in that step.
+The HTML report shows request timelines, long-chunk steps and step duration
+versus token count. Open the Perfetto file to inspect a request and the steps
+it shared. vLLM's aggregate latency and queue metrics show the symptom;
+request IDs and scheduled tokens link it to specific shared steps.
 
-## What would count as a result
+`llmtrace findings <run_dir>` reports the hypothesis and missing evidence.
+Use `decide` with actual repeat paths to check a target. Newer comparison
+checks may withhold recommendations or energy for older records that lack
+required metadata or GPU selection.
 
-* The traces explain the slowdown if flagged steps are markedly longer than
-  unflagged ones, the step-time model has a clear per-token slope, and affected
-  short requests have a worse TPOT/TTFT tail than unaffected ones, in the
-  baseline run.
-* The scheduling change helps if `capped` reduces both short-request TTFT p95
-  and ITL max by at least 20% versus `baseline` in all repeats, with ITL p99,
-  TPOT and the long-request TTFT cost reported alongside. Anything less is
-  reported as no meaningful change.
+## Comparing CUDA spans with Nsight
 
+`--enable-nvtx` adds an NVTX range per step. Record with
+`nsys profile -t cuda,nvtx`, export with `nsys export --type sqlite`, then use
+`scripts/nsys_step_compare.py <sqlite> <run_dir>`. CUDA-event spans include
+launch gaps; the Nsight comparison checks them against measured busy intervals.
 
 ## Results: GPU run 2026-09-08 (RTX A4500, vLLM 0.11.0, opt-125m)
 
@@ -162,7 +114,7 @@ traced settling phase, collector interval 0.1 s. Effective scheduler config
 recorded by the driver: `max_num_batched_tokens=8192`, `max_num_seqs=256`,
 chunked prefill on, FCFS; `long_prefill_token_threshold` 0 vs 256.
 
-**Do the traces explain the slowdown?** Yes, in every baseline run:
+**Baseline observations:**
 
 * 12 of ~1700 steps carried a 1536-token prefill chunk; they took 8.0 to 8.5 ms
   against 1.6 ms for the rest (step-time fit 1.6 ms + 4.1 to 4.5 us per
@@ -173,13 +125,14 @@ chunked prefill on, FCFS; `long_prefill_token_threshold` 0 vs 256.
 * No step exceeded the token model by more than 2x the median (no unexplained
   stalls) in the final set.
 
-**Where does the extra step time go?** (RTX 4000 Ada run, CUDA-event spans,
+**Step timing on a second GPU.** (RTX 4000 Ada run, CUDA-event spans,
 `docs/gpu_runs/2026-09-08-rtx-4000-ada-cuda-spans/exp`): in the baseline the
 12 long-chunk steps have a GPU span of 7.92 ms against 1.71 ms for the other
 ~1480 steps, with host overhead unchanged (p50 0.16 ms, median host share 9%).
-Under the cap the long-chunk span is 2.74 ms. So the interference is GPU
-prefill compute co-scheduled with the short requests' decode, not host work;
-the mean short TTFT change decomposes entirely into the prefill component.
+Under the cap the long-chunk span is 2.74 ms. The extra elapsed time falls inside the CUDA-event span of steps that
+combine prefill with short-request decode. The span includes launch gaps,
+so it does not isolate kernel execution time. The mean short TTFT change
+falls in the recorded prefill component.
 Verdicts on this second GPU: improved 3/3 (short TTFT p95 -62%, ITL max -45
 to -55%, long TTFT +114 to +116%).
 
@@ -211,7 +164,7 @@ rate delivers almost the same tokens per second while spending 45% more energy
 per token; with an open-loop workload the throughput column reflects the
 arrival schedule, not capacity, and `decide` says so.
 
-**Does the scheduling change help on opt-125m?** Verdict `improved` in 3 of 3 repeats (RTX A4500):
+**Effect on opt-125m:** verdict `improved` in all three repeats (RTX A4500):
 
 | metric (short requests unless noted) | baseline | capped (256) | change |
 |---|---|---|---|
@@ -227,7 +180,7 @@ time that short requests and new arrivals wait on, at the price of doubling
 the long request's own time to first token. Whether that trade is worth it is
 a product decision; the traces make it visible and quantified.
 
-Scope: one tiny model on one GPU with ~1.6 ms decode steps. Larger models have
+Scope of the opt-125m table: one model on one GPU with ~1.6 ms decode steps. Larger models have
 longer steps and different prefill/decode cost ratios; the mechanism is the
 same but the magnitudes are not transferable.
 

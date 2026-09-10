@@ -1,13 +1,26 @@
-# GPU Validation
+# GPU validation
 
-Evidence layout: each session under `docs/gpu_runs/` keeps its README, driver
-script, manifests and every derived output in git; the raw JSONL trace files
-are release assets ([`evidence-2026-09`](https://github.com/Aagam-Bothara/llmtrace/releases/tag/evidence-2026-09), one archive per session,
-see `docs/gpu_runs/README.md` to restore them).
+This document records the GPU experiments and how to repeat the checks.
+Use [status](STATUS.md) for a short overview or jump to the
+[repeated A100 runs](#validation-set-from-a-clean-commit-with-independent-repeats-2026-09-09-a100-80gb-qwen25-7b-session-4)
+for the queue and KV-cache results.
 
-The first GPU run happened on 2026-09-08 (results below). The checklist that
-follows is the procedure for repeating it; record results with exact commands
-and outputs, never from memory.
+Scripts, manifests and reports are kept in each session directory. Download
+raw traces and verify their checksums using the
+[evidence guide](gpu_runs/README.md).
+
+The results below describe the code and environment used in each session.
+They are historical measurements, not a new validation of later changes.
+In particular, the latest energy-selection and writer-shutdown fixes were
+CPU-tested without rerunning GPU inference. Current analysis may withhold
+older results that lack required evidence or an explicit GPU selection.
+
+## Repeat the checks
+
+Save the exact commands, environment and output for each new session.
+The smoke commands below suit a host with one NVML-visible GPU. On a
+multi-GPU host, configure `gpu_sampler.gpu_ids` with the engine's physical
+NVML indices, or use the generic runner with repeatable `--gpu-id` flags.
 
 ## Environment
 
@@ -45,13 +58,15 @@ spans, every trace has `batch_ids`, ledger `membership_source=batch_metadata`.
 
 ## Checks (both runs)
 
-Telemetry availability
+### Telemetry availability
+
 - [ ] `health()["gpu_sampler"]["available"]` is true and `unavailable_reason` is null
 - [ ] `samples_taken > 0` and `gpu_*.jsonl` exists; `dropped == 0`, `read_errors == 0`
 - [ ] samples have non-null `power_draw_watts`; note any null fields per GPU
 - [ ] sample interval observed in the file is close to the configured 50 ms (report median and max gap)
 
-Request completion
+### Request completion
+
 - [ ] number of traces == number of prompts; all `status == completed`
 - [ ] `health()["instrumentation"]["active_requests"] == 0` after `stop()`
 - [ ] `instrumentation_errors == 0`, `last_error == null`
@@ -59,7 +74,10 @@ Request completion
 - [ ] a second `llm.generate()` after `stop()` works normally (engine restored)
 - [ ] abort path: add a long request via the raw engine, call `engine.abort_request([...])` while traced, confirm `status == aborted`
 
-Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which forces FINAL_ONLY outputs; B = raw engine loop with CUMULATIVE outputs via `run_engine_with_timing`)
+### Timing
+
+Phase A uses final-only `LLM.generate()`; phase B uses cumulative outputs through `run_engine_with_timing`.
+
 - [ ] Phase A: `output_kind == final_only`, `ttft_ms`/`tpot_ms` are null with a FINAL_ONLY reason; token counts still match
 - [ ] Phase B: generated text identical to phase A (temperature 0)
 - [ ] `output_length` equals the engine's token count per request; `prompt_length` equals `len(prompt_token_ids)` and `prompt_length_source == engine_prompt_token_ids`
@@ -70,39 +88,47 @@ Timing checks (the smoke test runs two phases: A = `LLM.generate()`, which force
 - [ ] Run B only: queue + prefill == TTFT for each request (to floating point)
 - [ ] `tokens_at_first_observation` is 1 without speculative decoding
 
-GPU step spans (CUDA events; in-process run only)
+### GPU step spans (CUDA events; in-process run only)
+
 - [x] `health()["executor_visible_during_run"]` is true and `gpu_steps_*.jsonl` has one record per step with `gpu_span_ms` (RTX 4000 Ada run)
 - [x] `gpu_span_ms <= host_step_ms` for every step, and `cuda_timing.dropped == 0`, `errors == 0`
-- [x] median host share per step recorded: 9 to 13% on opt-125m, i.e. GPU-bound; the `host_overhead` finding reports not supported (the expectation of a large host share was wrong)
+- [x] median host share per step recorded: 9 to 13% on opt-125m (the CUDA span still includes launch gaps); the `host_overhead` finding reports not supported (the expectation of a large host share was wrong)
 - [x] with `enable_nvtx=True` under `nsys profile`, llmtrace step ranges appear next to the kernels, and every range matched a `gpu_steps` record; `gpu_span_ms >= ` Nsight busy time on every step (RTX A5000 run, `scripts/nsys_step_compare.py`)
 - [x] traced-vs-untraced wall time with `gpu_step_timing` on vs off (event recording cost): 0.11 ms per step, +3.0% (RTX A5000 session 2)
 - [x] `llmtrace run --workload w.json --engine vllm` (the generic runner) reproduces `experiments/mixed_prompts/run.py` on the same GPU: same effective config, work-identical hash, verdicts agree (RTX A5000 session 2)
 - [x] `llmtrace plan` -> `llmtrace run --plan` -> `llmtrace decide` on real vLLM, one process per engine (RTX A5000 session 2)
 - [x] vLLM per-step stats through the post-hoc attach on the sync engine (`disable_log_stats=False`; RTX A5000 session 2)
 
-AsyncLLM (`examples/vllm_async_smoke_test.py`)
+### AsyncLLM (`examples/vllm_async_smoke_test.py`)
+
 - [x] concurrent `generate()` streams traced with TTFT, token counts equal to the consumer's, status completed (RTX 4000 Ada run)
 - [x] a stream the client stops reading is recorded `aborted` with `abort_cause=client_cancelled` and a partial token count, and `AsyncLLM.abort` was called
 - [x] `generate`/`abort` restored after `stop()`; scheduler and executor reported unavailable with the AsyncLLM reason; `vllm_stats_*.jsonl` present
 
-vLLM stats (stat_loggers hook)
-- [x] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step (AsyncLLM run; sync engine post-hoc attach still fakes-only)
+### vLLM stats (stat_loggers hook)
+
+- [x] `health()["vllm_stats"]["unavailable_reason"]` is null and `vllm_stats_*.jsonl` exists with one record per engine step (AsyncLLM run; sync-engine attachment was checked later in session 2)
 - [ ] `kv_cache_usage`, `num_running_reqs`, `num_waiting_reqs` populated; `num_preempted_reqs` is 0 in the smoke run
 - [ ] vLLM's own TTFT samples (`time_to_first_tokens_s`) agree with llmtrace `ttft_ms` within a step for the raw-engine phase
 - [ ] the logger is gone from `engine.logger_manager.per_engine_logger_dict[0]` after `stop()`
 
-Energy checks
+### Energy checks
+
+- [ ] Record every participating physical GPU index and UUID; exclude unrelated devices.
+- [ ] Confirm enough integrated coverage and an allocation or reason for every request.
 - [ ] ledger `conservation_error_joules < 1e-6`
 - [ ] `device_joules` roughly equals mean power × run window from `nvidia-smi --query-gpu=power.draw --format=csv -lms 100` sampled in parallel (order of magnitude; write down both numbers)
 - [ ] every request has either an allocation or an `unavailable_reason`; count each
 - [ ] idle energy is non-zero if there were gaps between requests, zero otherwise
 
-Tracing enabled vs disabled
+### Tracing enabled vs disabled
+
 - [ ] run `--no-trace --repeat 5` and `--repeat 5`; record per-run `generate()` wall times for both
 - [ ] report median traced/untraced ratio; do not claim an overhead figure before this exists
 - [ ] outputs (generated text) are identical between traced and untraced runs at temperature 0
 
-Failure surfacing
+### Failure surfacing
+
 - [ ] with `strict_instrumentation=True`, inject a fault (e.g. monkeypatch `_on_step_completed`) and confirm the exception surfaces after the engine call
 - [ ] with `require_gpu=True` and NVML blocked, confirm `instrument_engine()` raises **and** the engine is restored (`"step" not in engine.__dict__`), no `llmtrace-*` threads remain
 
@@ -399,14 +425,14 @@ repeats, while doubling long-request TTFT.
   (in `vllm/transformers_utils/tokenizer.py`). Not an llmtrace bug; the `vllm`
   extra now pins `transformers>=4.56,<5`.
 
-## Things likely to need adjustment after the first run
+## Checks to revisit when changing the environment
 
 * `_attach_scheduler` path if `InprocClient` attribute names differ at runtime.
 * `NVMLBackend` throttle-reason constants on older `nvidia-ml-py`.
 * `min_coverage_fraction` for very short requests at 50-100 ms sampling.
 * The `prefill` span including the first decode step (step granularity).
 
-## Out of scope for this phase
+## Outside this validation scope
 
 Renting hardware, deploying servers, AMD/ROCm, DCGM, dashboards, additional
 inference frameworks, ML-based diagnosis, distributed multi-node runs.

@@ -1,29 +1,79 @@
-# Status, in detail
+# Status and limitations
 
-Every row below is either backed by a committed evidence directory under `docs/gpu_runs/` (validated), tested against fakes on CPU (implemented), or absent (not implemented). The numbers are copied from `docs/GPU_VALIDATION.md`, which has the full tables and the caveats.
+llmtrace targets **vLLM 0.11.0**. This page separates recorded hardware
+results from CPU tests and features that are still missing.
 
-Status labels: **validated** = exercised on real vLLM 0.11.0 on a GPU with
-committed evidence; **implemented** = CPU-tested against fakes shaped like the
-verified vLLM interfaces; **not implemented** = absent.
+## What works
 
-| Area | Status |
-|------|--------|
-| Instrumentation of vLLM 0.11.0 `LLMEngine` (`add_request`/`step`/`abort_request`) | Validated: patched, traced 8/8 and 64/64 requests, restored cleanly |
-| Scheduler batch metadata | Validated in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`); correctly reported unavailable with the default multiprocess core |
-| GPU telemetry (NVML, background thread) | Validated: all fields populated on an A5000, samples taken while `generate()` blocks |
-| Energy ledger (per-GPU integration, allocation policies, conservation) | Unit-tested with known totals; on the GPU run, device energy matched a separately collected `nvidia-smi` stream of the same NVML sensor within 0.15% over identical boundaries |
-| Timing (TTFT/TPOT) | Validated through the raw engine loop; `LLM.generate()` forces FINAL_ONLY outputs and yields no first-token timing (documented) |
-| Overhead | Small-model benchmark only (opt-125m, 64 x 256 tokens, 256 steps). First session (no GPU step timing): +4% (`generate()`) and +9% (cumulative engine loop), 0.13 to 0.29 ms per step. Second session (RTX A5000, GPU step timing on): +7.7% and +14.4%, 0.25 to 0.47 ms per step, of which the CUDA-event recording itself is 0.11 ms per step (+3.0%). Qwen2.5-7B on A100 80GB (same matrix): +1.2% (`generate()`) and +1.7% (engine loop), 0.16 to 0.23 ms per step, CUDA events 0.08 ms per step (+0.6%) |
-| Evidence-based findings (`llmtrace findings`) with assumptions, competing explanations and confidence limits | Three of five findings validated end to end on real vLLM (each induced, found, planned, replayed, decided): long-prompt interference (opt-125m, 7B), queue overload (opt-125m, 7B: `max_num_seqs=8` under bursts; 72 and 88 requests waited over 100 ms), KV-cache pressure (opt-125m: 100% usage in 1547 steps with 56 preemptions from vLLM's stats; Qwen2.5-7B: 22 preemptions, and raising memory utilization removed them and cut e2e p95 by 21% across three independent repeats from a clean commit). `host_overhead` and `tracer_observer_effect` report not supported on every recorded run, which is consistent but not a validation |
-| Experiment planner (`llmtrace plan`, `llmtrace run --plan`) | Validated (RTX A5000, opt-125m): the plan from a real baseline run proposed `long_prefill_token_threshold` 1024 and 512; six engines ran one process each; `decide` selected the 512 cap (short TTFT p95 4.8 ms vs 8.3 ms baseline, goodput 98% vs 89%, long TTFT +62%); the effect grows monotonically with the cap (1024: -24%, 512: -41%, 256: -64% short TTFT p95). Session 3: for queue overload the plan's `max_num_seqs` doubling cut burst TTFT p95 from 379 to 166 ms on opt-125m and from 6.4 to 2.1 s on the 7B model while its `max_num_batched_tokens` doubling changed nothing (a negative control); for KV pressure `gpu_memory_utilization` 0.06 to 0.16 removed all preemptions and cut e2e p95 by 28%. Candidates are ranked by the affected-request count of their finding (`--finding` restricts them) after the cap crowded out the KV candidates on the first attempt |
-| Goodput under per-class SLOs and bootstrap intervals in `decide` | Implemented and CPU-tested |
-| vLLM engine stats via `stat_loggers` hook | Validated on `AsyncLLM` (34 per-step records over the multiprocess core) and, post-hoc, on the sync engine (RTX A5000: 1714 per-step records with KV usage and 136 finished-request stats with queue time). `vllm.LLM` disables stats logging unless `disable_log_stats=False` is passed; the runner passes it |
-| GPU span per step (CUDA events around `execute_model`), `host_overhead` finding | Validated (RTX 4000 Ada, A100 with Qwen2.5-7B): one span per step, never above host time, timer clean; long-prefill interference is GPU compute (7.9 vs 1.7 ms on opt-125m, 103 vs 11 ms on the 7B model); host share 9 to 13% on opt-125m, 2% on the 7B model; refused for TP>1 executors |
-| NVTX ranges per step, Nsight Systems cross-check (`scripts/nsys_step_compare.py`) | Validated (RTX A5000, opt-125m, Nsight Systems 2026.1): all 626 and 654 step ranges of two runs matched to llmtrace's spans; the span was never below Nsight's GPU busy time (kernels plus CUDA-graph executions); busy/span 0.58 on decode steps of this launch-bound 125M model, 0.84 on 1536-token prefill steps |
-| Threshold screens in the rules engine, CLI `analyze` / `compare` | Implemented and CPU-tested; screens flag symptoms only and never assert a cause |
-| Diagnosis experiment (short requests mixed with long prompts) | Run on opt-125m (RTX A4500, RTX 4000 Ada) and on Qwen2.5-7B (A100, TP=1 and TP=2): traces attribute the short-request tail to steps carrying 1536-token prefill chunks, CUDA spans show that cost is GPU prefill compute (103 vs 11 ms steps on the 7B model); `long_prefill_token_threshold=256` cut short TTFT p95 by 62 to 72% and the worst stall by 45 to 72%, raising long-request TTFT by 64 to 116% (`experiments/mixed_prompts/README.md`) |
-| Configuration-driven workloads and runs (`llmtrace workload`, `llmtrace run`) | Validated (RTX A5000, opt-125m): the generic runner reproduces the experiment driver on the same workload and GPU (short TTFT p95 -64 / -65% vs the driver's -61% under the 256 cap; `decide` accepts runner and driver runs as repeats of one configuration, work-identical); one spawned process per real engine so consecutive engines do not fight over GPU memory |
-| `llmtrace doctor` (which signals this environment or a recorded run can provide, and why not) | Implemented; CPU-tested with injected probes |
-| `llmtrace monitor` (attach to a running process) | Not implemented; exits with status 3 |
-| `AsyncLLM` (the OpenAI-server engine) via `instrument_async_engine()` | Validated (RTX 4000 Ada, opt-125m): 6 concurrent streams traced with TTFT and engine token counts, a client-cancelled stream recorded as aborted after 4 tokens, `generate`/`abort` restored, vLLM per-step stats via `stat_loggers` over the multiprocess core; no batch membership, queue/prefill boundary or GPU spans there, reported as unavailable with the reason |
-| Multi-node / distributed tracing, DCGM, dashboards | Not implemented |
+| Area | Status and limits |
+|------|-------------------|
+| Synchronous request tracing | Tested on real `LLMEngine`: submission, completion, aborts and method restoration |
+| Scheduler metadata | Tested with the in-process core; unavailable with the default multiprocess core |
+| Async request tracing | Tested on directly constructed `AsyncLLM`: concurrent streams, cancellation and restoration |
+| TTFT and TPOT | Tested through cumulative engine outputs; unavailable through `LLM.generate()` |
+| NVML telemetry | Tested on GPUs; missing fields and errors are reported |
+| CUDA-event step spans | Tested on RTX 4000 Ada and A100, with an Nsight cross-check on A5000; blocking single-process executor only |
+| Energy accounting | Known totals, gaps and allocation policies tested on CPU; a recorded integration matched a separate `nvidia-smi` stream within 0.15% |
+| Findings | Long-prompt interference, queue overload and KV pressure tested through the full experiment loop |
+| Planner and runner | Baselines and candidate settings replayed on real vLLM in fresh processes |
+| Goodput and uncertainty | CPU-tested SLO checks, request bootstrap intervals and variation across runs |
+| Comparison validation | CPU-tested manifest compatibility, health requirements, duplicates, missing metrics and strict bounds |
+| GPU selection and energy availability | CPU-tested physical-device selection, missing telemetry and incomplete allocations; no new GPU inference run for these fixes |
+| Writer shutdown | CPU-tested concurrent submission and shutdown for inline and background writes |
+| Doctor, reports and visualization | CPU-tested environment/run checks, text and JSON reports, HTML and Perfetto output |
+
+A separate `nvidia-smi` stream reads the same NVML sensor. Agreement checks
+the sampling and integration, not the sensor's absolute accuracy.
+
+## Recorded results
+
+These numbers describe specific experiments. They are not performance
+promises for other workloads.
+
+| Experiment | Recorded result |
+|------------|-----------------|
+| Queue overload, Qwen2.5-7B on A100 | Four repeats: doubling the sequence cap reduced burst TTFT p95 from 6.43 s to 2.18 s, with 47% lower energy per output token |
+| KV-cache pressure, Qwen2.5-7B on A100 | Three repeats: raising memory utilization removed 22 preemptions and reduced end-to-end p95 from 38.0 s to 29.9 s |
+| Mixed prompts, opt-125m and Qwen2.5-7B | A 256-token prefill cap reduced short-request TTFT p95 by 62?72%, while long-request TTFT rose by 64?116% |
+| CUDA span vs Nsight busy time, opt-125m | The span was never below busy time across 1,280 steps; busy time was about 58% of the span on decode steps and 84% on long-prefill steps |
+| Tracing overhead with step timing, opt-125m | +7.7% for `generate()` and +14.4% for the engine loop |
+| Tracing overhead, Qwen2.5-7B | +1.2% for `generate()` and +1.7% for the engine loop; CUDA-event recording cost 0.08 ms per step |
+
+Full tables, environments, earlier attempts and caveats are in
+[GPU validation](GPU_VALIDATION.md). Download the underlying records from
+the [evidence index](gpu_runs/README.md). Historical reports describe the
+code used in those sessions; current comparison checks may withhold results
+when older records lack required evidence.
+
+## How to interpret the limits
+
+**Timing:** observations are tied to engine steps. CUDA spans include launch
+gaps and exclude work outside the measured stream; they do not directly
+measure GPU busy time.
+
+**Energy:** select the engine's physical GPUs. Readings include other work
+sharing those GPUs, and request energy is an allocation. Missing coverage or
+allocations make energy unavailable without invalidating latency.
+
+**Findings:** `host_overhead` and `tracer_observer_effect` have returned
+`not_supported` on recorded runs. That does not validate their ability to
+detect a real positive case.
+
+**Repeats:** the largest recorded comparison has four independent repeats
+per configuration. A bootstrap over requests does not replace more runs.
+
+## Not validated on hardware
+
+Models above 7B, speculative decoding, multiple outputs per request (`n > 1`),
+pipeline parallelism, aborts under sustained load and nontrivial throttle
+reason bits still need coverage. The OpenAI-compatible server process itself
+has not been instrumented in the recorded tests.
+
+## Not implemented
+
+- Attaching to an existing process: `llmtrace monitor` exits with code 3.
+- Automatic integration inside the OpenAI-compatible server process.
+- Distributed or multi-node tracing and tensor-parallel worker instrumentation.
+- DCGM, dashboards, OTLP export and ML-based diagnosis.
+
+See the [design review](AUDIT.md) for remaining risks and next steps.

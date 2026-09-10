@@ -1,97 +1,69 @@
-# Development Guide
+# Development guide
+
+Start with the [quickstart](QUICKSTART.md) to run the tool. This guide explains
+the implementation and the meaning of its records.
 
 ## Architecture
 
-```
-vLLM process
-┌───────────────────────────────────────────────────────────────────┐
-│ caller thread: vllm.LLM.generate() -> LLMEngine.step() loop        │
-│   VLLMInstrumentation wraps add_request / step / abort_request     │
-│   (and scheduler.schedule when in-process)                         │
-│                                                                    │
-│ threads: GPUSampler (NVML) │ collector (drains buffers) │ writer   │
-└───────────────────────────────────────────────────────────────────┘
-                 traces_*.jsonl  batches_*.jsonl  gpu_*.jsonl
-                                     │
-             offline: io.load_* -> Correlator -> RulesEngine -> Reporter / CLI
+```text
+vLLM engine -> request/scheduler hooks -> buffers -> collector -> writer
+NVML        -> GPU sampler            -> buffer  -> collector -> writer
+
+Saved files -> correlator -> reports
+            -> findings  -> experiment plan -> new runs -> decision
 ```
 
-Data plane (`llmtrace/data_plane`) collects; control plane
-(`llmtrace/control_plane`) analyses offline and never needs vLLM or NVML.
-`llmtrace/workload.py` and `llmtrace/runner.py` replay a configuration-driven
-workload on the fake or the real engine and write a run directory with its
-manifest; `llmtrace/doctor.py` reports which signals an environment or a
-recorded run has. `docs/AUDIT.md` is the current architecture and gap audit.
+`data_plane/` collects records inside the engine process. `control_plane/`
+analyzes them offline, without vLLM or NVML. `workload.py` defines request
+workloads; `runner.py` replays them; `doctor.py` reports available signals.
 
-## Workloads and runs (`workload.py`, `runner.py`)
+## Workloads and runs
 
-A `WorkloadSpec` (JSON; `llmtrace workload template`) lists request classes,
-each with a count, prompt-length and `max_tokens` distributions (fixed,
-uniform, choice, clipped lognormal) and an arrival process (at once,
-constant, Poisson, gamma with a burstiness shape, bursts). `generate()` is a
-pure function of the spec and seed; request ids are `<class>-<index>` and
-`class_of()` recovers the class (`decide` and the experiment analysis rely on
-that). Prompts are token-id lists so lengths are exact without a tokenizer.
+A `WorkloadSpec` lists request classes, prompt and output lengths, arrival
+patterns and a seed. Generation is deterministic. Supported length patterns
+include fixed, uniform, choice and clipped lognormal; arrival patterns
+include simultaneous, constant, Poisson, gamma and bursts.
 
-`run_workload(spec, RunOptions)` replays the list on the synthetic engine
-(CPU) or on vLLM (GPU; the same warm-up, settle and `ignore_eos` protocol the
-experiment validated) under `LLMTracer`, and writes raw data only:
-`traces_*`, `batches_*`, `gpu_*`, `gpu_steps_*`, `vllm_stats_*`,
-`collector_*`, `workload.json`, `manifest.json`, `run_info.json`. Failures
-leave `status: failed` in the manifest. Derived summaries are produced by
-`analyze` / `findings` / `decide` / `visualize` and never written into the
-run directory by the runner. Real engines get one spawned process each
-(`run_workload_isolated`): vLLM 0.11.0's `LLM` has no close, and a second
-engine started in the same process fails on free GPU memory (seen on the RTX
-A5000 session); the child writes the manifest and the parent reads it back; a child that exits nonzero or is killed on timeout leaves `status: failed` with the reason even when it had already written a manifest, so `decide` excludes it,
-recording a child that died without one as a failed run. The runner passes
-`disable_log_stats=False` to `LLM(...)`, because `vllm.LLM` otherwise disables
-stats logging and there is no `logger_manager` to attach to. A directory that
-already holds a run is refused (`FileExistsError`; `--overwrite` removes the previous run's llmtrace
-files first): two runs written into one directory would load as one run with
-twice the traces and a manifest expecting half of them.
+Request IDs use `<class>-<index>`. Prompts are token-ID lists, so requested
+lengths do not depend on a tokenizer. Keep IDs and seeds stable for replay.
 
-## Provenance (`provenance.py`)
+The runner writes traces, batches, GPU samples, CUDA spans, vLLM stats,
+collector timings, `workload.json`, `manifest.json` and `run_info.json`.
+Analysis commands produce the derived reports separately.
 
-Every manifest records which code produced the run: `llmtrace_source_fingerprint`
-(sha256 over the installed package's `.py` files, path-sorted, line endings
-normalized), `llmtrace_git_commit` and `llmtrace_git_commit_full`,
-`llmtrace_git_dirty`, and when the tree is dirty the `git diff HEAD` saved
-next to the manifest as `source.patch` (`llmtrace_source_patch`) plus
-`source_untracked.tar.gz` with the contents of every untracked, non-ignored
-file (`llmtrace_untracked_archive`; files above 1 MB are listed but not
-archived). `llmtrace_snapshot_complete` is false, with the gaps listed in
-`llmtrace_snapshot_gaps`, whenever something could not be captured: a binary
-tracked change, an oversized untracked file, a failed archive, or no git tree
-at all. A fingerprint equal to a clean commit's fingerprint proves the
-evidence came from that commit; a dirty run is reproducible from the commit,
-the patch and the archive only when the snapshot is complete, and a
-fingerprint alone identifies code without restoring it. `llmtrace doctor`
-prints the fingerprint and git state of the installed code and, for a run
-directory, whether the run's fingerprint matches the code installed now and
-whether its snapshot is complete. GPU sessions 2
-and 3 predate this and are described in their READMEs as a commit plus the
-fixes committed together with the evidence.
+Real engines run in fresh child processes to avoid GPU-memory conflicts
+between consecutive engines. Start failures, crashes and timeouts leave a
+failed manifest. The runner enables vLLM stats with `disable_log_stats=False`.
+Existing run directories are refused unless `--overwrite` is set.
 
-## Health assessment (`health.py`)
+## Source provenance
 
-`assess_health()` is the one reading of `LLMTracer.health()` used by the
-runner (`problems` in the manifest), `doctor` and `decide`. Fatal problems
-(instrumentation errors, requests active at stop, dropped or unwritten
-traces, writer errors, collector errors) make a repeat ineligible for any
-comparison. Telemetry problems (GPU sampler unavailable, lossy or erroring;
-GPU step timing unavailable or erroring; vLLM stats unavailable; dropped
-batch, GPU, stats or collector records) do not affect latency targets, but
-each one clears the flag of the signal it belongs to (`gpu_telemetry_ok`,
-`gpu_steps_ok`, `vllm_stats_ok`), including records dropped in the writer
-queue, and `decide` reports energy per token as unavailable for a repeat
-whose GPU telemetry flag is false, with the reason in the notes.
+The manifest records a source fingerprint, Git commit and dirty-tree state.
+Dirty runs also save a patch and an archive of untracked files where possible.
+Files above 1 MB are listed but not archived. Binary changes, oversized files,
+archive failures or a missing Git tree make `llmtrace_snapshot_complete` false,
+with details in `llmtrace_snapshot_gaps`.
+
+A fingerprint identifies code; it cannot restore it. Reproduction needs the
+commit and a complete patch/archive snapshot. `doctor` compares the recorded
+fingerprint with the installed code and reports missing source evidence.
+
+## Health
+
+`assess_health()` is shared by the runner, `doctor` and `decide`.
+Instrumentation failures, unfinished requests, lost traces and writer or
+collector errors make a repeat ineligible. `decide` also rejects unknown
+health for recommendations.
+
+Missing or lossy telemetry disables the dependent measurement. It does not
+by itself invalidate request latency. Energy reporting additionally needs
+sufficient integrated coverage and available allocations.
 
 ## Verified vLLM target
 
+
 llmtrace targets exactly **vLLM 0.11.0**, V1 engine, synchronous
-`vllm.v1.engine.llm_engine.LLMEngine` as used by `vllm.LLM`. The following
-was read from the tagged source (not guessed):
+`vllm.v1.engine.llm_engine.LLMEngine` as used by `vllm.LLM`. The reference below was checked against the tagged source:
 
 | Interface | Location | Shape |
 |-----------|----------|-------|
@@ -134,251 +106,181 @@ The engine core is always out of process there, so scheduler and executor
 evidence is unavailable and reported as such; vLLM's per-step stats still
 arrive through the `stat_loggers` hook.
 
-## Instrumentation semantics
+## Instrumentation and timing
 
-* Wrappers are plain synchronous functions. The engine's return value is
-  returned unchanged and its exceptions propagate unchanged. llmtrace
-  bookkeeping runs after the engine call inside `_guard`, which counts and logs
-  failures (`health()["instrumentation_errors"]`, `last_error`);
-  `strict_instrumentation=True` re-raises them after the engine call.
-* Patches are stored as `(target object, name, original instance attribute)`.
-  Restoration deletes the instance override (restoring the class method) or
-  puts back the instance attribute. Double-wrapping is detected via a marker
-  attribute; instrumenting twice with the same engine is a no-op; uninstrument
-  is idempotent and returns still-active requests marked `incomplete`.
-* One `threading.Lock` guards all instrumentation state. Completion is
-  finalised inline under that lock (the previous nested-lock deadlock is gone).
-* Abort: `abort_request` marks requests `aborted`; so does a `finish_reason`
-  of `abort` in step outputs.
-* Token counts: prompt length from `RequestOutput.prompt_token_ids` (engine),
-  falling back to caller-supplied `prompt_token_ids`; otherwise `null`.
-  Output length is the sum of `token_ids` across completions, accumulated for
-  DELTA outputs and taken as-is for CUMULATIVE/FINAL_ONLY.
-* First token: the first step after which the request's accumulated output
-  token count becomes positive (not "exactly one token"). TTFT is not observable
-  for FINAL_ONLY and is reported as unavailable.
-* TTFT = first-token step end - arrival (monotonic). TPOT = (last-token step
-  end - first-token step end) / (tokens - tokens at first observation); `null`
-  if the denominator is 0.
-* Spans: with the in-process scheduler, `queue` = arrival to the start of the
-  first step that scheduled the request, `prefill` = that step start to first
-  token step end (includes the first decode step; step granularity).
-  Without it, a single `time_to_first_token` span; no boundary is inferred.
-* Prefill vs decode per batch: `computed_before = num_computed_tokens -
-  num_scheduled_tokens[req]` (because `schedule()` has already advanced the
-  counter); prefill iff `computed_before < num_prompt_tokens`. Prefix-cache
-  hits start the counter above 0; preemption resets it, so a resumed request
-  counts as prefill again.
-* Batches: `batch_id` is llmtrace's own (`<session>-s<step>-b<seq>`), because
-  `SchedulerOutput` has no identifier; `request_ids` are the engine's.
-  `step_end_monotonic` is stamped when the step returns so batches are real
-  execution intervals for energy membership.
+Wrappers preserve engine return values and exceptions. Bookkeeping failures
+are counted and logged; `strict_instrumentation=True` raises them. Stopping
+restores original methods and records requests still active as incomplete.
+Abort calls and abort finish reasons produce aborted traces.
 
-## vLLM's own stats (`data_plane/vllm_stats.py`)
+Prompt length comes from engine token IDs, with caller token IDs as a fallback.
+Output tokens come from completion token IDs. Delta outputs are accumulated;
+cumulative and final-only outputs use their reported totals.
 
-Besides its own hooks, llmtrace records what vLLM reports through the
-supported `stat_loggers` mechanism, once per engine step: KV-cache usage,
-queue depth, preemptions, prefix-cache stats, vLLM's own TTFT and inter-token
-latency samples, and per-finished-request timings. These work with the default
-multiprocess engine core. Two ways to enable it:
+| Measurement | Definition |
+|-------------|------------|
+| TTFT | First-token step end minus request arrival |
+| TPOT | Time from first to last token observation divided by tokens after the first observation |
+| Queue span | Arrival to the first scheduled step's start |
+| Prefill span | That step's start to the first-token step's end |
 
-* construction time (preferred): `LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])`;
-* post-hoc: `tracer.instrument_engine(engine)` appends a logger to
-  `engine.logger_manager.per_engine_logger_dict` when log stats are enabled,
-  and removes it on `stop()`. `health()["vllm_stats"]["unavailable_reason"]`
-  says why when it could not.
+Durations use monotonic time. TTFT includes queue wait and the full step that
+first exposes a token. TPOT is unavailable without enough observations.
+Final-only and pooling outputs cannot provide first-token timing.
 
-Records go to `vllm_stats_<session>.jsonl`; `llmtrace analyze` and
-`llmtrace visualize` summarize and chart them. vLLM does not attach request
-ids to finished-request stats, so they are run-level evidence (e.g. for the
-KV-pressure/preemption hypothesis), not per-request attribution.
+Queue and prefill boundaries require the in-process scheduler. Otherwise,
+records use one `time_to_first_token` span. Batch classification accounts for
+`schedule()` already advancing `num_computed_tokens`: subtract scheduled
+tokens before deciding whether a request is still in prefill. Prefix-cache
+hits and preemption affect that counter.
 
-## Two layers of diagnosis
+Batch IDs are generated by llmtrace; request IDs come from the engine.
+`step_end_monotonic` makes a batch an execution interval for allocation.
 
-`RulesEngine` (`control_plane/rules_engine.py`) is a set of threshold
-*screens* over one request: they flag a symptom (long queue span, throttled
-samples, high memory use) with the evidence value and threshold, and carry a
-ranking `score`. They do not assert causes: a high TTFT alone never produces a
-diagnosis, and rules whose inputs are missing return nothing rather than a
-guess. `findings.py` is the evidence layer: it joins requests, scheduler steps
-and vLLM stats, names what is missing, and proposes the experiment that would
-test the hypothesis. New diagnosis work belongs in findings.
+## vLLM stats
 
-## Findings and decisions (`control_plane/findings.py`, `control_plane/decision.py`)
+`data_plane/vllm_stats.py` records vLLM's `stat_loggers` output: queue depth,
+KV usage, preemptions, prefix-cache stats and latency samples. These signals
+can work with the default multiprocess core.
 
-A `Finding` is a hypothesis with a status (`supported`, `not_supported`,
-`insufficient_evidence`), the affected request ids, supporting events (each
-naming the file and field it came from), the evidence that is missing, the
-check's `assumptions`, the `competing_explanations` the recorded events are
-also consistent with, its `confidence_limits`, and a suggested experiment.
-The three context lists are fixed per hypothesis (`_CONTEXT`) and attached by
-the `_check` decorator on every return path, so they describe the check
-itself, not the outcome. Findings never claim a root cause; the suggested
-experiment is the causal test. `queue_overload` uses vLLM's own
-`queued_time` from `FinishedRequestStats` when the in-process queue spans are
-absent (then with no request ids).
+Attach at construction with
+`LLMEngine.from_engine_args(args, stat_loggers=[tracer.stat_logger_factory()])`,
+or let `instrument_engine()` attach when engine stats logging is enabled.
+The logger is removed on stop; health records explain attachment failures.
+Finished-request stats do not include request IDs, so they support run-level
+findings rather than per-request attribution.
 
-`decision.evaluate()` scores configurations against a parsed `Target`
-(`<class|*> <ttft|ttft_sched|tpot|e2e>_<pNN|max> <= <ms>`), per repeat, and
-only reports. A repeat is an independent run: the same directory listed
-twice (under any spelling of the path), a copied run directory (same tracer
-session id, taken from the manifest health or the traces' clock domain), or
-one run listed under two configurations counts once; later mentions get
-status `duplicate`, are excluded from eligibility, and are named in the
-notes. Uncertainty comes in two kinds that are never merged. The
-run-to-run range is the min..max (and spread) of the target statistic across
-eligible repeats; it is the only estimate of between-run variation, so a
-configuration needs `min_repeats` eligible repeats (default 2, `--min-repeats`;
-three or more recommended, and the notes say how many each configuration
-had) to be a candidate. The 95% interval is a seeded percentile bootstrap
-(default 1000 resamples) over the per-request values pooled across eligible
-repeats: a within-run statement that treats requests as independent draws,
-which they are not (requests in one run share engine steps and the arrival
-schedule), so it understates the true uncertainty and the table labels it
-`req-bootstrap`; a candidate whose interval upper bound misses the target is
-listed as `marginal`. Optional `Slo`s
-(`<class|*>: <metric> <= <ms>, ...`) give goodput: the share of selected
-requests meeting every bound, with a request lacking a bounded metric counted
-as not meeting it and the coverage reported. The recommendation prefers the
-highest goodput when SLOs are given, otherwise the highest median throughput,
-among candidates meeting the target in every repeat; always labeled advisory.
+## Findings and decisions
 
-## Experiment planner (`control_plane/experiments.py`)
+`RulesEngine` screens individual requests for symptoms. `findings.py` joins
+requests, steps and engine stats to test hypotheses. Add new diagnosis work
+to findings when it needs evidence across records.
 
-`plan_experiments(findings, manifest, batches)` maps supported findings to a
-bounded list of `Candidate`s (name, `scheduling_change`, source finding,
-rationale, expected effect, expected cost): `long_prompt_interference` gives
-`long_prefill_token_threshold` values below the largest observed chunk (and a
-halved `max_num_batched_tokens` when that would cap it); `queue_overload`
-doubles `max_num_seqs` when the running count reached it and doubles the
-token budget; `kv_cache_pressure` raises `gpu_memory_utilization` by 0.1 (at
-most 0.95), halves `max_num_seqs`, enables prefix caching if off;
-`host_overhead` doubles `max_num_seqs`. Baseline knobs come from the
-manifest's effective config (real sections or the fake engine's). Candidates
-are ranked by the affected-request count of their source finding (most
-first, ties in rule order; `--finding` restricts the plan to named
-hypotheses), deduplicated and capped (`--max-candidates`), skipped items are
-listed with the reason, and the plan is JSON that `llmtrace run --plan` executes as
-fresh engines under the same workload (`<out>/<config>/r<i>`), warning if the
-workload hash differs from the plan's source run. The plan carries the source
-run's engine (`fake`/`vllm`), model, revision and `source_engine_kwargs`.
-Those kwargs are reconstructed from the effective configuration through an
-explicit map of settings that have an engine kwarg form (`_REPRODUCIBLE`:
-token budget, sequence cap, chunked prefill, prefill threshold, partial
-prefill limits, scheduling policy, block size, memory utilization, prefix
-caching, revision, dtype, seed, max model length, tensor/pipeline/data
-parallelism; for the fake engine every recorded knob), then the run's
-explicit engine kwargs and scheduling change are applied on top. Effective
-entries with no kwarg form are listed in `unreproduced` (`NOT REPRODUCED`
-in the plan text, a warning at `run --plan`, and `plan.reproducible` is
-false); derived values such as `num_gpu_blocks` are neither. The baseline
-runs with exactly those kwargs and every candidate applies its change on
-top, so a source run with a 512-token budget recorded only in its effective
-config keeps that budget in the baseline. `--engine` and `--model` default to
-the plan's values. Nothing is executed by the planner and no
-running server is modified.
+Each finding includes its status, affected requests, source files and fields,
+missing evidence, assumptions, competing explanations and confidence limits.
+Statuses are `supported`, `not_supported` and `insufficient_evidence`.
+A supported finding suggests an experiment; it does not prove a root cause.
 
-## GPU span per step (`data_plane/cuda_timing.py`)
+`decision.evaluate()` compares configurations against a target such as
+`short ttft_p95 <= 20ms`. It accepts `<` and `<=` without changing the bound.
+Before ranking, it checks:
 
-With the in-process engine core, llmtrace wraps `model_executor.execute_model`
-and records a `torch.cuda.Event(enable_timing=True)` before and after each
-call on the engine thread's current stream. The elapsed time is the step's
-**GPU span**: an upper bound on GPU busy time (it includes launch gaps on that
-stream) that excludes work on vLLM's other streams (async output copy,
-communication). `host_overhead_ms = host_step_ms - gpu_span_ms`. Events are
-resolved lazily with `query()` at later steps and at collection time, never
-by synchronizing; pending events are bounded and drops counted. Records go to
-`gpu_steps_*.jsonl`, feed the `host_overhead` finding, the experiment's
-per-step GPU/host split, and Perfetto counter tracks. `enable_nvtx` adds an
-NVTX range per step for Nsight Systems; `scripts/nsys_step_compare.py` joins
-an `nsys export --type sqlite` database with `gpu_steps_*` by step index and
-reports Nsight's busy time (union of `CUPTI_ACTIVITY_KIND_KERNEL` and
-`CUPTI_ACTIVITY_KIND_GRAPH_TRACE`; vLLM's decode steps are CUDA graphs and
-appear only in the latter under the default `--cuda-graph-trace=graph`)
-against the span. Scope: vLLM's default blocking path
-(`UniProcExecutor.collective_rpc` runs the worker method on the calling
-thread); with async scheduling (`non_block=True`) `execute_model` returns a
-future and the bracket would cover only submission, so spans are not
-meaningful there and that mode is unsupported. Tensor-parallel executors run
-workers in other processes and are out of reach. Status: validated on RTX
-4000 Ada and A100 (Qwen2.5-7B) and cross-checked against Nsight Systems on
-RTX A5000; see `docs/GPU_VALIDATION.md`.
+- Compatible workload definition/hash, seed, model/revision, engine/version and intended arrivals.
+- Matching per-request IDs, model names, prompt lengths and output lengths.
+- Clean health, completed requests and sufficient target-metric coverage.
+- Independent runs: duplicate paths or tracer session IDs cannot count twice.
+
+Missing comparison evidence stays exploratory. A configuration needs at
+least two eligible repeats by default (`--min-repeats`); three or more are
+preferable. A workload mismatch withholds ranking for the comparison.
+
+The report shows the range across runs separately from a seeded request
+bootstrap interval (1,000 resamples by default). Requests sharing steps are
+related, so the bootstrap understates run-to-run uncertainty. A candidate
+whose interval's upper bound misses the target is marked marginal.
+
+SLOs define per-request limits. Goodput is the share of selected requests
+meeting every bound; missing metrics count as a failure. Recommendations
+prefer median goodput when SLOs are supplied, then throughput; otherwise they
+prefer median throughput. They never modify a running server.
+
+## Experiment planner
+
+`plan_experiments()` maps supported findings to bounded candidate changes.
+Examples include smaller prefill chunks, a higher sequence cap or more KV
+memory. It ranks candidates by affected-request count, removes duplicates
+and applies `--max-candidates`. `--finding` restricts the hypotheses.
+
+The plan records the source engine, model, workload hash and settings.
+Reproducible settings come from an explicit map of effective configuration
+fields, with recorded engine kwargs and scheduling changes applied on top.
+Settings without a known input argument are listed as `unreproduced`; derived
+values such as `num_gpu_blocks` are excluded from that list.
+
+`run --plan` starts a fresh engine for each configuration and repeat under
+`<out>/<config>/r<i>`. The baseline uses the reconstructed source settings;
+candidates add their change. Review warnings about a changed workload or
+settings the plan cannot reproduce.
+
+## GPU spans
+
+`CudaStepTimer` places CUDA events around `execute_model` on the current
+stream. The elapsed span includes launch gaps. It excludes work on other
+streams and cannot by itself distinguish kernel execution from host stalls.
+`host_overhead_ms` is the difference between host step duration and GPU span.
+
+Events are queried later without synchronization; pending events are bounded
+and drops are counted. This supports the blocking `UniProcExecutor` path.
+Async submission and workers in other processes are outside its scope.
+
+`enable_nvtx` adds step ranges for Nsight Systems. The comparison script
+`scripts/nsys_step_compare.py` joins these ranges to kernel and CUDA-graph
+activity. See [GPU validation](docs/GPU_VALIDATION.md) for the observed
+span-versus-busy-time gap.
 
 ## Clocks
 
-Every record has wall-clock (`*_time`, `timestamp`) and monotonic
-(`*_monotonic`, `monotonic`) fields plus a `clock_domain` (the tracer session).
-Durations use monotonic. The correlator uses monotonic when traces and samples
-share a domain, otherwise wall clock, and records which (`ledger.clock`).
+Records carry wall time, monotonic time and a tracer-session `clock_domain`.
+The correlator uses monotonic time when traces and samples share a domain;
+otherwise it uses wall time. The choice is recorded in `ledger.clock`.
 
-## Energy ledger (`control_plane/correlator.py`)
+## Energy ledger
 
-Per-request energy is an allocation of measured device energy, never a
-measurement of the request itself:
+Device energy is estimated from power samples. Request energy is an
+allocation of that total:
 
+```text
+request share = interval energy * request weight / total active weight
 ```
-E_r = sum over elementary intervals t of  E_t * w_{r,t} / sum_{j in A_t} w_{j,t}
+
+The correlator works in this order:
+
+1. Select participating physical NVML GPU indices. Ambiguous multi-GPU input or missing selected-device telemetry yields no energy estimate.
+2. Group power readings per GPU, ignore missing/nonfinite power, sort timestamps and keep the last duplicate.
+3. Integrate each GPU's power by trapezoid. Gaps above `max_sample_gap_s` (default 1 s) are uncovered.
+4. Use the run window from earliest arrival to latest completion. Coverage is the minimum covered fraction across participating GPUs.
+5. Find active requests from usable batch intervals, or request windows when batch timing is unavailable.
+6. Split each interval's energy by policy. `equal_share` uses equal weights; `proportional_tokens` uses total prompt plus output tokens. `window_only` does not allocate request energy.
+7. Check conservation: attributed + idle + unattributable energy equals integrated device energy within tolerance.
+
+Request windows need positive coverage, at least two in-window power samples
+and the configured coverage fraction (default 50%). Otherwise their share
+is unattributable. With no integration interval, energy is `None`, not zero.
+`decide` also requires sufficient run coverage and an allocation for every
+request before reporting J/token. It records `energy_unavailable_reason`
+and keeps latency eligibility separate.
+
+Use `gpu_sampler.gpu_ids` for collection or `EnergyConfig(gpu_ids=[...])`
+for direct offline correlation. CLI `run`, `analyze` and `decide` accept
+repeatable `--gpu-id`. Physical indices and UUIDs are saved in
+`manifest.gpu_selection`; old records listing visible devices alone do not
+prove which GPUs participated. Other processes on selected devices still
+contribute to whole-device power.
+
+## Collection and shutdown
+
+- `GPUSampler` uses a bounded buffer and an atomic drain. Unavailable telemetry is reported; `require_gpu=True` makes it a start failure.
+- `TraceWriter` uses a bounded queue. Full-queue and post-stop submissions count as drops. Acceptance and shutdown-sentinel insertion share a lifecycle lock; the worker is joined after releasing it.
+- `LLMTracer.stop()` joins the collector, restores hooks, stops sampling, drains remaining records, writes incomplete requests and stops the writer.
+- Failed startup restores the engine, stops started threads and releases NVML before raising the original error.
+
+Parquet output writes separate part files rather than appending to an
+existing file.
+
+## Tests and contributions
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+python -m ruff check .
 ```
 
-`E_t` is the device energy in interval `t` (NVML power integrated by
-trapezoid per GPU on its own timestamps, summed over GPUs); `A_t` the requests
-active in `t` (batch membership when the in-process scheduler is visible,
-request windows otherwise, and the ledger says which); `w_{r,t}` the weight
-(1 for `equal_share`, prompt plus output tokens for `proportional_tokens`;
-`window_only` allocates nothing and reports only the shared window energy).
-Insufficient telemetry yields `null` with a reason, never zero, and coverage
-is reported with every figure. Step by step:
+Fakes in `llmtrace/testing/fakes.py` use an injectable clock and model the
+verified vLLM interfaces. They check local logic; use the
+[GPU procedure](docs/GPU_VALIDATION.md) to check engine compatibility.
 
-1. Group samples by `gpu_id`; drop samples with `power_draw_watts == null`
-   (counted); dedupe identical timestamps (last wins); sort.
-2. Build a cumulative trapezoid curve per GPU. Segments longer than
-   `max_sample_gap_s` contribute nothing and are "uncovered".
-3. Run window = [earliest arrival, latest completion]. Device energy = sum over
-   GPUs of curve energy over the run window.
-4. Membership intervals per request: batch intervals (`batch_metadata`) when
-   every batch has start/end and the monotonic clock is in use; otherwise the
-   request window.
-5. Sweep elementary intervals between all interval boundaries. Energy in an
-   interval with no active request is `idle`; otherwise it is split by policy
-   (`equal_share`; `proportional_tokens` weights by prompt+output tokens).
-   Span edges are boundaries too, so each elementary interval is wholly inside
-   or outside every span and phase energy is the integrated curve over the
-   span, not a time fraction of the request total.
-6. Requests whose window has < 2 power samples or coverage below
-   `min_coverage_fraction` get no figure; their share goes to
-   `unattributable`. Under `window_only` all active-interval energy is
-   unattributable and only `window_device_joules` is reported.
-7. Conservation check: `|attributed + idle + unattributable - device| <= tol`,
-   else an error is logged and noted in the ledger.
-
-No "exact" method exists; `is_estimate` is always true; there are no
-confidence probabilities. Diagnosis rules carry a `score` used for ranking.
-
-## Collection
-
-* `GPUSampler` runs in a thread with a bounded deque; `drain()` swaps the
-  buffer atomically (no read-then-clear window). Unavailable NVML is reported
-  in `stats()`; `require_gpu=True` turns it into a start failure.
-* `TraceWriter` writes from a thread fed by a bounded queue; full queue drops
-  are counted; `stop()` drains and closes. Parquet writes one part file per
-  flush (no read-modify-write append).
-* `LLMTracer.stop()` order: stop collector, restore engine (collect leftovers),
-  stop sampler, final drain, write incomplete requests, stop writer, log health.
-* `LLMTracer.start()` is transactional: if any component fails to start (e.g.
-  `require_gpu=True` without NVML) the engine is restored, threads are stopped,
-  NVML is released, the tracer is left `stopped`, and the original error is
-  re-raised.
-
-## Tests
-
-`python -m pytest`. Fakes live in `llmtrace/testing/fakes.py` (re-exported by
-`tests/fakes.py`) and mirror the verified vLLM 0.11.0 shapes with an
-injectable clock. They validate llmtrace's logic, not vLLM compatibility. The
-same fake engine is what `llmtrace run --engine fake` drives.
-
-## Adding a diagnosis rule
-
-1. Add a `DiagnosisCategory`.
-2. Implement `_check_*` in `RulesEngine` returning a `DiagnosisResult` with
-   evidence and a `score` in [0, 1]; skip when inputs are missing (`None`).
-3. Add a test with a synthetic trace.
+For a new finding, define the required evidence, missing-data behavior,
+assumptions and competing explanations. Test both supported and unsupported
+cases. For a simple request-level screen, add a `DiagnosisCategory` and a
+`RulesEngine._check_*` method with evidence and a ranking score, then test it
+with a synthetic trace. Scores are not probabilities.

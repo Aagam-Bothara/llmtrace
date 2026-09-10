@@ -82,6 +82,54 @@ class TestAssessHealth:
 
 
 class TestDecideUsesFullHealth:
+    @pytest.mark.parametrize("kind", ["empty", "one", "gap", "partial_allocation", "window_only"])
+    def test_unavailable_energy_is_not_zero_consumption(self, tmp_path, kind):
+        from conftest import const_power, mk_sample
+        d = self._run(tmp_path, "energy", CLEAN)
+        samples = {"empty": [], "one": [mk_sample(0.5, 100)],
+                   "gap": [mk_sample(0, 100), mk_sample(2, 100)]}.get(kind, const_power(0, 1, 0.1, 100))
+        if kind == "partial_allocation":
+            traces = io.load_traces([d])
+            traces[0].start_time, traces[0].end_time = 1, 1.1
+            io.write_jsonl(tmp_path / "energy" / "traces_x.jsonl", traces)
+        io.write_jsonl(tmp_path / "energy" / "gpu_x.jsonl", samples)
+        dec = evaluate({"energy": [d]}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=1,
+                       attribution="window_only" if kind == "window_only" else "equal_share")
+        r = dec.configs[0].repeats[0]
+        assert r.eligible and dec.candidates == ["energy"]
+        assert r.energy_withheld and r.joules_per_output_token is None and r.device_joules is None
+        assert r.energy_unavailable_reason and any("energy unavailable" in p for p in r.telemetry_problems)
+        if kind == "one":
+            assert r.telemetry_coverage == 0
+
+    def test_manifest_gpu_selection_is_used_by_decide_and_analyze(self, tmp_path):
+        from conftest import const_power
+        from llmtrace.cli import _correlate_dir
+        d = self._run(tmp_path, "selected", CLEAN)
+        samples = const_power(0, 1, 0.1, 100, gpu_id=0) + const_power(0, 1, 0.1, 300, gpu_id=1)
+        io.write_jsonl(tmp_path / "selected" / "gpu_x.jsonl", samples)
+        m = RunManifest.read(d)
+        m.gpu_selection = {"mode": "explicit", "gpu_ids": [0], "devices": [{"gpu_id": 0, "uuid": "GPU-physical-0"}]}
+        m.write(d)
+        r = evaluate({"selected": [d]}, Target.parse("short ttft_p95 <= 20ms"), min_repeats=1).configs[0].repeats[0]
+        assert r.eligible and not r.energy_withheld and r.energy_gpu_ids == [0]
+        assert r.device_joules == pytest.approx(100) and r.joules_per_output_token == pytest.approx(100 / 12)
+        assert _correlate_dir([d], None, "equal_share").ledger.device_joules == pytest.approx(100)
+        output = tmp_path / "decision.json"
+        cli = CliRunner().invoke(main, ["decide", "--target", "short ttft_p95 <= 20ms", "--config", f"selected={d}",
+                                       "--min-repeats", "1", "--gpu-id", "1", "--json", str(output)])
+        assert cli.exit_code == 0, cli.output
+        repeat = json.loads(output.read_text())["configs"][0]["repeats"][0]
+        assert repeat["energy_gpu_ids"] == [1] and repeat["device_joules"] == pytest.approx(300)
+
+    def test_covered_zero_power_is_a_valid_zero_estimate(self, tmp_path):
+        from conftest import const_power
+        d = self._run(tmp_path, "zero", CLEAN)
+        io.write_jsonl(tmp_path / "zero" / "gpu_x.jsonl", const_power(0, 1, 0.1, 0))
+        r = evaluate({"zero": [d]}, Target.parse("short ttft_p95 <= 20ms")).configs[0].repeats[0]
+        assert r.joules_per_output_token == 0 and r.telemetry_coverage == pytest.approx(1)
+        assert not r.energy_withheld and r.energy_unavailable_reason is None
+
     def _run(self, tmp_path, name, health):
         d = tmp_path / name
         d.mkdir()

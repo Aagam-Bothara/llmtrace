@@ -27,6 +27,25 @@ def corr(**kw) -> Correlator:
 
 
 class TestIntegration:
+    def test_unrelated_gpu_is_never_implicitly_allocated(self):
+        g0 = const_power(0, 1, 0.1, 100, gpu_id=0)
+        g1 = const_power(0, 1, 0.1, 300, gpu_id=1)
+        ambiguous = corr().correlate([trace("r", 0, 1)], g0 + g1)
+        assert ambiguous.ledger.device_joules is None
+        assert "ambiguous" in ambiguous.traces[0].energy.unavailable_reason
+        selected = corr(gpu_ids=[0]).correlate([trace("r", 0, 1)], g0 + g1)
+        assert selected.ledger.device_joules == pytest.approx(100)
+        assert selected.traces[0].energy.attributed_joules == pytest.approx(100)
+        assert {s.gpu_id for s in selected.traces[0].gpu_samples} == {0}
+        parallel = corr(gpu_ids=[0, 1]).correlate([trace("r", 0, 1)], g0 + g1)
+        assert parallel.ledger.device_joules == pytest.approx(400)
+
+    def test_missing_selected_gpu_is_not_hidden_by_another_gpu(self):
+        g0 = const_power(0, 1, 0.1, 100, gpu_id=0)
+        for g1 in ([], [mk_sample(0.5, None, gpu_id=1)], [mk_sample(0.5, 300, gpu_id=1)]):
+            res = corr(gpu_ids=[0, 1]).correlate([trace("r", 0, 1)], g0 + g1)
+            assert res.ledger.device_joules is None and not res.traces[0].energy.is_allocated
+
     def test_single_gpu_constant_power_known_total(self):
         samples = const_power(0.0, 1.0, 0.1, 200.0)
         res = corr().correlate([trace("r", 0.0, 1.0)], samples)
@@ -50,7 +69,7 @@ class TestIntegration:
     def test_multi_gpu_with_offset_timestamps(self):
         g0 = const_power(0.0, 1.0, 0.1, 100.0, gpu_id=0)
         g1 = const_power(0.03, 1.03, 0.1, 50.0, gpu_id=1)  # not aligned with GPU 0
-        res = corr().correlate([trace("r", 0.0, 1.0)], g0 + g1)
+        res = corr(gpu_ids=[0, 1]).correlate([trace("r", 0.0, 1.0)], g0 + g1)
         # GPU1 covers [0.03, 1.0] of the window = 0.97s * 50W
         assert res.ledger.per_gpu_joules[0] == pytest.approx(100.0)
         assert res.ledger.per_gpu_joules[1] == pytest.approx(48.5)
@@ -94,7 +113,7 @@ class TestUnavailable:
 
     def test_single_sample_is_not_zero_energy(self):
         res = corr().correlate([trace("r", 0.0, 1.0)], [mk_sample(0.5, 200.0)])
-        assert res.ledger.device_joules == 0.0  # nothing bracketed
+        assert res.ledger.device_joules is None  # nothing bracketed
         e = res.traces[0].energy
         assert e.attributed_joules is None and e.window_device_joules is None
         assert "1 power samples" in e.unavailable_reason

@@ -48,18 +48,24 @@ class NVMLBackend:
         pynvml.nvmlInit()
         self._nvml = pynvml
         count = pynvml.nvmlDeviceGetCount()
-        wanted = list(range(count)) if not gpu_ids else gpu_ids
+        if gpu_ids is None and count > 1:
+            raise RuntimeError("GPU selection ambiguous: set gpu_sampler.gpu_ids to the engine's physical NVML GPU indices")
+        wanted = list(range(count)) if gpu_ids is None else gpu_ids
+        if len(set(wanted)) != len(wanted):
+            raise ValueError("GPU indices must be unique")
         devices = []
         for gpu_id in wanted:
             if gpu_id < 0 or gpu_id >= count:
-                logger.warning("GPU %d not present (device count %d); skipping", gpu_id, count)
-                continue
+                raise ValueError(f"GPU {gpu_id} not present (device count {count})")
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
             name = pynvml.nvmlDeviceGetName(handle)
             if isinstance(name, bytes):
                 name = name.decode("utf-8", errors="replace")
             self._handles[gpu_id] = handle
-            devices.append({"gpu_id": gpu_id, "name": str(name)})
+            identity = pynvml.nvmlDeviceGetUUID(handle)
+            if isinstance(identity, bytes):
+                identity = identity.decode("utf-8")
+            devices.append({"gpu_id": gpu_id, "name": str(name), "uuid": identity})
         return devices
 
     def _try(self, fn, *args):  # type: ignore[no-untyped-def]
@@ -167,6 +173,12 @@ class GPUSampler:
             self._devices = self._backend.open(self.config.gpu_ids)
             if not self._devices:
                 raise RuntimeError("no GPUs selected/found")
+            selected = [d["gpu_id"] for d in self._devices]
+            if self.config.gpu_ids is None and len(selected) != 1:
+                raise RuntimeError("GPU selection ambiguous: set gpu_sampler.gpu_ids to participating physical NVML indices")
+            if self.config.gpu_ids is not None and (len(set(selected)) != len(selected)
+                    or sorted(selected) != sorted(self.config.gpu_ids)):
+                raise RuntimeError("backend did not return exactly the selected GPUs")
         except Exception as exc:
             self.available = False
             self.unavailable_reason = f"{type(exc).__name__}: {exc}"
@@ -265,6 +277,9 @@ class GPUSampler:
             "available": self.available,
             "unavailable_reason": self.unavailable_reason,
             "devices": list(self._devices),
+            "selection": {"mode": "explicit" if self.config.gpu_ids is not None else "single_visible_device",
+                          "gpu_ids": [d["gpu_id"] for d in self._devices] if self.available else [],
+                          "devices": list(self._devices) if self.available else []},
             "samples_taken": self._samples_taken,
             "buffered": buffered,
             "dropped": self._dropped,

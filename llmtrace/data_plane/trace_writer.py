@@ -56,6 +56,7 @@ class TraceWriter:
         self._started = False
         self._stopped = False
         self._lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
 
         self.written: Dict[str, int] = {t: 0 for t in self.DATA_TYPES}
         self.dropped: Dict[str, int] = {t: 0 for t in self.DATA_TYPES}
@@ -65,22 +66,26 @@ class TraceWriter:
     # -------------------------------------------------------------- lifecycle
 
     def start(self) -> None:
-        if self._started:
-            return
-        self._started = True
-        self._stopped = False
-        if self.background:
-            self._thread = threading.Thread(target=self._loop, name="llmtrace-writer", daemon=True)
-            self._thread.start()
+        with self._lifecycle_lock:
+            if self._started:
+                return
+            self._started = True
+            self._stopped = False
+            if self.background:
+                self._thread = threading.Thread(target=self._loop, name="llmtrace-writer", daemon=True)
+                self._thread.start()
 
     def stop(self) -> None:
         """Drain pending writes, close files. Idempotent."""
-        if not self._started or self._stopped:
-            return
-        self._stopped = True
-        if self._thread is not None:
-            self._queue.put(_SENTINEL)  # blocks only if the queue is full; the thread is draining
-            self._thread.join()
+        with self._lifecycle_lock:
+            if not self._started or self._stopped:
+                return
+            self._stopped = True
+            worker = self._thread
+            if worker is not None:
+                self._queue.put(_SENTINEL)  # worker drains without acquiring the lifecycle lock
+        if worker is not None:
+            worker.join()  # never hold the acceptance lock while joining
             self._thread = None
         self._close_files()
         logger.info("TraceWriter stopped: written=%s dropped=%s", self.written, self.dropped)
@@ -115,20 +120,21 @@ class TraceWriter:
     def _submit(self, data_type: str, items: List[Any]) -> None:
         if not items:
             return
-        if not self._started:
-            raise RuntimeError("TraceWriter.start() must be called before writing")
-        if self._stopped:
-            self.dropped[data_type] += len(items)
-            logger.error("TraceWriter is stopped; dropped %d %s", len(items), data_type)
-            return
-        if self._thread is None:
-            self._write(data_type, items)
-            return
-        try:
-            self._queue.put_nowait((data_type, items))
-        except queue.Full:
-            self.dropped[data_type] += len(items)
-            logger.error("TraceWriter queue full; dropped %d %s records", len(items), data_type)
+        with self._lifecycle_lock:
+            if not self._started:
+                raise RuntimeError("TraceWriter.start() must be called before writing")
+            if self._stopped:
+                self.dropped[data_type] += len(items)
+                logger.error("TraceWriter is stopped; dropped %d %s", len(items), data_type)
+                return
+            if self._thread is None:
+                self._write(data_type, items)
+                return
+            try:
+                self._queue.put_nowait((data_type, items))
+            except queue.Full:
+                self.dropped[data_type] += len(items)
+                logger.error("TraceWriter queue full; dropped %d %s records", len(items), data_type)
 
     def _loop(self) -> None:
         while True:

@@ -16,6 +16,7 @@ from llmtrace.control_plane.reporter import Reporter
 from llmtrace.control_plane.rules_engine import RulesEngine
 from llmtrace.models.config import AutopsyConfig, EnergyConfig, ReporterConfig, TracerConfig
 from llmtrace.models.trace import MetricComparison
+from llmtrace.manifest import RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,19 @@ def main(verbose: bool) -> None:
 
 
 def _correlate_dir(
-    trace_paths: List[str], gpu_paths: Optional[List[str]], attribution: str
+    trace_paths: List[str], gpu_paths: Optional[List[str]], attribution: str, gpu_ids: Optional[List[int]] = None
 ) -> CorrelationResult:
     traces = io.load_traces(trace_paths)
     dirs = io.run_directories_for(trace_paths)
     samples = io.load_gpu_samples(gpu_paths if gpu_paths else dirs)
     batches = io.load_batches(dirs)
-    correlator = Correlator(EnergyConfig(attribution_method=attribution))  # type: ignore[arg-type]
+    if gpu_ids is None and len(dirs) == 1:
+        try:
+            manifest = RunManifest.read(str(dirs[0]))
+            gpu_ids = manifest.energy_gpu_ids() if manifest else None
+        except (ValueError, OSError):
+            pass
+    correlator = Correlator(EnergyConfig(attribution_method=attribution, gpu_ids=gpu_ids))  # type: ignore[arg-type]
     return correlator.correlate(traces, samples, batches)
 
 
@@ -53,10 +60,11 @@ def _correlate_dir(
               type=click.Choice(["equal_share", "proportional_tokens", "window_only"]))
 @click.option("--output", type=click.Path(), help="Write report (.json for machine-readable, else text)")
 @click.option("--no-rich", is_flag=True, help="Plain text output")
+@click.option("--gpu-id", "gpu_ids", multiple=True, type=click.IntRange(min=0), help="Participating physical NVML GPU index; repeat for tensor/pipeline parallel ranks")
 def analyze(trace_paths: Tuple[str, ...], gpu_paths: Tuple[str, ...], baseline: Optional[str],
-            attribution: str, output: Optional[str], no_rich: bool) -> None:
+            attribution: str, output: Optional[str], no_rich: bool, gpu_ids: Tuple[int, ...]) -> None:
     """Analyze trace files or run directories."""
-    result = _correlate_dir(list(trace_paths), list(gpu_paths) or None, attribution)
+    result = _correlate_dir(list(trace_paths), list(gpu_paths) or None, attribution, list(gpu_ids) or None)
     if not result.traces:
         click.echo("No traces found", err=True)
         sys.exit(EXIT_USAGE)
@@ -66,7 +74,7 @@ def analyze(trace_paths: Tuple[str, ...], gpu_paths: Tuple[str, ...], baseline: 
 
     baseline_traces = baseline_ledger = None
     if baseline:
-        b = _correlate_dir([baseline], None, attribution)
+        b = _correlate_dir([baseline], None, attribution, list(gpu_ids) or None)
         baseline_traces, baseline_ledger = b.traces, b.ledger
         if not baseline_traces:
             click.echo(f"Warning: no baseline traces in {baseline}", err=True)
@@ -257,8 +265,9 @@ def plan(run_dir: str, chunk_threshold: int, queue_threshold_ms: float, kv_thres
 @click.option("--min-repeats", type=int, default=2, show_default=True,
               help="Eligible repeats a configuration needs to be a candidate (three or more recommended)")
 @click.option("--json", "json_out", type=click.Path(), help="Write the decision JSON here")
+@click.option("--gpu-id", "gpu_ids", multiple=True, type=click.IntRange(min=0), help="Participating physical NVML GPU index in every run; overrides manifest selection")
 def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_classes: Tuple[str, ...], min_metric_coverage: float,
-           slos: Tuple[str, ...], min_repeats: int, json_out: Optional[str]) -> None:
+           slos: Tuple[str, ...], min_repeats: int, json_out: Optional[str], gpu_ids: Tuple[int, ...]) -> None:
     """Compare configurations against a latency target, with goodput under SLOs and bootstrap intervals (advisory; changes nothing)."""
     from llmtrace.control_plane.decision import Slo, Target, evaluate, format_decision
 
@@ -276,7 +285,7 @@ def decide(target: str, configs: Tuple[str, ...], attribution: str, exclude_clas
         name, dirs = c.split("=", 1)
         parsed[name.strip()] = [d.strip() for d in dirs.split(",") if d.strip()]
     dec = evaluate(parsed, tgt, attribution, min_metric_coverage, list(exclude_classes) or None, slos=parsed_slos or None,
-                   min_repeats=min_repeats)
+                   min_repeats=min_repeats, gpu_ids=list(gpu_ids) or None)
     click.echo(format_decision(dec))
     if json_out:
         Path(json_out).write_text(dec.model_dump_json(indent=2), encoding="utf-8")
@@ -357,9 +366,10 @@ def workload_preview(spec_path: str, json_out: Optional[str], requests_out: Opti
 @click.option("--in-process", is_flag=True,
               help="vllm: run the engine in this process instead of one spawned process per run (memory of a previous engine "
                    "is then not reliably released; only for a single run)")
+@click.option("--gpu-id", "gpu_ids", multiple=True, type=click.IntRange(min=0), help="Participating physical NVML GPU index; required on multi-GPU hosts, repeat for all engine GPUs")
 def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out_dir: str, model: Optional[str], overwrite: bool,
         config_name: str, changes: Tuple[str, ...], engine_kwargs: str, repeat: int, collection_interval: float, enable_nvtx: bool,
-        no_ignore_eos: bool, no_warmup: bool, settle: int, in_process: bool) -> None:
+        no_ignore_eos: bool, no_warmup: bool, settle: int, in_process: bool, gpu_ids: Tuple[int, ...]) -> None:
     """Replay a workload spec under llmtrace and write run directories (raw data + manifest)."""
     from llmtrace.runner import RunOptions, run_workload, run_workload_isolated
     from llmtrace.workload import WorkloadSpec
@@ -416,6 +426,7 @@ def run(workload_path: str, plan_path: Optional[str], engine: Optional[str], out
     failed = False
     for name, kw, chg, out in jobs:
         opts = RunOptions(engine=engine, out_dir=out, model=model, config_name=name, scheduling_change=chg,
+                          gpu_ids=list(gpu_ids) or None,
                           engine_kwargs=kw, collection_interval_s=collection_interval, enable_nvtx=enable_nvtx,
                           ignore_eos=not no_ignore_eos, warmup=not no_warmup, settle_requests=settle, overwrite=overwrite)
         # real engines get one process each so a previous engine's GPU memory cannot break the next start

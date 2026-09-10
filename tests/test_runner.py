@@ -43,6 +43,8 @@ class TestRunWorkload:
         # no derived summaries are written into the run directory
         assert not list(out.glob("analysis*")) and not list(out.glob("findings*"))
         assert RunManifest.read(str(out)) == m
+        assert m.gpu_selection["gpu_ids"] == [0]
+        assert m.gpu_selection["mode"] == "single_visible_device"
 
     def test_scheduling_change_is_applied_and_recorded(self, tmp_path):
         base = run_workload(_spec(), RunOptions(engine="fake", out_dir=str(tmp_path / "b")))
@@ -92,12 +94,13 @@ class TestCli:
         summ = json.loads((tmp_path / "s.json").read_text())
         assert summ["requests"] == 12 and len((tmp_path / "r.jsonl").read_text().splitlines()) == 12
         res = r.invoke(main, ["run", "--workload", str(spec_path), "--engine", "fake", "--out", str(tmp_path / "runs"),
-                              "--repeat", "2", "--config-name", "capped", "--set", "long_prefill_token_threshold=256"])
+                              "--repeat", "2", "--config-name", "capped", "--set", "long_prefill_token_threshold=256", "--gpu-id", "0"])
         assert res.exit_code == 0, res.output
         for i in range(2):
             m = RunManifest.read(str(tmp_path / "runs" / f"r{i}"))
             assert m is not None and m.status == "ok" and m.config_name == "capped"
             assert m.scheduling_change == {"long_prefill_token_threshold": 256}
+            assert m.gpu_selection["mode"] == "explicit" and m.energy_gpu_ids() == [0]
         assert "scheduler visible: True" in res.output
 
     def test_run_rejects_bad_set_and_spec(self, tmp_path):

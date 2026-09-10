@@ -20,8 +20,43 @@ from conftest import mk_sample
 
 
 class TestGPUSampler:
+    def test_ambiguous_devices_require_explicit_selection(self):
+        backend = FakeNVMLBackend({0: 100.0, 1: 300.0})
+        sampler = GPUSampler(GPUSamplerConfig(), backend=backend)
+        sampler.start()
+        assert not sampler.available and "ambiguous" in sampler.unavailable_reason
+        assert backend.closed and not sampler.running and not sampler.drain()
+        selected = GPUSampler(GPUSamplerConfig(gpu_ids=[0]), backend=FakeNVMLBackend({0: 100.0, 1: 300.0}))
+        selected.start()
+        try:
+            assert [s.gpu_id for s in selected.sample_once()] == [0]
+            assert selected.stats()["selection"]["gpu_ids"] == [0]
+            assert selected.stats()["selection"]["mode"] == "explicit"
+        finally:
+            selected.stop()
+
+    def test_nvml_records_physical_uuid_and_rejects_ambiguous_default(self, monkeypatch):
+        import sys
+        from types import SimpleNamespace
+        from llmtrace.data_plane.gpu_sampler import NVMLBackend
+        nvml = SimpleNamespace(nvmlInit=lambda: None, nvmlShutdown=lambda: None,
+                               nvmlDeviceGetCount=lambda: 2, nvmlDeviceGetHandleByIndex=lambda i: i,
+                               nvmlDeviceGetName=lambda h: b"GPU", nvmlDeviceGetUUID=lambda h: f"GPU-physical-{h}".encode())
+        monkeypatch.setitem(sys.modules, "pynvml", nvml)
+        backend = NVMLBackend()
+        try:
+            with pytest.raises(RuntimeError, match="ambiguous"):
+                backend.open(None)
+            assert backend.open([1]) == [{"gpu_id": 1, "name": "GPU", "uuid": "GPU-physical-1"}]
+            with pytest.raises(ValueError, match="not present"):
+                backend.open([2])
+            with pytest.raises(ValueError, match="unique"):
+                backend.open([1, 1])
+        finally:
+            backend.close()
+
     def test_samples_have_both_clocks_and_real_fields(self):
-        s = GPUSampler(GPUSamplerConfig(sample_interval_ms=10), backend=FakeNVMLBackend({0: 100.0, 1: 50.0}))
+        s = GPUSampler(GPUSamplerConfig(sample_interval_ms=10, gpu_ids=[0, 1]), backend=FakeNVMLBackend({0: 100.0, 1: 50.0}))
         s.start()
         assert s.available
         samples = s.sample_once()
@@ -79,7 +114,7 @@ class TestGPUSampler:
             s.start()
 
     def test_read_error_counts_and_skips_device(self):
-        s = GPUSampler(GPUSamplerConfig(), backend=FakeNVMLBackend({0: 1.0, 1: 2.0}, read_error_on=1))
+        s = GPUSampler(GPUSamplerConfig(gpu_ids=[0, 1]), backend=FakeNVMLBackend({0: 1.0, 1: 2.0}, read_error_on=1))
         s.start()
         samples = s.sample_once()
         s.stop()
@@ -103,6 +138,51 @@ class TestGPUSampler:
 
 
 class TestTraceWriter:
+    @pytest.mark.parametrize("background", [True, False])
+    def test_submission_is_serialized_with_stop(self, tmp_path, monkeypatch, background):
+        w = TraceWriter(str(tmp_path), background=background)
+        w.start()
+        accepting, release, stopping = threading.Event(), threading.Event(), threading.Event()
+        failures = []
+        original = w._queue.put_nowait if background else w._write
+
+        def paused_accept(*args):
+            accepting.set()
+            if not release.wait(5):
+                raise RuntimeError("test submission was not released")
+            return original(*args)
+
+        monkeypatch.setattr(w._queue if background else w, "put_nowait" if background else "_write", paused_accept)
+
+        def submit():
+            try:
+                w.write_gpu_samples([mk_sample(1)])
+            except Exception as exc:
+                failures.append(exc)
+
+        def stop():
+            stopping.set()
+            w.stop()
+
+        submitter = threading.Thread(target=submit)
+        stopper = threading.Thread(target=stop)
+        submitter.start()
+        assert accepting.wait(5)
+        stopper.start()
+        assert stopping.wait(5)
+        try:
+            stopper.join(0.1)
+            assert stopper.is_alive()  # stop must wait for the accepted submission
+        finally:
+            release.set()
+            submitter.join(5)
+            stopper.join(5)
+        assert not submitter.is_alive() and not stopper.is_alive() and not failures
+        assert w.stats()["written"]["gpu"] == 1 and w.stats()["dropped"]["gpu"] == 0
+        assert w.stats()["queued"] == 0 and len(io.load_gpu_samples([tmp_path])) == 1
+        w.write_gpu_samples([mk_sample(2)])
+        assert w.stats()["dropped"]["gpu"] == 1 and w.stats()["queued"] == 0
+
     def test_background_writer_writes_everything_once(self, tmp_path):
         w = TraceWriter(str(tmp_path), background=True, max_queue=1000)
         w.start()

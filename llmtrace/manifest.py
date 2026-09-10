@@ -54,6 +54,7 @@ class RunManifest(BaseModel):
     python: str = Field(default_factory=lambda: sys.version.split()[0])
     platform: str = Field(default_factory=platform.platform)
     gpu: Optional[Dict[str, Any]] = None
+    gpu_selection: Dict[str, Any] = Field(default_factory=dict)  # physical NVML indices and UUIDs, with selection mode
     workload: Dict[str, Any] = Field(default_factory=dict)
     workload_hash: Optional[str] = None
     seed: Optional[int] = None
@@ -81,6 +82,8 @@ class RunManifest(BaseModel):
 
     def write(self, run_dir: str) -> Path:
         self.finalize_arrivals()
+        if not self.gpu_selection:
+            self.gpu_selection = self.health.get("gpu_sampler", {}).get("selection", {})
         p = Path(run_dir) / "manifest.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(self.model_dump_json(indent=2), encoding="utf-8")
@@ -92,6 +95,12 @@ class RunManifest(BaseModel):
         if not p.exists():
             return None
         return cls.model_validate_json(p.read_text(encoding="utf-8"))
+
+    def energy_gpu_ids(self) -> Optional[List[int]]:
+        """Never infer engine participation from old records that merely listed every visible GPU."""
+        if self.gpu_selection:
+            return self.gpu_selection.get("gpu_ids", [])
+        return self.tracer_config.get("gpu_sampler", {}).get("gpu_ids")
 
 
 def workload_hash(specs: List[Any]) -> str:

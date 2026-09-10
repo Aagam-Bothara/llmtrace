@@ -233,6 +233,27 @@ assigned to anyone; and the ledger checks that attributed plus idle plus
 unattributable equals the device total on every run. The formula and the edge
 cases are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
+On hosts with more than one NVML-visible GPU, select every physical GPU used
+by the engine: `llmtrace run ... --gpu-id 0 --gpu-id 1`. In Python, use
+`TracerConfig(gpu_sampler={"gpu_ids": [0, 1]})`. These are physical NVML
+indices, not CUDA logical indices remapped by `CUDA_VISIBLE_DEVICES`.
+The sampler records the selected indices and UUIDs in the manifest's
+`gpu_selection`. Without explicit selection, a multi-GPU host continues
+with latency tracing and reports GPU telemetry as unavailable.
+
+`analyze` and `decide` use the recorded selection. For older multi-GPU traces,
+pass `--gpu-id` for each participating device; ambiguous telemetry is never
+allocated to requests. Python callers of `Correlator` can use
+`EnergyConfig(gpu_ids=[0, 1])`. Power remains a whole-device measurement,
+including other processes sharing a selected GPU.
+
+`decide` reports J/token only when integration covers at least 50% of the run
+on every selected GPU and every request has an allocation. Missing samples,
+gaps, incomplete allocations and `window_only` yield `None` with an energy
+unavailability reason, while latency eligibility remains separate. Coverage
+is still shown when energy is withheld; a lone sample cannot imply zero
+consumption.
+
 ## Install and test
 
 ```bash
@@ -241,7 +262,7 @@ pip install -e ".[nvml]"         # GPU telemetry
 pip install -e ".[parquet]"      # parquet output
 pip install -e ".[vllm]"         # vllm==0.11.0 (Linux, NVIDIA GPU)
 pip install -e ".[dev]"          # pytest and ruff
-python -m pytest                 # 252 tests, all CPU, against fakes shaped like the verified vLLM interfaces
+python -m pytest                 # CPU tests against fakes shaped like the verified vLLM interfaces
 ```
 
 The test suite proves llmtrace's own logic, not vLLM compatibility; that is

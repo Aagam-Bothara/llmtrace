@@ -32,6 +32,7 @@ from llmtrace.data_plane.vllm_stats import (CollectorEvent, VLLMStatsSink, attac
                                             make_stat_logger_factory)
 from llmtrace.models.config import TracerConfig
 from llmtrace.models.trace import TraceAnalysis
+from llmtrace.manifest import RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,8 @@ class LLMTracer:
         try:
             self.trace_writer.start()
             self.gpu_sampler.start()  # raises only if require_gpu=True and NVML is unavailable
+            if self.config.energy.gpu_ids is None:
+                self.config.energy.gpu_ids = self.gpu_sampler.stats()["selection"]["gpu_ids"]
             self._stop_event.clear()
             self._collector = threading.Thread(target=self._collect_loop, name="llmtrace-collector", daemon=True)
             self._collector.start()
@@ -315,7 +318,13 @@ class LLMTracer:
         if baseline_dir:
             baseline_traces = io.load_traces([baseline_dir])
             if baseline_traces:
-                b = self.correlator.correlate(
+                try:
+                    manifest = RunManifest.read(baseline_dir)
+                    baseline_gpu_ids = manifest.energy_gpu_ids() if manifest else None
+                except (ValueError, OSError):
+                    baseline_gpu_ids = None
+                baseline_config = self.config.energy.model_copy(update={"gpu_ids": baseline_gpu_ids})
+                b = Correlator(baseline_config).correlate(
                     baseline_traces, io.load_gpu_samples([baseline_dir]), io.load_batches([baseline_dir])
                 )
                 baseline_traces, baseline_ledger = b.traces, b.ledger

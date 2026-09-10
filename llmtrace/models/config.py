@@ -20,7 +20,7 @@ class GPUSamplerConfig(_StrictModel):
         default=100, ge=10, le=10000, description="GPU sampling interval in milliseconds"
     )
     gpu_ids: Optional[List[int]] = Field(
-        default=None, description="Specific GPU indices to monitor (None = all)"
+        default=None, description="Participating physical NVML GPU indices; required when more than one GPU is visible"
     )
     max_buffered_samples: int = Field(
         default=100_000,
@@ -40,6 +40,7 @@ class EnergyConfig(_StrictModel):
     """Configuration for energy integration and allocation."""
 
     enabled: bool = Field(default=True, description="Enable energy accounting")
+    gpu_ids: Optional[List[int]] = Field(default=None, description="Participating physical NVML GPU indices; None permits only single-GPU telemetry")
     attribution_method: AttributionMethod = Field(
         default="equal_share",
         description=(

@@ -162,7 +162,7 @@ class EnergyCoverage(BaseModel):
     """How well telemetry covers a time window."""
 
     window_s: float
-    covered_s: float  # window time bracketed by consecutive samples within max_gap
+    covered_s: float  # minimum across participating GPUs of time bracketed by samples within max_gap
     coverage_fraction: float  # covered_s / window_s (0 when window_s == 0)
     num_samples: int  # samples with a power reading inside the window (all GPUs)
     gpu_ids: List[int] = Field(default_factory=list)

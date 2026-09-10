@@ -109,6 +109,7 @@ class RunOptions:
     engine_kwargs: Dict[str, Any] = field(default_factory=dict)  # other engine kwargs (vllm: LLM(...); fake: FakeLLMEngine(...))
     collection_interval_s: float = 0.1
     gpu_sample_interval_ms: int = 50
+    gpu_ids: Optional[List[int]] = None  # participating physical NVML device indices
     enable_nvtx: bool = False
     ignore_eos: bool = True
     warmup: bool = True  # vllm only: untraced full-workload replay first
@@ -180,7 +181,7 @@ def _run_fake(spec: WorkloadSpec, specs: List[RequestSpec], opts: RunOptions) ->
     # Synthetic cost model (defaults): 1.5 ms per step + 8 us per scheduled token. Numbers are invented.
     engine = FakeLLMEngine(clock=clock, in_process_scheduler=True, **kwargs)
     tracer = LLMTracer(TracerConfig(output_dir=opts.out_dir, collection_interval_s=min(opts.collection_interval_s, 0.05),
-                                    gpu_sampler={"sample_interval_ms": 10}),
+                                    gpu_sampler={"sample_interval_ms": 10, "gpu_ids": opts.gpu_ids}),
                        gpu_backend=FakeNVMLBackend({0: opts.fake_power_w}))
     # The tracer must read the fake clock so traces and batches are consistent with it.
     tracer.vllm_instrumentation._monotonic = clock.monotonic
@@ -228,7 +229,8 @@ def _run_vllm(spec: WorkloadSpec, specs: List[RequestSpec], opts: RunOptions) ->
     if opts.warmup:
         warm = [RequestSpec(f"warm-{s.request_id}", s.kind, s.arrival_s, s.prompt_len, s.max_tokens) for s in specs]
         drive(engine, warm, params, time.monotonic, sleep_until, vocab, spec.seed, spec.min_token_id)
-    tracer = LLMTracer(TracerConfig(output_dir=opts.out_dir, gpu_sampler={"sample_interval_ms": opts.gpu_sample_interval_ms},
+    tracer = LLMTracer(TracerConfig(output_dir=opts.out_dir, gpu_sampler={"sample_interval_ms": opts.gpu_sample_interval_ms,
+                                                                       "gpu_ids": opts.gpu_ids},
                                     collection_interval_s=opts.collection_interval_s, enable_nvtx=opts.enable_nvtx))
     tracer.instrument_engine(engine)
     settle: List[RequestSpec] = []

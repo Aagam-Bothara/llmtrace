@@ -177,6 +177,8 @@ class RepeatResult(BaseModel):
     health_problems: List[str] = Field(default_factory=list)
     telemetry_problems: List[str] = Field(default_factory=list)  # secondary signals missing or lossy
     energy_withheld: bool = False  # GPU telemetry missing or lossy: energy figures set to None for this repeat
+    energy_unavailable_reason: Optional[str] = None
+    energy_gpu_ids: Optional[List[int]] = None
     arrival_delay_ms_max: Optional[float] = None
     duration_s: Optional[float] = None
     output_tokens: int = 0
@@ -276,7 +278,7 @@ def _comparison_signature(manifest: Optional[RunManifest], traces: List[RequestT
 
 def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_share",
                     min_metric_coverage: float = 1.0, exclude_classes: Optional[List[str]] = None,
-                    slos: Optional[List[Slo]] = None) -> RepeatResult:
+                    slos: Optional[List[Slo]] = None, gpu_ids: Optional[List[int]] = None) -> RepeatResult:
     d = Path(run_dir)
     manifest = None
     try:
@@ -305,7 +307,9 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         traces = keep
     if not traces:
         return RepeatResult(run_dir=str(d), status="empty", error="no traces")
-    res = Correlator(EnergyConfig(attribution_method=attribution)).correlate(traces, io.load_gpu_samples([d]), io.load_batches([d]))  # type: ignore[arg-type]
+    selected_gpu_ids = gpu_ids if gpu_ids is not None else manifest.energy_gpu_ids() if manifest else None
+    energy_config = EnergyConfig(attribution_method=attribution, gpu_ids=selected_gpu_ids)
+    res = Correlator(energy_config).correlate(traces, io.load_gpu_samples([d]), io.load_batches([d]))
     delays = {a.request_id: a.delay_ms for a in manifest.arrivals if a.delay_ms is not None} if manifest else {}
     vals, n_sel = _metric_values(res.traces, target, delays)
     tv = _stat(vals, target.stat)
@@ -353,6 +357,19 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
     eligible = not problems
     # Energy figures need trustworthy GPU telemetry; a lossy or unavailable sampler makes them unavailable, not wrong.
     energy_ok = gpu_ok is not False
+    energy_reasons = []
+    if not energy_ok:
+        energy_reasons.append("GPU sampler health is not clean")
+    if L.device_joules is None or L.coverage is None or L.coverage.covered_s <= 0:
+        energy_reasons.extend(L.notes or ["no integrated telemetry coverage"])
+    elif L.coverage.coverage_fraction < energy_config.min_coverage_fraction:
+        energy_reasons.append(f"integrated telemetry covers only {L.coverage.coverage_fraction:.0%} of the run "
+                              f"(need {energy_config.min_coverage_fraction:.0%})")
+    if L.num_requests_allocated != len(res.traces):
+        energy_reasons.append(f"energy allocation available for only {L.num_requests_allocated}/{len(res.traces)} requests")
+    energy_ok = not energy_reasons
+    if energy_reasons:
+        tele.append("energy unavailable: " + "; ".join(energy_reasons))
     gp, gp_n, gp_cov = goodput(res.traces, slos or [], delays)
     return RepeatResult(
         run_dir=str(d), status="ok" if eligible else "ineligible", problems=problems, eligible=eligible, session_id=session,
@@ -362,11 +379,13 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
         target_values_ms=list(vals), goodput=gp, goodput_requests=gp_n, slo_metric_coverage=gp_cov,
         requests=len(res.traces), expected_requests=expected, completed=completed, aborted=aborted, incomplete=incomplete,
         health_ok=health_ok, health_problems=hp, telemetry_problems=tele, energy_withheld=not energy_ok,
+        energy_unavailable_reason="; ".join(energy_reasons) or None,
+        energy_gpu_ids=selected_gpu_ids if selected_gpu_ids is not None else L.coverage.gpu_ids if L.coverage else None,
         arrival_delay_ms_max=manifest.arrival_delay_ms_max if manifest else None,
         duration_s=dur, output_tokens=out_tokens, tokens_per_s=out_tokens / dur, requests_per_s=len(res.traces) / dur,
         device_joules=L.device_joules if energy_ok else None,
         joules_per_output_token=(L.attributed_joules / out_tokens) if energy_ok and L.device_joules is not None and out_tokens else None,
-        telemetry_coverage=(L.coverage.coverage_fraction if L.coverage else None) if energy_ok else None,
+        telemetry_coverage=L.coverage.coverage_fraction if L.coverage else None,
         work_signature=signature,
     )
 
@@ -374,14 +393,14 @@ def evaluate_repeat(run_dir: str, target: Target, attribution: str = "equal_shar
 def evaluate(configs: Dict[str, List[str]], target: Target, attribution: str = "equal_share",
              min_metric_coverage: float = 1.0, exclude_classes: Optional[List[str]] = None,
              slos: Optional[List[Slo]] = None, bootstrap_resamples: int = 1000, seed: int = 0,
-             min_repeats: int = 2) -> Decision:
+             min_repeats: int = 2, gpu_ids: Optional[List[int]] = None) -> Decision:
     results: List[ConfigResult] = []
     # A repeat is an independent run. The same directory given twice, a copy of a run directory (same tracer
     # session id) or one run listed under two configurations must not count twice: the later mention is a duplicate.
     seen_paths: Dict[str, str] = {}
     seen_sessions: Dict[str, str] = {}
     dup_notes: List[str] = []
-    measured = {name: [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos)
+    measured = {name: [evaluate_repeat(dd, target, attribution, min_metric_coverage, exclude_classes, slos, gpu_ids)
                        for dd in dirs] for name, dirs in configs.items()}
     signatures = {r.work_signature for reps in measured.values() for r in reps if r.work_signature is not None}
     unknown_compatibility = any(r.work_signature is None for reps in measured.values() for r in reps

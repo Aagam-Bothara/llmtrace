@@ -156,6 +156,15 @@ class Correlator:
         gpu_samples: List[GPUSample],
         batches: Optional[List[BatchMetadata]] = None,
     ) -> CorrelationResult:
+        observed_ids = {s.gpu_id for s in gpu_samples}
+        selected_ids = self.config.gpu_ids
+        selection_problem = None
+        if selected_ids is None and len(observed_ids) > 1:
+            selection_problem = "GPU selection ambiguous: specify participating physical NVML gpu_ids; energy unavailable"
+        elif selected_ids is not None:
+            if not selected_ids or set(selected_ids) - observed_ids:
+                selection_problem = "selected GPU telemetry missing; energy unavailable"
+            gpu_samples = [s for s in gpu_samples if s.gpu_id in selected_ids]
         clock = self._choose_clock(traces, gpu_samples)
         if not traces:
             return CorrelationResult([], RunEnergyLedger(window_start=0.0, window_end=0.0, clock=clock))
@@ -180,10 +189,16 @@ class Correlator:
         if not self.config.enabled:
             ledger.notes.append("energy accounting disabled by config")
             return CorrelationResult(traces, ledger)
+        if selection_problem:
+            ledger.notes.append(selection_problem)
+            for t in traces:
+                t.energy = self._unavailable(t, selection_problem, ledger.membership_source)
+            ledger.num_requests_without_telemetry = len(traces)
+            return CorrelationResult(traces, ledger)
 
         curves, no_power = self._build_curves(gpu_samples, clock)
         ledger.samples_without_power = no_power
-        if not curves:
+        if not curves or (selected_ids is not None and set(selected_ids) - set(curves)):
             ledger.notes.append("no GPU power samples; energy unavailable")
             for t in traces:
                 t.energy = self._unavailable(t, "no GPU power telemetry", ledger.membership_source)
@@ -191,8 +206,17 @@ class Correlator:
             return CorrelationResult(traces, ledger)
 
         ledger.per_gpu_joules = {g: c.energy(run_start, run_end) for g, c in curves.items()}
-        ledger.device_joules = sum(ledger.per_gpu_joules.values())
         ledger.coverage = self._coverage(curves, run_start, run_end, clock)
+        if ledger.coverage.covered_s <= 0:
+            ledger.notes.append("no integrated telemetry coverage; energy unavailable")
+            ledger.per_gpu_joules = {}
+            for t in traces:
+                cov = self._coverage(curves, *self._trace_bounds(t, clock), clock)
+                t.energy = self._unavailable(t, f"insufficient telemetry: {cov.num_samples} power samples, "
+                                            f"{cov.coverage_fraction:.0%} of window covered", ledger.membership_source, cov)
+            ledger.num_requests_without_telemetry = len(traces)
+            return CorrelationResult(traces, ledger)
+        ledger.device_joules = sum(ledger.per_gpu_joules.values())
 
         self._unusable_batches = 0
         intervals, membership = self._membership(traces, batches, clock)
@@ -212,7 +236,7 @@ class Correlator:
             cov = self._coverage(curves, a, b, clock)
             window_j = sum(c.energy(a, b) for c in curves.values())
             alloc = allocs.get(t.request_id, _Alloc())
-            enough = cov.num_samples >= 2 and cov.coverage_fraction >= self.config.min_coverage_fraction
+            enough = cov.covered_s > 0 and cov.num_samples >= 2 and cov.coverage_fraction >= self.config.min_coverage_fraction
             if not enough:
                 t.energy = self._unavailable(
                     t,
@@ -320,11 +344,13 @@ class Correlator:
         window = max(b - a, 0.0)
         covered = [c.covered_seconds(a, b) for c in curves.values()]
         gaps = [g for g in (c.max_gap_in(a, b) for c in curves.values()) if g is not None]
-        mean_covered = sum(covered) / len(covered) if covered else 0.0
+        # Every participating device must be sufficiently covered; averaging can
+        # hide a missing rank behind a fully sampled device.
+        min_covered = min(covered) if covered else 0.0
         return EnergyCoverage(
             window_s=window,
-            covered_s=mean_covered,
-            coverage_fraction=(mean_covered / window) if window > 0 else 0.0,
+            covered_s=min_covered,
+            coverage_fraction=(min_covered / window) if window > 0 else 0.0,
             num_samples=sum(c.samples_in(a, b) for c in curves.values()),
             gpu_ids=sorted(curves.keys()),
             max_gap_s=max(gaps) if gaps else None,
